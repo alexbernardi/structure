@@ -2,10 +2,10 @@
   "manifest_schema": 1,
   "assets": {
     "resource_stone": {
-      "version": 1,
+      "version": 2,
       "type": "model",
       "path": "COMMON-ASSETS/models/resource_stone",
-      "runtime_sha256": "e35dc1907a471eba35d8cd9eb8219ab077beaebeb6465ddffc487addcf68c7ac",
+      "runtime_sha256": "1728e5e572197debc27d624bdfaf63e6d966dead00ea920d0458490f45117470",
       "license": "CC0-1.0"
     }
   }

@@ -111,7 +111,18 @@ def validate(path: Path, spec: dict) -> tuple[list[str], dict]:
         errors.append(f"{info['images']} embedded images exceed the budget of {budget.get('max_images', 0)}")
     if info["bytes"] > budget.get("max_bytes", math.inf):
         errors.append(f"{info['bytes']} bytes exceed the budget of {budget['max_bytes']}")
+    color = spec["params"].get("color")
+    factors = [m.get("pbrMetallicRoughness", {}).get("baseColorFactor") for m in doc.get("materials", [])]
+    if color and factors and factors[0]:
+        expected = [srgb_to_linear(c) for c in color[:3]] + [color[3] if len(color) > 3 else 1.0]
+        if any(abs(a - b) > 0.01 for a, b in zip(factors[0], expected)):
+            errors.append(f"baseColorFactor {[round(v, 3) for v in factors[0]]} != linear(spec sRGB colour) "
+                          f"{[round(v, 3) for v in expected]} (colour-space conversion missing?)")
     return errors, info
+
+
+def srgb_to_linear(c: float) -> float:
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
 
 if __name__ == "__main__":

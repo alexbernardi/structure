@@ -1,12 +1,12 @@
 {
   "asset_id": "resource_stone",
-  "version": 1,
+  "version": 2,
   "dimensions_m": [
     0.5,
     0.4,
     0.5
   ],
   "pivot": "base_center",
-  "sha256": "e35dc1907a471eba35d8cd9eb8219ab077beaebeb6465ddffc487addcf68c7ac",
+  "sha256": "1728e5e572197debc27d624bdfaf63e6d966dead00ea920d0458490f45117470",
   "source": "COMMON-ASSETS/models/resource_stone"
 }

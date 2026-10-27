@@ -10,9 +10,10 @@ how civilisations build, maintain, transform and lose the institutions and infra
 A Tower / Stairway to Heaven is the central organising objective, not necessarily an ending. The project is
 gameplay- and simulation-first: no art direction or lore yet ([CONCEPTS/PILLARS.md](CONCEPTS/PILLARS.md)).
 
-## 2. Current state (updated 2026-10-27 by task [0001](TASKS/0001-bootstrap.md))
+## 2. Current state (updated 2026-10-27 by tasks [0001](TASKS/0001-bootstrap.md) and [0002](TASKS/0002-first-play-session.md))
 
-**Phase: M0 bootstrap foundation - complete.** Next milestone (needs approval): [PLANNING/MILESTONES.md](PLANNING/MILESTONES.md).
+**Phase: M0 bootstrap foundation - complete; first human play session done** (loop playable unaided, "felt good",
+no rubber-banding; two bugs found and fixed). Next milestone (needs approval): [PLANNING/MILESTONES.md](PLANNING/MILESTONES.md).
 Build 0.1.0 - network protocol v1 - world schema v1 - Godot 4.7.2-stable.
 
 | Area | What exists |

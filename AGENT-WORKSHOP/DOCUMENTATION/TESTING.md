@@ -10,7 +10,7 @@
 | `unit` | sandbox GDScript unit tests: world rules, persistence safety, protocol validation, config, world gen, asset import | Godot | ~5 s |
 | `rooms` | each room's tests in isolation + a room scaffolded from `_TEMPLATE` (tests + benchmark) | Godot | ~10 s |
 | `pipeline` | asset library/manifest/consumer hashes + GLB validation (`--with-blender`: regenerate and compare bytes) | Python (+Blender) | < 1 s |
-| `multiplayer` | native server + bot processes: two-client sync, cooperation, cheat suite, protocol mismatch, server full, graceful and crash persistence, data-dir lease, newer-schema refusal | Godot | ~40 s |
+| `multiplayer` | native server + bot processes: two-client sync, cooperation, cheat suite, protocol mismatch, server full, graceful and crash persistence, data-dir lease, newer-schema refusal; the real client run headless (`--allow-headless`) following live events and exiting through the window-close path | Godot | ~50 s |
 | `docker` | builds `structure-server:test`; container serves native bots; persistence across re-creation; graceful `docker stop`; Scenario B isolation | Docker | ~1-2 min |
 
 Results summary: `.runtime/test-results/summary-<UTC>.json`. Logs of process tests: `.runtime/test-runs/<suite>-<UTC>/<test>/`.
@@ -49,5 +49,6 @@ Benchmarks default to seed 4242. The movement room keeps a float32 golden trajec
 
 ## Not automated yet
 
-Visual checks of the windowed client (a screenshot mode exists: `--screenshot=<abs.png>`), real human input,
-Linux-native clients, and cross-machine networking.
+Rendering/visual checks of the windowed client (a screenshot mode exists: `--screenshot=<abs.png>`), real human input
+(see playtest task notes, e.g. `TASKS/0002-first-play-session.md`), Linux-native clients, and cross-machine networking.
+Human sessions: the client logs a `client.session` summary on close - use it plus the server log as the playtest record.

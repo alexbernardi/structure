@@ -35,4 +35,5 @@ Engine errors are plain lines starting with `ERROR:` / `SCRIPT ERROR:`. Summaris
 | `client.action_rejected`, `client.position_corrected` (debug) | action, target, reason / position |
 | `client.connection_lost` | reason |
 | `client.screenshot`, `client.metrics` | path, error / frames, fps_avg, frame_avg/p50/p99/max_ms, rtt_ms, renderer, vsync |
+| `client.session` | logged when the window closes (or on automated quit): reason, run_s, played_s, distance_m, jumps, actions_sent, pickups, deposits, rejections, corrections, disconnects, players_seen, final_site_progress |
 | `bot.joined`, `bot.finished` | peer, name, players, site_progress / ok, reason, deposits, final_progress, errors |

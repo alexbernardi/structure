@@ -6,6 +6,7 @@ and data-safety refusals. Run: python TOOLS/cli/structure.py test multiplayer
 """
 from __future__ import annotations
 
+import datetime
 import json
 import re
 import shutil
@@ -20,6 +21,10 @@ from structure_cli import buildinfo, godot, paths, procs  # noqa: E402
 RUN_ROOT = paths.TEST_RUNS / f"multiplayer-{buildinfo.utc_stamp()}"
 # Engine errors that are expected because a test provokes them on purpose.
 FORGED_RPC_ERROR = re.compile(r"RPC '_rpc_event' is not allowed|not allowed on node")
+
+
+def _epoch(event: dict) -> float:
+    return datetime.datetime.strptime(event["ts"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=datetime.timezone.utc).timestamp()
 
 
 def setUpModule() -> None:
@@ -138,6 +143,29 @@ class MultiplayerTest(unittest.TestCase):
         intruder.start()
         self.assertEqual(intruder.wait(30), 3)
         self.assertEqual(intruder.events("server.start_failed")[0]["reason"], "data_dir_in_use")
+
+    def test_client_presentation_follows_server_and_exits_cleanly(self) -> None:
+        """Runs the real client (world view, avatars, HUD, close path) headless while a bot plays.
+        Regression for playtest 0002: closing the window sent an RPC after the session was closed."""
+        server = self.start_server()
+        viewer = procs.GodotProcess("client:viewer", ["--allow-headless", f"--connect=127.0.0.1:{self.port}",
+                                                      "--name=viewer", "--quit-after=15"], self.run_dir / "client-viewer.log")
+        viewer.start()
+        server.wait_for_event("player.joined", 20, lambda e: e["name"] == "viewer")
+        code, rep = procs.run_bot(self.run_dir, self.port, "builder", "gather:1", wait_players=2)
+        self.assertEqual(code, 0, rep.get("errors"))
+        self.assertEqual(viewer.wait(60), 0)
+        sessions = viewer.events("client.session")
+        self.assertEqual(len(sessions), 1, "session summary logged exactly once")
+        summary = sessions[0]
+        self.assertEqual(summary["reason"], "automation")
+        self.assertIn("builder", summary["players_seen"], "client saw the other player join")
+        self.assertEqual(summary["final_site_progress"], 1, "client presentation applied the live deposit")
+        self.assertEqual(summary["corrections"], 0)
+        self.assert_no_engine_errors(viewer)
+        left = server.wait_for_event("player.left", 10, lambda e: e["name"] == "viewer")
+        self.assertLess(_epoch(left) - _epoch(summary), 2.0, "server learns about the exit immediately, not by timeout")
+        self.assert_no_engine_errors(server)
 
     def test_refuses_world_from_newer_schema(self) -> None:
         world = self.data_dir / "world"

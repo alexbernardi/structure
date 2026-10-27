@@ -18,7 +18,7 @@ func _ready() -> void:
 		Log.event("config.invalid", {"errors": cfg.errors}, "error")
 		get_tree().quit(2)
 		return
-	if cfg.role == "client" and DisplayServer.get_name() == "headless":
+	if cfg.role == "client" and DisplayServer.get_name() == "headless" and not cfg.allow_headless:
 		Log.event("config.invalid", {"errors": ["the client role needs a display; use --bot for headless clients"]}, "error")
 		get_tree().quit(2)
 		return

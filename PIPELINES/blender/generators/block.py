@@ -1,10 +1,16 @@
 """Parameterised bevelled block with its origin at the base centre.
 
 Spec params (metres, glTF/Godot axes: x = width, y = height, z = depth):
-  size [x, y, z], bevel (offset in m), bevel_segments (int), color [r, g, b, a], roughness (0..1)
+  size [x, y, z], bevel (offset in m), bevel_segments (int), color [r, g, b, a] in sRGB (as seen on screen),
+  roughness (0..1)
 """
 import bmesh
 import bpy
+
+
+def srgb_to_linear(c: float) -> float:
+    """Blender's Base Color (and glTF baseColorFactor) are linear; specs use display sRGB."""
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
 
 def build(asset_id: str, params: dict):
@@ -33,6 +39,7 @@ def _material(name: str, params: dict):
     if mat.node_tree is None:  # Blender 4.x creates node-less materials through the API
         mat.use_nodes = True
     bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-    bsdf.inputs["Base Color"].default_value = tuple(params.get("color", (0.8, 0.8, 0.8, 1.0)))
+    r, g, b, a = params.get("color", (0.8, 0.8, 0.8, 1.0))
+    bsdf.inputs["Base Color"].default_value = (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b), a)
     bsdf.inputs["Roughness"].default_value = float(params.get("roughness", 0.8))
     return mat

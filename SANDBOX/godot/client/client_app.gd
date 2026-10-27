@@ -33,6 +33,12 @@ var _joined := false
 var _send_accum := 0.0
 var _elapsed := 0.0
 var _screenshot_done := false
+var _last_feet := Vector3.ZERO
+var _session_logged := false
+var _automated_quit := false
+## Playtest telemetry, logged as `client.session` when the window closes.
+var _session := {"joined_at_s": -1.0, "actions_sent": {}, "rejections": {}, "pickups": 0, "deposits": 0, "jumps": 0,
+	"corrections": 0, "disconnects": 0, "distance_m": 0.0, "players_seen": {}}
 
 
 func setup(config: Dictionary, session_node: Node) -> void:
@@ -42,7 +48,9 @@ func setup(config: Dictionary, session_node: Node) -> void:
 
 func _ready() -> void:
 	InputSetup.ensure_actions()
-	if not cfg.vsync:
+	if DisplayServer.get_name() == "headless":
+		Engine.max_fps = 60  # automated client tests: do not spin without vsync
+	elif not cfg.vsync:
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	DisplayServer.window_set_title("STRUCTURE sandbox %s" % BuildInfo.build_version())
 	view = WorldView.new()
@@ -99,6 +107,11 @@ func _on_welcome(payload: Dictionary) -> void:
 	player.global_position = mine.pos
 	player.rotation.y = mine.yaw
 	_joined = true
+	_last_feet = mine.pos
+	if _session.joined_at_s < 0.0:
+		_session.joined_at_s = _elapsed
+	for p in replica.players.values():
+		_session.players_seen[p.name] = true
 	menu.visible = false
 	_set_mouse_captured(true)
 	Log.event("client.joined", {"peer": me, "name": payload.name, "env": payload.env, "server": payload.server,
@@ -108,6 +121,7 @@ func _on_welcome(payload: Dictionary) -> void:
 func _on_event(e: Dictionary) -> void:
 	if e.type == "rejected":
 		hud.toast("Server rejected %s: %s" % [e.action, e.reason])
+		_session.rejections[e.reason] = int(_session.rejections.get(e.reason, 0)) + 1
 		Log.event("client.action_rejected", {"action": e.action, "target": e.target, "reason": e.reason})
 		return
 	if not _joined:
@@ -115,9 +129,15 @@ func _on_event(e: Dictionary) -> void:
 	replica.apply_event(e)
 	view.on_event(e, replica, me)
 	match String(e.type):
+		"resource_picked":
+			if e.by == me:
+				_session.pickups += 1
 		"resource_deposited":
 			hud.toast("%s added a stone - structure now %d" % [e.by_name, e.deposited])
+			if e.by == me:
+				_session.deposits += 1
 		"player_joined":
+			_session.players_seen[e.name] = true
 			if e.peer != me:
 				hud.toast("%s joined" % e.name)
 		"player_left":
@@ -131,13 +151,17 @@ func _on_players(states: Array) -> void:
 
 
 func _on_correction(position: Vector3) -> void:
+	_session.corrections += 1
 	if player != null:
 		player.global_position = position
 		player.velocity = Vector3.ZERO
+		_last_feet = position
 		Log.event("client.position_corrected", {"position": position}, "debug")
 
 
 func _on_connection_lost(reason: String, prefix: String) -> void:
+	if _joined:
+		_session.disconnects += 1
 	_joined = false
 	_set_mouse_captured(false)
 	if player != null:
@@ -155,6 +179,11 @@ func _process(delta: float) -> void:
 	frame_stats.record(delta)
 	_elapsed += delta
 	if _joined and player != null:
+		var feet := player.global_position
+		var step := Vector2(feet.x - _last_feet.x, feet.z - _last_feet.z).length()
+		if step < 5.0:  # ignore teleports (corrections, respawns)
+			_session.distance_m += step
+		_last_feet = feet
 		_send_accum += delta
 		if _send_accum >= 1.0 / STATE_SEND_HZ:
 			_send_accum = 0.0
@@ -186,9 +215,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("interact"):
 		var target := _interaction_target()
 		if not target.is_empty():
+			_count_action(target.action)
 			session.send_action(target.action, target.id)
 	elif event.is_action_pressed("drop"):
+		_count_action(Protocol.ACTION_DROP)
 		session.send_action(Protocol.ACTION_DROP, "")
+	elif event.is_action_pressed("jump") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		_session.jumps += 1
+
+
+func _count_action(action: String) -> void:
+	_session.actions_sent[action] = int(_session.actions_sent.get(action, 0)) + 1
 
 
 ## What [E] would do right now: deposit near the site while carrying, else the resource in view and range.
@@ -247,9 +284,35 @@ func _check_automation() -> void:
 
 
 func _quit() -> void:
-	set_process(false)
+	if _automated_quit:
+		return
+	# Replays a player closing the window: the close request lands at the start of a frame, before _process,
+	# exactly like a real close event, so automated runs exercise the human exit path.
+	_automated_quit = true
+	get_tree().process_frame.connect(func() -> void:
+		get_tree().root.propagate_notification(NOTIFICATION_WM_CLOSE_REQUEST)
+		get_tree().quit(0), CONNECT_ONE_SHOT)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_log_session("automation" if _automated_quit else "window_closed")
+		_joined = false
+		set_process(false)
+		set_process_unhandled_input(false)
+		session.close()  # tell the server now instead of waiting for the ENet timeout
+
+
+## Frame-time statistics plus the playtest summary; logged once per run.
+func _log_session(reason: String) -> void:
+	if _session_logged:
+		return
+	_session_logged = true
 	Log.event("client.metrics", frame_stats.summary().merged({"joined": _joined, "rtt_ms": session.round_trip_ms(),
 		"renderer": RenderingServer.get_current_rendering_method(), "vsync": cfg.vsync}))
-	session.close()
-	await get_tree().create_timer(0.2).timeout
-	get_tree().quit(0)
+	var played: float = (_elapsed - _session.joined_at_s) if _session.joined_at_s >= 0.0 else 0.0
+	Log.event("client.session", {"reason": reason, "run_s": _elapsed, "played_s": played,
+		"distance_m": _session.distance_m, "jumps": _session.jumps, "actions_sent": _session.actions_sent,
+		"pickups": _session.pickups, "deposits": _session.deposits, "rejections": _session.rejections,
+		"corrections": _session.corrections, "disconnects": _session.disconnects,
+		"players_seen": _session.players_seen.keys(), "final_site_progress": _site_progress()})

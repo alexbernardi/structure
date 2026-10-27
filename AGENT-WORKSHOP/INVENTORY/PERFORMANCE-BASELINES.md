@@ -30,6 +30,9 @@ Observations:
 
 Placeholder geometry only; useful to catch regressions, not to predict the cost of real content.
 
+First human session (task 0002, vsync on, Docker server, 2 players): 143.9 FPS avg locked to the 144 Hz display
+(p50 = p99 = 6.94 ms), RTT 29 ms, server tick avg 0.17 ms / max 6.8 ms, 0.6 % CPU.
+
 ## Systems
 
 `python TOOLS/cli/structure.py room bench movement` (targets in `SYSTEM-ROOMS/movement/room.json`)

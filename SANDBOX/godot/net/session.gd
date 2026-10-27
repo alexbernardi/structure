@@ -196,11 +196,13 @@ func _emit_failure(reason: String) -> void:
 # ------------------------------------------------------------------------------------------ outbound helpers
 
 func send_state(position: Vector3, yaw: float) -> void:
-	_rpc_state.rpc_id(1, position, yaw)
+	if is_connected_to_server():
+		_rpc_state.rpc_id(1, position, yaw)
 
 
 func send_action(action: String, target: String) -> void:
-	_rpc_action.rpc_id(1, action, target)
+	if is_connected_to_server():
+		_rpc_action.rpc_id(1, action, target)
 
 
 func send_welcome(peer_id: int, payload: Dictionary) -> void:

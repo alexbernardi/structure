@@ -23,7 +23,8 @@ const DEFAULTS := {
 	"vsync": true,
 	"screenshot": "",         # client: save PNG to this absolute path, then quit
 	"screenshot_delay": 3.0,
-	"quit_after": 0.0,        # client: quit after N seconds and log a metrics summary
+	"quit_after": 0.0,        # client: quit after N seconds (same exit path as closing the window) and log metrics
+	"allow_headless": false,  # test-only: run the client role without a display (dummy renderer, no screenshots)
 	"protocol_override": -1,  # test-only: advertise another protocol version
 	"bot_plan": "observe",    # observe | gather:<n> | cheat | wander
 	"bot_report": "",         # absolute path for the bot's JSON report

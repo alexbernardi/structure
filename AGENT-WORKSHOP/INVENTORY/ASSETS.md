@@ -5,6 +5,8 @@ and each asset's `asset.json`. Field reference: `../BLUEPRINTS/ASSET-INVENTORY.m
 
 | Asset | Type | Version | Licence | Editable source | Runtime | Size / budget | Consumers |
 |---|---|---|---|---|---|---|---|
-| `resource_stone` | model | 1 | CC0-1.0 (generated) | `COMMON-ASSETS/models/resource_stone/source/spec.json` + `PIPELINES/blender/generators/block.py` | `runtime/resource_stone.glb`, 6876 B, 108 triangles, Blender 5.0.1 | 0.5 x 0.4 x 0.5 m, pivot base centre; budget 500 tris / 1 material / 0 images / 64 KB | `SANDBOX/godot/assets/common/models/resource_stone` (gatherable resource visual) |
+| `resource_stone` | model | 2 | CC0-1.0 (generated) | `COMMON-ASSETS/models/resource_stone/source/spec.json` + `PIPELINES/blender/generators/block.py` | `runtime/resource_stone.glb`, 6876 B, 108 triangles, Blender 5.0.1 | 0.5 x 0.4 x 0.5 m, pivot base centre; budget 500 tris / 1 material / 0 images / 64 KB | `SANDBOX/godot/assets/common/models/resource_stone` (gatherable resource visual) |
+
+Version history: v2 (2026-10-27) fixed the colour space (spec sRGB orange now converted to linear; v1 rendered tan).
 
 Everything else in the sandbox is engine primitives (boxes, capsules, planes) with flat placeholder materials.
