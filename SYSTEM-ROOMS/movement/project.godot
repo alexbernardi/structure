@@ -1,0 +1,12 @@
+config_version=5
+
+[application]
+
+config/name="Room: movement"
+config/description="Isolated laboratory for the movement system. Run tests via TOOLS/cli/structure.py room test movement."
+config/features=PackedStringArray("4.7")
+
+[filesystem]
+
+import/blender/enabled=false
+import/fbx2gltf/enabled=false

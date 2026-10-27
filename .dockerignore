@@ -1,0 +1,7 @@
+# Whitelist: the image build only needs the Godot project and the container scripts.
+*
+!SANDBOX/godot/
+!INFRASTRUCTURE/docker/entrypoint.sh
+!INFRASTRUCTURE/docker/healthcheck.sh
+SANDBOX/godot/.godot/
+SANDBOX/godot/tests/

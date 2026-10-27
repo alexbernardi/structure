@@ -1,0 +1,6 @@
+{
+  "description": "Multiplayer session: one dedicated server, two clients on the same world.",
+  "environments": ["dev"],
+  "clients": 2,
+  "notes": "Docker by default; --native runs the server on this machine; --bots replaces windows with headless bots."
+}

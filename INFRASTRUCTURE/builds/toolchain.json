@@ -1,0 +1,47 @@
+{
+  "_comment": "Single source of truth for pinned external tools. Changing a pin requires an ADR (AGENT-WORKSHOP/DECISIONS).",
+  "schema": 1,
+  "godot": {
+    "version": "4.7.2-stable",
+    "release_page": "https://github.com/godotengine/godot-builds/releases/tag/4.7.2-stable",
+    "download_base": "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable",
+    "platforms": {
+      "windows-x86_64": {
+        "archive": "Godot_v4.7.2-stable_win64.exe.zip",
+        "sha256": "731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953",
+        "editor": "Godot_v4.7.2-stable_win64.exe",
+        "console": "Godot_v4.7.2-stable_win64_console.exe"
+      },
+      "linux-x86_64": {
+        "archive": "Godot_v4.7.2-stable_linux.x86_64.zip",
+        "sha256": "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4",
+        "editor": "Godot_v4.7.2-stable_linux.x86_64",
+        "console": "Godot_v4.7.2-stable_linux.x86_64"
+      }
+    },
+    "export_templates": {
+      "archive": "Godot_v4.7.2-stable_export_templates.tpz",
+      "sha256": "f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011",
+      "size_bytes": 1281349702,
+      "required_templates": ["windows_release_x86_64.exe", "windows_debug_x86_64.exe", "linux_release.x86_64", "linux_debug.x86_64"],
+      "needed_for": "Exporting standalone client/server executables only. Not needed to run the sandbox, the tests, or the Docker server (which runs the imported project headless)."
+    }
+  },
+  "blender": {
+    "version": "5.0.1",
+    "search_paths": [
+      "C:/Program Files/Blender Foundation/Blender 5.0/blender.exe",
+      "/usr/bin/blender",
+      "/Applications/Blender.app/Contents/MacOS/Blender"
+    ],
+    "env_override": "STRUCTURE_BLENDER"
+  },
+  "python": {
+    "min_version": "3.11",
+    "third_party_packages": []
+  },
+  "docker": {
+    "base_image": "debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad",
+    "server_image_repository": "structure-server"
+  }
+}

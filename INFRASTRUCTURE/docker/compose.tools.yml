@@ -1,0 +1,13 @@
+# Development tooling container: Linux Godot + Python running the repository's test suites.
+#   docker compose -f INFRASTRUCTURE/docker/compose.tools.yml run --rm tools python3 TOOLS/cli/structure.py test unit rooms
+# The repository is bind-mounted; only tooling lives in the image (build: structure.py build --tools).
+name: structure-tools
+
+services:
+  tools:
+    image: structure-tools:${STRUCTURE_TOOLS_TAG:-local}
+    working_dir: /repo
+    volumes:
+      - "../..:/repo"
+    environment:
+      STRUCTURE_GODOT: /opt/godot/godot

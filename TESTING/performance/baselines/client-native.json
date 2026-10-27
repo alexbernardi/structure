@@ -1,0 +1,31 @@
+{
+  "duration_s": 15.0,
+  "bots": 2,
+  "client": {
+    "ts": "2026-10-27T22:21:39.371Z",
+    "lvl": "info",
+    "role": "client",
+    "env": "local",
+    "evt": "client.metrics",
+    "frames": 29618,
+    "fps_avg": 1974.513,
+    "frame_avg_ms": 0.506,
+    "frame_p50_ms": 0.48,
+    "frame_p99_ms": 0.719,
+    "frame_max_ms": 150.0,
+    "joined": true,
+    "rtt_ms": 14.0,
+    "renderer": "forward_plus",
+    "vsync": false
+  },
+  "engine_errors": [],
+  "benchmark": "client-native",
+  "recorded_at": "2026-10-27T22:21:40Z",
+  "git": "nocommit",
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "cores": 32,
+    "python": "3.13.0"
+  }
+}

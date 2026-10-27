@@ -1,0 +1,40 @@
+; STRUCTURE sandbox. Versions under [structure] are the runtime source of truth for
+; network protocol and world schema compatibility (see AGENT-WORKSHOP/PROTOCOLS/VERSIONING.md).
+
+config_version=5
+
+[application]
+
+config/name="STRUCTURE Sandbox"
+config/description="Dedicated-server multiplayer sandbox (bootstrap)."
+config/version="0.1.0"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+run/flush_stdout_on_print=true
+config/use_custom_user_dir=true
+config/custom_user_dir_name="structure-sandbox"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[filesystem]
+
+import/blender/enabled=false
+import/fbx2gltf/enabled=false
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+
+[structure]
+
+network/protocol_version=1
+network/default_port=24565
+persistence/world_schema_version=1
+persistence/min_world_schema_version=1

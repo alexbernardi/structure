@@ -1,0 +1,35 @@
+{
+  "mode": "docker",
+  "bots": 32,
+  "duration_s": 30.0,
+  "seed": 4242,
+  "warmup_s": 5.0,
+  "server": {
+    "intervals": 49,
+    "tick_avg_ms": 0.66,
+    "tick_p95_ms_max": 9.276,
+    "tick_max_ms": 12.177,
+    "cpu_pct_avg": 1.501,
+    "cpu_pct_max": 2.922,
+    "rss_mb_max": 101.895,
+    "mem_static_mb_max": 25.466,
+    "players_max": 32,
+    "entities_avg": 35.224,
+    "net_in_bps_avg": 15362.054,
+    "net_out_bps_avg": 461987.163,
+    "saves": 63,
+    "actions_ok": 128,
+    "moves_rejected": 0
+  },
+  "bots_ok": 32,
+  "deposits_total": 64,
+  "benchmark": "server-docker-32bots",
+  "recorded_at": "2026-10-27T22:21:09Z",
+  "git": "nocommit",
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "cores": 32,
+    "python": "3.13.0"
+  }
+}

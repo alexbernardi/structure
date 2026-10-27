@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "problems": [],
+  "results": [
+    {
+      "elapsed_usec": 72409,
+      "file": "res://benchmarks/bench_movement_model.gd",
+      "name": "movement.step",
+      "ops": 200000,
+      "ops_per_sec": 2762087.58579735,
+      "us_per_op": 0.362045
+    },
+    {
+      "elapsed_usec": 58601,
+      "file": "res://benchmarks/bench_movement_model.gd",
+      "name": "movement.tick_64_players",
+      "ops": 2000,
+      "ops_per_sec": 34129.1104247368,
+      "players": 64,
+      "us_per_op": 29.3005
+    }
+  ],
+  "targets": {
+    "movement.step": {
+      "max_us_per_op": 2.0
+    },
+    "movement.tick_64_players": {
+      "max_us_per_op": 150.0
+    }
+  },
+  "benchmark": "room-movement",
+  "recorded_at": "2026-10-27T22:21:20Z",
+  "git": "nocommit",
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "cores": 32,
+    "python": "3.13.0"
+  }
+}

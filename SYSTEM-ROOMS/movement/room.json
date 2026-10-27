@@ -1,0 +1,19 @@
+{
+  "name": "movement",
+  "version": "1.0.0",
+  "status": "stable",
+  "summary": "Deterministic first-person movement model: velocity integration plus speed bounds used for server validation.",
+  "public_interface": ["src/movement_model.gd"],
+  "dependencies": {
+    "engine": "Godot 4.7 (Vector3 math only)",
+    "systems": [],
+    "assets": []
+  },
+  "integration": {
+    "target": "SANDBOX/godot/systems/movement"
+  },
+  "benchmarks": {
+    "movement.step": {"max_us_per_op": 2.0},
+    "movement.tick_64_players": {"max_us_per_op": 150.0}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "asset_id": "resource_stone",
+  "generator": "block",
+  "params": {
+    "size": [0.5, 0.4, 0.5],
+    "bevel": 0.05,
+    "bevel_segments": 2,
+    "color": [0.85, 0.52, 0.22, 1.0],
+    "roughness": 0.85
+  },
+  "origin": "base_center",
+  "tolerance_m": 0.001,
+  "budget": {
+    "max_triangles": 500,
+    "max_materials": 1,
+    "max_images": 0,
+    "max_bytes": 65536
+  }
+}

@@ -1,0 +1,12 @@
+config_version=5
+
+[application]
+
+config/name="Room: {{ROOM_NAME}}"
+config/description="Isolated laboratory for the {{ROOM_NAME}} system. Tests: structure.py room test {{ROOM_NAME}}."
+config/features=PackedStringArray("4.7")
+
+[filesystem]
+
+import/blender/enabled=false
+import/fbx2gltf/enabled=false

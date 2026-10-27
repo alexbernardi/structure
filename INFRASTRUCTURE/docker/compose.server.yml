@@ -1,0 +1,27 @@
+# One dedicated server per compose project (= per environment). Normally started through
+#   python TOOLS/cli/structure.py env up <env>
+# which exports the variables below from INFRASTRUCTURE/environments/<env>.env plus a per-environment
+# data directory and the selected image. Manual use: see INFRASTRUCTURE/docker/README.md.
+name: structure-${STRUCTURE_ENV_ID:?set STRUCTURE_ENV_ID}
+
+services:
+  server:
+    image: ${STRUCTURE_IMAGE:?set STRUCTURE_IMAGE (structure-server:<tag>)}
+    container_name: structure-${STRUCTURE_ENV_ID}-server
+    environment:
+      STRUCTURE_ENV_ID: ${STRUCTURE_ENV_ID}
+      STRUCTURE_WORLD_ID: ${STRUCTURE_WORLD_ID:?set STRUCTURE_WORLD_ID}
+      STRUCTURE_WORLD_SEED: ${STRUCTURE_WORLD_SEED:?set STRUCTURE_WORLD_SEED}
+      STRUCTURE_MAX_PLAYERS: ${STRUCTURE_MAX_PLAYERS:-16}
+      STRUCTURE_LOG_LEVEL: ${STRUCTURE_LOG_LEVEL:-info}
+      STRUCTURE_METRICS_INTERVAL: ${STRUCTURE_METRICS_INTERVAL:-10}
+    ports:
+      # Host loopback only by default. Exposing beyond localhost must be a deliberate change of STRUCTURE_BIND.
+      - "${STRUCTURE_BIND:-127.0.0.1}:${STRUCTURE_PORT:?set STRUCTURE_PORT}:24565/udp"
+    volumes:
+      # Isolated, writable world storage for this environment only.
+      - "${STRUCTURE_DATA_DIR:?set STRUCTURE_DATA_DIR}:/data"
+    stop_grace_period: 20s
+    restart: "no"
+    labels:
+      org.structure.env: ${STRUCTURE_ENV_ID}

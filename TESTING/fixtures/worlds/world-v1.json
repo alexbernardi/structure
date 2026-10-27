@@ -1,0 +1,142 @@
+{
+  "created_at": "2026-10-27T21:54:33Z",
+  "resources": [
+    {
+      "id": "r0",
+      "kind": "stone",
+      "pos": [
+        2.743,
+        0.0,
+        -25.73
+      ]
+    },
+    {
+      "id": "r1",
+      "kind": "stone",
+      "pos": [
+        -14.635,
+        0.0,
+        5.545
+      ]
+    },
+    {
+      "id": "r2",
+      "kind": "stone",
+      "pos": [
+        6.759,
+        0.0,
+        -14.459
+      ]
+    },
+    {
+      "id": "r3",
+      "kind": "stone",
+      "pos": [
+        -15.141,
+        0.0,
+        17.882
+      ]
+    },
+    {
+      "id": "r4",
+      "kind": "stone",
+      "pos": [
+        17.092,
+        0.0,
+        0.759
+      ]
+    },
+    {
+      "id": "r6",
+      "kind": "stone",
+      "pos": [
+        -15.239,
+        0.0,
+        7.117
+      ]
+    },
+    {
+      "id": "r8",
+      "kind": "stone",
+      "pos": [
+        3.106,
+        0.0,
+        -17.537
+      ]
+    },
+    {
+      "id": "r9",
+      "kind": "stone",
+      "pos": [
+        -3.796,
+        0.0,
+        -28.126
+      ]
+    },
+    {
+      "id": "r10",
+      "kind": "stone",
+      "pos": [
+        -13.101,
+        0.0,
+        8.78
+      ]
+    },
+    {
+      "id": "r11",
+      "kind": "stone",
+      "pos": [
+        -13.976,
+        0.0,
+        -15.106
+      ]
+    },
+    {
+      "id": "r13",
+      "kind": "stone",
+      "pos": [
+        27.464,
+        0.0,
+        -10.866
+      ]
+    },
+    {
+      "id": "r14",
+      "kind": "stone",
+      "pos": [
+        17.432,
+        0.0,
+        -0.562
+      ]
+    }
+  ],
+  "revision": 18,
+  "saved_at": "2026-10-27T21:54:45Z",
+  "schema_version": 1,
+  "seed": 1337,
+  "server_build": {
+    "build": "0.1.0",
+    "commit": "nocommit",
+    "dirty": true,
+    "engine": "4.7.2-stable",
+    "image": null,
+    "protocol": 1,
+    "world_schema": 1
+  },
+  "sites": [
+    {
+      "contributors": {
+        "builder": 3
+      },
+      "deposited": 3,
+      "id": "site_0",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "spawn_counter": 15,
+  "world_id": "visual"
+}

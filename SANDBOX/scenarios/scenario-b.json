@@ -1,0 +1,6 @@
+{
+  "description": "Isolated environments: two independently configured servers with separate ports, worlds and storage.",
+  "environments": ["iso-a", "iso-b"],
+  "clients": 0,
+  "notes": "Verified automatically by TESTING/integration/test_docker.py::test_scenario_b_isolated_environments_run_concurrently."
+}
