@@ -20,5 +20,5 @@ camera control, animation, networking.
 | Gravity / terminal fall | 20 m/s² / 40 m/s |
 | Frame time | clamped to `[0, MAX_DELTA = 0.1]`; `<= 0` returns the velocity unchanged |
 
-Determinism: pure function of its inputs (no randomness, no engine state); `Vector3` uses float32.
-The golden trajectory is bit-identical at float32 precision on Windows (Godot 4.7.2 official build).
+Determinism: a pure function of its inputs (no randomness, no engine state); `Vector3` uses float32. The golden
+trajectory is bit-identical at float32 precision on Windows and Linux (Godot 4.7.2 official builds).

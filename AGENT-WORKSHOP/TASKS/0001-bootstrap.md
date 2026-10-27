@@ -23,10 +23,10 @@ Everything (new repository). Versions introduced: build 0.1.0, protocol v1, worl
 | Server owns and persists progress | cheat suite (8+ refused manipulations); graceful restart, crash (kill) and container re-creation keep progress | verified |
 | Second isolated server runs concurrently | Scenario B test: two containers, separate ports/worlds/seeds/storage, no cross-talk | verified |
 | Build versions can be identified | build manifest in image label + `res://build_manifest.json`; `versions`, `builds`; servers log and send it | verified |
-| A compatible world snapshot can be restored | snapshot create/restore with integrity, schema, world-id and running-server guards (unit-tested) and end-to-end on `dev` | verified (see final run below) |
+| A compatible world snapshot can be restored | snapshot create/restore with integrity, schema, world-id and running-server guards (unit-tested) and end-to-end on `dev` | verified |
 | A system room runs tests independently | `room test movement` (10 tests) and a freshly scaffolded template room | verified |
 | One asset generated in Blender and imported into Godot | `pipeline run resource_stone` (Blender 5.0.1) -> validated GLB -> in-engine dimension test; regeneration byte-identical | verified |
-| Essential automated checks pass | `structure.py test` (all suites) | see final run below |
+| Essential automated checks pass | `structure.py test --with-blender`: 8/8 suites | verified |
 
 ## Outcome
 - Implemented as described in `START-HERE.md` section 2; decisions ADR-0001..0008; baselines in
@@ -35,8 +35,28 @@ Everything (new repository). Versions introduced: build 0.1.0, protocol v1, worl
 - Not verified: human play sessions with real input; client on a second machine/LAN; Linux-native client; macOS;
   standalone exports (export templates not downloaded); fsync-level durability; CPU/RSS of native Windows servers.
 
-## Final run
-(filled in at the end of the task)
+## Final run (2026-10-27, after commit 1d818e9 + documentation updates)
+
+`python TOOLS/cli/structure.py test --with-blender` - **all 8 suites passed**:
+
+| Suite | Result |
+|---|---|
+| check | 0 errors, 0 warnings (pins, envs, system drift, asset hashes, secrets, documentation links) |
+| tools | 29 Python tests passed |
+| import | all projects imported; smoke load of 28 scripts/scenes, 0 failures |
+| unit | 34 GDScript tests passed (incl. v1 world fixture and in-engine asset check) |
+| rooms | movement 10/10; template-scaffolded room 1/1 + benchmark within target |
+| pipeline | library consistent; Blender 5.0.1 regeneration byte-identical to the committed GLB |
+| multiplayer | 8/8 (two-client cooperation, cheat suite, protocol mismatch, server full, graceful + crash persistence, lease, newer schema) |
+| docker | 3/3 (container persistence across re-creation, graceful `docker stop`, Scenario B isolation) |
+
+Also executed by hand through the CLI with the clean build `structure-server:0.1.0-1d818e9`:
+`setup`; `versions`; `builds`; `scenario b` (+ `--down`); `scenario a --bots`; snapshot create -> restore refused while
+running -> refused without `--yes` -> dry run -> restore with automatic `pre-restore` snapshot -> new client sees the
+restored progress; `compat --client current --server 0.1.0-1d818e9 --snapshot dev/<id>`; `play` (window joined the
+restored world on Vulkan/RTX 3090; closing it stopped the server gracefully, no orphan processes);
+`room promote movement` (gateway incl. sandbox suites); `pipeline run resource_stone`; all benchmarks with `--record`.
+Linux tools container: `test rooms unit` passed with Linux Godot; movement golden trajectory bit-exact (KI-010 resolved).
 
 ## Next steps
 Milestone M1 proposal in `../PLANNING/MILESTONES.md` (requires approval).

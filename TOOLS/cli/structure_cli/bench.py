@@ -3,6 +3,7 @@ TESTING/performance/baselines/ (committed) - summarise them in AGENT-WORKSHOP/IN
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import statistics
@@ -15,7 +16,7 @@ BASELINES = paths.TESTING / "performance" / "baselines"
 
 
 def _machine() -> dict:
-    return {"os": platform.platform(), "cpu": platform.processor(), "cores": __import__("os").cpu_count(),
+    return {"os": platform.platform(), "cpu": platform.processor(), "cores": os.cpu_count(),
             "python": platform.python_version()}
 
 

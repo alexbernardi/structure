@@ -13,6 +13,6 @@ Format: `../BLUEPRINTS/KNOWN-ISSUE.md`. Keep facts and assumptions separate.
 | KI-007 | containers | minor | mitigated | The Godot editor binary logs `Unable to load fontconfig` during headless import in minimal images | `libfontconfig1` installed in the build stage; the runtime image needs nothing extra (zero engine errors at runtime) |
 | KI-008 | tests | minor | accepted | Bots move in straight lines without collision; they exercise the protocol, not navigation | fine for current tests |
 | KI-009 | client | minor | open | Pick-up targeting is a view cone + distance check, without line of sight | add a physics ray when obstacles matter |
-| KI-010 | determinism | info | open | Movement golden trajectory is bit-exact on Windows; Linux (container) determinism is unverified | run `room test movement` in the tools image |
+| KI-010 | determinism | info | resolved | Movement golden trajectory (generated on Windows) is bit-exact at float32 on Linux too | verified in the tools container (`room test movement`, Godot 4.7.2 Linux build) |
 | KI-011 | tooling | minor | open | Native server CPU/RSS, Linux clients and cross-machine networking are not covered by automated tests | see `DOCUMENTATION/TESTING.md` "Not automated yet" |
 | KI-012 | security | info | accepted | Unauthenticated identities, unencrypted ENet, editor binary in the image | `PROTOCOLS/SECURITY.md` unresolved risks |

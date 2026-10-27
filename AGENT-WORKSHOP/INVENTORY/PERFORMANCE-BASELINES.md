@@ -1,7 +1,7 @@
 # Performance baselines (initial, 2026-10-27)
 
-Machine: Windows 11 (26200), Intel 64 Family 6 Model 183 (32 logical cores), Docker Desktop 29.1.3 on WSL2.
-Godot 4.7.2-stable. These are **reference points for regression checks, not scalability promises**.
+Machine: Windows 11 (26200), Intel 64 Family 6 Model 183 (32 logical cores), NVIDIA GeForce RTX 3090 (Vulkan 1.4),
+Docker Desktop 29.1.3 on WSL2. Godot 4.7.2-stable. These are **reference points for regression checks, not scalability promises**.
 Raw results: `TESTING/performance/baselines/*.json` (re-record with `--record`).
 
 ## Server (fixed seed 4242, 30 s, bots run the gather loop; 5 s warm-up excluded)

@@ -250,6 +250,9 @@ def cmd_scenario(args) -> int:
                 for proc, report in bots:
                     code, data = procs.finish_bot(proc, report)
                     print(f"  {data.get('name')}: exit {code}, saw {data.get('players_seen')}, site progress {data.get('final_progress')}")
+                status = envs.status_doc(first)
+                if status:
+                    print(f"  server: site progress {status['site_progress']} (shared by all clients)")
             else:
                 clients = [_launch_client(f"127.0.0.1:{first.port}", f"player{i + 1}") for i in range(scenario["clients"])]
                 print(f"  {len(clients)} windowed clients connected to 127.0.0.1:{first.port}; close them to finish.")
