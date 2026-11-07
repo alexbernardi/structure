@@ -12,7 +12,7 @@ const Events = preload("res://midi/midi_events.gd")
 enum State { IDLE, LISTEN, COLLECT, NEED_REVERSE, COLLECT_REVERSE, WAIT_RELEASE, DONE, FAILED }
 
 const IDLE_FINALIZE_SEC := 0.6
-const RELEASE_WAIT_SEC := 0.8
+const RELEASE_WAIT_SEC := 2.5
 const MAX_SAMPLES := 80
 const FORCE_DECISION_SAMPLES := 16
 const MIN_SWEEP_FRACTION := 0.8

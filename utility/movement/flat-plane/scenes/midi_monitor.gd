@@ -38,6 +38,7 @@ var _frames := 0
 var options := {}  ## overrides command-line options (used by tests)
 var _demo_events: Array[InputEventMIDI] = []
 var _demo_index := 0
+var _announce_next := false
 
 
 func _ready() -> void:
@@ -142,6 +143,7 @@ func _build_ui() -> void:
 	row.add_theme_constant_override("separation", 8)
 	left.add_child(row)
 	row.add_child(_button("Learn all unmapped", _start_wizard))
+	row.add_child(_button("Infer strips from pattern", _infer))
 	row.add_child(_button("Skip", _skip))
 	row.add_child(_button("Cancel (Esc)", _cancel))
 	row.add_child(_button("Save now", func() -> void: _save()))
@@ -214,12 +216,15 @@ func _refresh_progress() -> void:
 	var req := Catalog.required_ids()
 	var mapped := 0
 	var verified := 0
+	var inferred := 0
 	for id in req:
 		if mgr.config.is_mapped(id):
 			mapped += 1
 			if mgr.config.is_verified(id):
 				verified += 1
-	_progress.text = "Mapped %d / %d     Verified %d / %d     Profile: %s" % [mapped, req.size(), verified, req.size(), mgr.config.active_profile_name()]
+			if mgr.config.is_inferred(id):
+				inferred += 1
+	_progress.text = "Mapped %d / %d (%d inferred, unverified)     Verified %d / %d     Profile: %s" % [mapped, req.size(), inferred, verified, req.size(), mgr.config.active_profile_name()]
 	if mapped == req.size() and verified < req.size() and not mgr.learn.is_active():
 		_prompt.text = "All controls mapped. Now VERIFY: move / press every control once - a green tick appears on each."
 	elif verified == req.size():
@@ -229,6 +234,8 @@ func _refresh_progress() -> void:
 
 func _on_connection_changed(c: bool) -> void:
 	_refresh_status()
+	_announce_next = c
+	print("midi.connection connected=%s ports=%s" % [c, str(mgr.port_names)])
 	_log_line("[color=%s]%s[/color]" % ["#6e6" if c else "#f77", "Device connected" if c else "Device DISCONNECTED"])
 
 
@@ -273,6 +280,9 @@ func _log_line(bbcode: String) -> void:
 
 
 func _on_raw_event(ev: Dictionary, accepted: bool, port: String) -> void:
+	if accepted and _announce_next:
+		_announce_next = false
+		print("midi.first_event_after_reconnect %s" % Events.describe(ev))
 	var text := "%8.2f [%d] %s" % [Time.get_ticks_msec() / 1000.0, ev.device, Events.describe(ev)]
 	if not accepted:
 		_log_line("[color=#667]%s  (dup, ignored)[/color]" % text)
@@ -325,6 +335,15 @@ func _learn_single(id: String) -> void:
 	_wizard = false
 	_queue = []
 	_begin_learn(id)
+
+
+func _infer() -> void:
+	var proposals: Array = mgr.infer_strips()
+	if proposals.is_empty():
+		_result.text = "Nothing to infer: need at least two strips mapped with the same regular step."
+	else:
+		_result.text = "Inferred %d controls from the pattern. They are UNVERIFIED: actuate each one on the hardware (a green tick appears)." % proposals.size()
+	_refresh_progress()
 
 
 func _skip() -> void:
@@ -383,7 +402,8 @@ func _show_detail() -> void:
 	if m.is_empty():
 		_detail.text = "%s  (%s)\nnot mapped" % [c.label, c.kind]
 	else:
-		_detail.text = "%s  (%s)\n%s\nverified: %s" % [c.label, c.kind, JSON.stringify(m), mgr.config.profile().verified.get(_selected, "no")]
+		_detail.text = "%s  (%s)\n%s\nverified: %s%s" % [c.label, c.kind, JSON.stringify(m), mgr.config.profile().verified.get(_selected, "no"),
+			"   - INFERRED from the pattern, not yet seen on the hardware" if mgr.config.is_inferred(_selected) else ""]
 	_invert_btn.disabled = m.is_empty() or m.behavior == "momentary" or m.behavior == "trigger"
 
 

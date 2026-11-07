@@ -49,7 +49,24 @@ Mappings are data (`config/midi_mapping.json`); no control identifier is hardcod
 8. **Physical**: user maps all controls and confirms; unplug/replug confirmed. Phase 2 does not start before that.
 
 ## Validation
-(filled in as phases complete)
+### Phase 1 (done 2026-11-07)
+| Criterion | Evidence | Result |
+|---|---|---|
+| Discovery / init native in Godot | `OS.open_midi_inputs()`; both ports listed headless and windowed; status line in the monitor | verified on hardware |
+| Live monitor, duplicates flagged | Every message arrives on both ports (950 events, equal counts); auto mode accepts one port; log greys the other | verified on hardware + test |
+| MIDI Learn for every control | User learned strips 1-3 and Play with the wizard; the 10 remaining global buttons learned from real presses (Stop 93, Record 95, Rewind 91, Fast fwd 92, Bank prev 46, Bank next 47, Up 96, Down 97, Left 98, Right 99). Strips 4-8 (30 controls) were **inferred** from the constant step in strips 1-3 (`midi_pattern.gd`, >= 2 strips, flagged `inferred`) | learned 29 / inferred 30 |
+| Absolute vs relative detection | Fader = absolute pitch bend 0..16256; knob = relative sign-magnitude (1 / 65); detector tested on the real capture and synthetic streams | verified |
+| Saved, editable config | `config/midi_mapping.json` (sorted, tab-indented, validated on load, atomic save with `.bak`); invalid files are reported and never overwritten | tests + used on hardware |
+| Disconnect / reconnect | Unplugged and replugged while running: log `connected=false ports=[]` then `connected=true` with both ports, then live pitch-bend data | verified on hardware |
+| Visual feedback + physical verification | Saved file after the user's pass: **mapped 59/59, verified 59/59, 0 inferred**, 59 timestamps over 32 s | verified on hardware |
+| Automated tests | `structure.py test utility`: 70 tests (events, catalog, behaviour, learn, config, pattern, manager routing via synthetic `InputEventMIDI`, scene) | pass |
+
+Problems found by the hardware checkpoints (all fixed): the first "all green" report was contradicted by the saved file
+(0 verified) - verification was then redone and confirmed from disk; buttons held > 0.8 s were learned as `trigger`
+(release window now 2.5 s); a rescan during a gesture could swallow its first message (no rescan while learning);
+`validate()` crashed on a non-string `ports` value and corrupt JSON logged an engine error (both fixed with tests).
+
+Measured: a hot-plug rescan (`close` + `open` inputs) costs ~41 ms, almost all in `open`.
 
 ## Outcome
 (filled in at the end)

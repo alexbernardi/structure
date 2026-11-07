@@ -1,0 +1,350 @@
+{
+	"active_profile": "daw",
+	"device_hint": "SMC-Mixer",
+	"ports": "auto",
+	"profiles": {
+		"daw": {
+			"label": "DAW mode (Mackie)",
+			"mappings": {
+				"global_bank_next": {
+					"behavior": "momentary",
+					"sig": "note:0:47"
+				},
+				"global_bank_prev": {
+					"behavior": "momentary",
+					"sig": "note:0:46"
+				},
+				"global_forward": {
+					"behavior": "momentary",
+					"sig": "note:0:92"
+				},
+				"global_nav_down": {
+					"behavior": "momentary",
+					"sig": "note:0:97"
+				},
+				"global_nav_left": {
+					"behavior": "momentary",
+					"sig": "note:0:98"
+				},
+				"global_nav_right": {
+					"behavior": "momentary",
+					"sig": "note:0:99"
+				},
+				"global_nav_up": {
+					"behavior": "momentary",
+					"sig": "note:0:96"
+				},
+				"global_play": {
+					"behavior": "momentary",
+					"sig": "note:0:94"
+				},
+				"global_record": {
+					"behavior": "momentary",
+					"sig": "note:0:95"
+				},
+				"global_rewind": {
+					"behavior": "momentary",
+					"sig": "note:0:91"
+				},
+				"global_stop": {
+					"behavior": "momentary",
+					"sig": "note:0:93"
+				},
+				"strip1_fader": {
+					"behavior": "absolute",
+					"invert": false,
+					"raw_max": 16256,
+					"raw_min": 0,
+					"sig": "pb:0:0"
+				},
+				"strip1_knob": {
+					"behavior": "relative",
+					"encoding": "sign_magnitude",
+					"invert": false,
+					"sig": "cc:0:16"
+				},
+				"strip1_mute": {
+					"behavior": "momentary",
+					"sig": "note:0:16"
+				},
+				"strip1_rec": {
+					"behavior": "momentary",
+					"sig": "note:0:0"
+				},
+				"strip1_select": {
+					"behavior": "momentary",
+					"sig": "note:0:24"
+				},
+				"strip1_solo": {
+					"behavior": "momentary",
+					"sig": "note:0:8"
+				},
+				"strip2_fader": {
+					"behavior": "absolute",
+					"invert": false,
+					"raw_max": 16256,
+					"raw_min": 0,
+					"sig": "pb:1:0"
+				},
+				"strip2_knob": {
+					"behavior": "relative",
+					"encoding": "sign_magnitude",
+					"invert": false,
+					"sig": "cc:0:17"
+				},
+				"strip2_mute": {
+					"behavior": "momentary",
+					"sig": "note:0:17"
+				},
+				"strip2_rec": {
+					"behavior": "momentary",
+					"sig": "note:0:1"
+				},
+				"strip2_select": {
+					"behavior": "momentary",
+					"sig": "note:0:25"
+				},
+				"strip2_solo": {
+					"behavior": "momentary",
+					"sig": "note:0:9"
+				},
+				"strip3_fader": {
+					"behavior": "absolute",
+					"invert": false,
+					"raw_max": 16256,
+					"raw_min": 0,
+					"sig": "pb:2:0"
+				},
+				"strip3_knob": {
+					"behavior": "relative",
+					"encoding": "sign_magnitude",
+					"invert": false,
+					"sig": "cc:0:18"
+				},
+				"strip3_mute": {
+					"behavior": "momentary",
+					"sig": "note:0:18"
+				},
+				"strip3_rec": {
+					"behavior": "momentary",
+					"sig": "note:0:2"
+				},
+				"strip3_select": {
+					"behavior": "momentary",
+					"sig": "note:0:26"
+				},
+				"strip3_solo": {
+					"behavior": "momentary",
+					"sig": "note:0:10"
+				},
+				"strip4_fader": {
+					"behavior": "absolute",
+					"invert": false,
+					"raw_max": 16256,
+					"raw_min": 0,
+					"sig": "pb:3:0"
+				},
+				"strip4_knob": {
+					"behavior": "relative",
+					"encoding": "sign_magnitude",
+					"invert": false,
+					"sig": "cc:0:19"
+				},
+				"strip4_mute": {
+					"behavior": "momentary",
+					"sig": "note:0:19"
+				},
+				"strip4_rec": {
+					"behavior": "momentary",
+					"sig": "note:0:3"
+				},
+				"strip4_select": {
+					"behavior": "momentary",
+					"sig": "note:0:27"
+				},
+				"strip4_solo": {
+					"behavior": "momentary",
+					"sig": "note:0:11"
+				},
+				"strip5_fader": {
+					"behavior": "absolute",
+					"invert": false,
+					"raw_max": 16256,
+					"raw_min": 0,
+					"sig": "pb:4:0"
+				},
+				"strip5_knob": {
+					"behavior": "relative",
+					"encoding": "sign_magnitude",
+					"invert": false,
+					"sig": "cc:0:20"
+				},
+				"strip5_mute": {
+					"behavior": "momentary",
+					"sig": "note:0:20"
+				},
+				"strip5_rec": {
+					"behavior": "momentary",
+					"sig": "note:0:4"
+				},
+				"strip5_select": {
+					"behavior": "momentary",
+					"sig": "note:0:28"
+				},
+				"strip5_solo": {
+					"behavior": "momentary",
+					"sig": "note:0:12"
+				},
+				"strip6_fader": {
+					"behavior": "absolute",
+					"invert": false,
+					"raw_max": 16256,
+					"raw_min": 0,
+					"sig": "pb:5:0"
+				},
+				"strip6_knob": {
+					"behavior": "relative",
+					"encoding": "sign_magnitude",
+					"invert": false,
+					"sig": "cc:0:21"
+				},
+				"strip6_mute": {
+					"behavior": "momentary",
+					"sig": "note:0:21"
+				},
+				"strip6_rec": {
+					"behavior": "momentary",
+					"sig": "note:0:5"
+				},
+				"strip6_select": {
+					"behavior": "momentary",
+					"sig": "note:0:29"
+				},
+				"strip6_solo": {
+					"behavior": "momentary",
+					"sig": "note:0:13"
+				},
+				"strip7_fader": {
+					"behavior": "absolute",
+					"invert": false,
+					"raw_max": 16256,
+					"raw_min": 0,
+					"sig": "pb:6:0"
+				},
+				"strip7_knob": {
+					"behavior": "relative",
+					"encoding": "sign_magnitude",
+					"invert": false,
+					"sig": "cc:0:22"
+				},
+				"strip7_mute": {
+					"behavior": "momentary",
+					"sig": "note:0:22"
+				},
+				"strip7_rec": {
+					"behavior": "momentary",
+					"sig": "note:0:6"
+				},
+				"strip7_select": {
+					"behavior": "momentary",
+					"sig": "note:0:30"
+				},
+				"strip7_solo": {
+					"behavior": "momentary",
+					"sig": "note:0:14"
+				},
+				"strip8_fader": {
+					"behavior": "absolute",
+					"invert": false,
+					"raw_max": 16256,
+					"raw_min": 0,
+					"sig": "pb:7:0"
+				},
+				"strip8_knob": {
+					"behavior": "relative",
+					"encoding": "sign_magnitude",
+					"invert": false,
+					"sig": "cc:0:23"
+				},
+				"strip8_mute": {
+					"behavior": "momentary",
+					"sig": "note:0:23"
+				},
+				"strip8_rec": {
+					"behavior": "momentary",
+					"sig": "note:0:7"
+				},
+				"strip8_select": {
+					"behavior": "momentary",
+					"sig": "note:0:31"
+				},
+				"strip8_solo": {
+					"behavior": "momentary",
+					"sig": "note:0:15"
+				}
+			},
+			"verified": {
+				"global_bank_next": "2026-11-07T07:23:08",
+				"global_bank_prev": "2026-11-07T07:23:08",
+				"global_forward": "2026-11-07T07:23:08",
+				"global_nav_down": "2026-11-07T07:23:07",
+				"global_nav_left": "2026-11-07T07:23:06",
+				"global_nav_right": "2026-11-07T07:23:06",
+				"global_nav_up": "2026-11-07T07:23:08",
+				"global_play": "2026-11-07T07:23:06",
+				"global_record": "2026-11-07T07:23:08",
+				"global_rewind": "2026-11-07T07:23:08",
+				"global_stop": "2026-11-07T07:23:07",
+				"strip1_fader": "2026-11-07T07:22:36",
+				"strip1_knob": "2026-11-07T07:22:40",
+				"strip1_mute": "2026-11-07T07:22:38",
+				"strip1_rec": "2026-11-07T07:22:39",
+				"strip1_select": "2026-11-07T07:22:39",
+				"strip1_solo": "2026-11-07T07:22:39",
+				"strip2_fader": "2026-11-07T07:22:52",
+				"strip2_knob": "2026-11-07T07:22:42",
+				"strip2_mute": "2026-11-07T07:22:50",
+				"strip2_rec": "2026-11-07T07:22:50",
+				"strip2_select": "2026-11-07T07:22:51",
+				"strip2_solo": "2026-11-07T07:22:50",
+				"strip3_fader": "2026-11-07T07:22:53",
+				"strip3_knob": "2026-11-07T07:22:43",
+				"strip3_mute": "2026-11-07T07:23:00",
+				"strip3_rec": "2026-11-07T07:23:00",
+				"strip3_select": "2026-11-07T07:22:59",
+				"strip3_solo": "2026-11-07T07:23:00",
+				"strip4_fader": "2026-11-07T07:22:54",
+				"strip4_knob": "2026-11-07T07:22:44",
+				"strip4_mute": "2026-11-07T07:23:01",
+				"strip4_rec": "2026-11-07T07:23:01",
+				"strip4_select": "2026-11-07T07:23:01",
+				"strip4_solo": "2026-11-07T07:23:01",
+				"strip5_fader": "2026-11-07T07:22:55",
+				"strip5_knob": "2026-11-07T07:22:45",
+				"strip5_mute": "2026-11-07T07:23:02",
+				"strip5_rec": "2026-11-07T07:23:02",
+				"strip5_select": "2026-11-07T07:23:02",
+				"strip5_solo": "2026-11-07T07:23:02",
+				"strip6_fader": "2026-11-07T07:22:56",
+				"strip6_knob": "2026-11-07T07:22:45",
+				"strip6_mute": "2026-11-07T07:23:03",
+				"strip6_rec": "2026-11-07T07:23:03",
+				"strip6_select": "2026-11-07T07:23:03",
+				"strip6_solo": "2026-11-07T07:23:03",
+				"strip7_fader": "2026-11-07T07:22:56",
+				"strip7_knob": "2026-11-07T07:22:46",
+				"strip7_mute": "2026-11-07T07:23:04",
+				"strip7_rec": "2026-11-07T07:23:04",
+				"strip7_select": "2026-11-07T07:23:04",
+				"strip7_solo": "2026-11-07T07:23:04",
+				"strip8_fader": "2026-11-07T07:22:57",
+				"strip8_knob": "2026-11-07T07:22:47",
+				"strip8_mute": "2026-11-07T07:23:05",
+				"strip8_rec": "2026-11-07T07:23:05",
+				"strip8_select": "2026-11-07T07:23:05",
+				"strip8_solo": "2026-11-07T07:23:05"
+			}
+		}
+	},
+	"schema": 1.0
+}

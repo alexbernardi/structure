@@ -40,7 +40,17 @@ func test_button_trigger_when_no_release(t) -> void:
 	_l.feed(_ev("cc", 0, 20, 127))
 	t.ok(_l.state == Learn.State.WAIT_RELEASE, "waiting for a release")
 	_settle(1.0)
-	t.eq(_l.status().mapping, {"sig": "cc:0:20", "behavior": "trigger"}, "no release -> trigger")
+	t.ok(_l.state == Learn.State.WAIT_RELEASE, "a button held for a second is still waiting (it is not a trigger yet)")
+	_settle(2.0)
+	t.eq(_l.status().mapping, {"sig": "cc:0:20", "behavior": "trigger"}, "no release for 3 s -> trigger")
+
+
+func test_button_held_a_while_is_still_momentary(t) -> void:
+	_l.start("strip1_mute")
+	_l.feed(_ev("note", 0, 16, 127))
+	_settle(2.0)
+	_l.feed(_ev("note", 0, 16, 0, true))
+	t.eq(_l.status().mapping.behavior, "momentary", "held 2 s then released")
 
 
 func test_button_ignores_analog_noise_until_a_press(t) -> void:

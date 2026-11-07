@@ -8,6 +8,7 @@ const Learn = preload("res://midi/midi_learn.gd")
 const Events = preload("res://midi/midi_events.gd")
 const Behavior = preload("res://midi/control_behavior.gd")
 const Catalog = preload("res://midi/control_catalog.gd")
+const Pattern = preload("res://midi/midi_pattern.gd")
 
 ## Every received message with the port it came from; `accepted` is false for filtered duplicates.
 signal raw_event(ev: Dictionary, accepted: bool, port_name: String)
@@ -28,7 +29,7 @@ var config = Config.new()
 var learn = Learn.new()
 var config_path := Config.DEFAULT_PATH
 var config_errors: Array[String] = []
-var rescan_interval := 1.5  ## seconds; 0 disables hot-plug polling
+var rescan_interval := 2.0  ## seconds between hot-plug checks (each costs ~40 ms); 0 disables polling
 var autosave := true
 
 var port_names: Array[String] = []
@@ -136,8 +137,7 @@ func _process(delta: float) -> void:
 		if _since_rescan >= rescan_interval:
 			_since_rescan = 0.0
 			var quiet := Time.get_ticks_msec() - _last_event_msec > RESCAN_IDLE_MSEC
-			var learning: bool = learn.is_active() and learn.state != Learn.State.LISTEN
-			if quiet and not learning:
+			if quiet and not learn.is_active():
 				rescan(true)
 
 
@@ -220,6 +220,17 @@ func _on_learn_finished(id: String, mapping: Dictionary) -> void:
 	if replaced != "":
 		mapping_changed.emit(replaced)
 	mapping_changed.emit(id)
+
+
+## Fills in strips that follow the pattern of the mapped ones. They stay "inferred" until actuated on the hardware.
+func infer_strips() -> Array:
+	var proposals := Pattern.propose(config)
+	Pattern.apply(config, proposals)
+	if autosave and not proposals.is_empty():
+		save_config()
+	for p in proposals:
+		mapping_changed.emit(p.control_id)
+	return proposals
 
 
 func clear_mapping(id: String) -> void:

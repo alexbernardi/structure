@@ -65,6 +65,11 @@ func is_verified(control_id: String) -> bool:
 func mark_verified(control_id: String) -> void:
 	if is_mapped(control_id) and not is_verified(control_id):
 		profile().verified[control_id] = Time.get_datetime_string_from_system(true)
+		mappings()[control_id].erase("inferred")
+
+
+func is_inferred(control_id: String) -> bool:
+	return mapping_of(control_id).get("inferred", false)
 
 
 func find_by_sig(sig: String) -> String:
@@ -180,6 +185,8 @@ static func _validate_entry(id: String, e: Variant) -> Array[String]:
 		p.append("%s behavior must be absolute or relative" % kind)
 	if e.has("invert") and typeof(e.invert) != TYPE_BOOL:
 		p.append("invert must be true or false")
+	if e.has("inferred") and typeof(e.inferred) != TYPE_BOOL:
+		p.append("inferred must be true or false")
 	return p
 
 
