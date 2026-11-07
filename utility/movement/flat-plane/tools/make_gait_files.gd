@@ -15,6 +15,16 @@ const BINDINGS_PATH := "res://config/gait_bindings.json"
 const PRESET_DIR := "res://presets_gait"
 
 const EXAMPLES := {
+	"first_defaults": {
+		"note": "The factory defaults before the first tuning session (2026-11-07), with the original proportions. Kept for reference and comparison.",
+		"values": {
+			"walk_speed": 1.2, "step_length": 0.68, "stand_height": 0.93, "velocity_match": 1.0, "step_height": 0.07, "swing_peak": 0.5,
+			"knee_min_flex": 12.0, "heel_strike_angle": 18.0, "toe_off_angle": 30.0, "heel_rise_at": 0.72, "pelvis_bob": 0.04,
+			"loading_dip": 0.0, "pelvis_sway": 0.02, "pelvis_rotation": 5.0, "shoulder_counter": 8.0, "torso_lean": 2.0,
+			"arm_swing": 24.0, "elbow_bend": 20.0, "arm_phase": 0.0, "view_zoom": 1.0,
+		},
+		"rig": "original",
+	},
 	"stroll": {
 		"note": "Example: slow, relaxed walk: short steps, long stance, small arm swing.",
 		"values": {"walk_speed": 0.8, "step_length": 0.6, "duty_factor": 0.64, "step_height": 0.05, "arm_swing": 14.0, "pelvis_bob": 0.03, "pelvis_rotation": 3.5, "shoulder_counter": 5.0},
@@ -45,7 +55,7 @@ func _initialize() -> void:
 		print("gait bindings: exists (use --force to overwrite)")
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(PRESET_DIR))
 	var store := Presets.new(PRESET_DIR)
-	var plan := {"default": {"note": "Every gait parameter at its documented default.", "values": {}}}
+	var plan := {"default": {"note": "Every gait and proportion parameter at the defaults saved on 2026-11-07 after the first tuning session.", "values": {}}}
 	plan.merge(EXAMPLES)
 	for name in plan:
 		if store.exists(name) and not force:
@@ -56,7 +66,12 @@ func _initialize() -> void:
 			params.set_value(id, float(plan[name].values[id]))
 		var targets := {"gait": params.snapshot()}
 		if name == "default":
-			targets["rig"] = RigParams.create().snapshot()   # the factory default also restores the original proportions
+			targets["rig"] = RigParams.create().snapshot()   # the factory default also restores the proportions
+		elif plan[name].get("rig", "") == "original":
+			var rig = RigParams.create()
+			for id in RigParams.ORIGINAL:
+				rig.set_value(id, float(RigParams.ORIGINAL[id]))
+			targets["rig"] = rig.snapshot()
 		var r2 := store.save_preset(name, targets, String(plan[name].note))
 		print("preset ", name, ": ", "written" if r2.ok else r2.error)
 	quit(0)

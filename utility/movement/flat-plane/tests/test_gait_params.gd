@@ -25,11 +25,11 @@ func test_values_are_clamped_snapped_and_nan_safe(t) -> void:
 	t.eq(p.set_value("step_length", 9.0), 1.0, "clamped to the maximum")
 	t.eq(p.set_value("step_length", -1.0), 0.3, "clamped to the minimum")
 	t.eq(p.set_value("duty_factor", 0.6049), 0.6, "snapped to the step")
-	t.eq(p.set_value("walk_speed", NAN), 1.2, "NaN falls back to the default")
+	t.eq(p.set_value("walk_speed", NAN), p.def("walk_speed").default, "NaN falls back to the default")
 	t.eq(p.set_value("freeze", 0.7), 1.0, "a boolean above half is on")
 	t.ok(p.is_on("freeze"), "and reads as on")
 	p.reset_all()
-	t.ok(not p.is_on("freeze") and p.get_value("walk_speed") == 1.2, "reset restores the defaults")
+	t.ok(not p.is_on("freeze") and p.get_value("walk_speed") == p.def("walk_speed").default, "reset restores the defaults")
 
 
 func test_the_gait_banks_are_valid_and_reach_every_parameter(t) -> void:

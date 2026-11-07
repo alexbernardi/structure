@@ -43,15 +43,15 @@ func _sole_corners(a: Vector3) -> Array[Vector2]:
 
 func test_cycle_numbers_at_the_defaults(t) -> void:
 	var c := _prime(1.2)
-	var expected_step := 0.68 * pow(1.2 / 1.4, 0.42)
+	var expected_step: float = float(_p.get_value("step_length")) * pow(1.2 / 1.4, 0.42)
 	t.near(c.step_len, expected_step, 1e-9, "step length grows with speed^0.42")
 	t.near(c.stride, 2.0 * expected_step, 1e-9, "stride = two steps")
 	t.near(c.rate * c.stride, 1.2, 1e-9, "cycles per second x stride = the walking speed")
 	t.near(120.0 * c.rate, 60.0 * 1.2 / expected_step, 1e-9, "cadence in steps per minute")
-	t.ok(120.0 * c.rate > 100.0 and 120.0 * c.rate < 125.0, "a human cadence at an easy walk: %.0f steps/min" % (120.0 * c.rate))
 	_p.set_value("auto_step_length", 0.0)
-	t.near(_prime(2.0).step_len, 0.68, 1e-9, "fixed step length when auto is off")
-	t.near(_prime(2.0).rate * 2.0 * 0.68, 2.0, 1e-9, "and the cadence takes up the speed")
+	var fixed: float = _p.get_value("step_length")
+	t.near(_prime(2.0).step_len, fixed, 1e-9, "fixed step length when auto is off")
+	t.near(_prime(2.0).rate * 2.0 * fixed, 2.0, 1e-9, "and the cadence takes up the speed")
 
 
 # ------------------------------------------------------------------ feet behave like feet
@@ -118,8 +118,8 @@ func test_the_flat_foot_phase_is_flat_on_the_ground(t) -> void:
 
 func test_heel_strike_is_toe_up_and_toe_off_is_toe_down(t) -> void:
 	var c := _prime(1.2)
-	t.near(rad_to_deg(_m.stance(0.0, c).z), 18.0, 1e-4, "heel strike angle from the parameter")
-	t.near(rad_to_deg(_m.stance(c.d, c).z), -30.0, 1e-4, "toe-off angle from the parameter")
+	t.near(rad_to_deg(_m.stance(0.0, c).z), _p.get_value("heel_strike_angle"), 1e-4, "heel strike angle from the parameter")
+	t.near(rad_to_deg(_m.stance(c.d, c).z), -float(_p.get_value("toe_off_angle")), 1e-4, "toe-off angle from the parameter")
 	_p.set_value("foot_roll", 0.0)
 	c = _prime(1.2)
 	for q in [0.0, 0.2, 0.4, 0.55, 0.8, 0.95]:
@@ -142,6 +142,7 @@ func test_the_swing_leaves_and_lands_moving_like_the_stance_foot(t) -> void:
 	var worst := 0.0
 	for speed in [0.5, 0.9, 1.2, 1.6, 2.0, 2.5]:
 		_p.reset_all()
+		_p.set_value("velocity_match", 1.0)
 		_p.set_value("step_height", 0.0)
 		_p.set_value("toe_clearance_angle", 0.0)
 		var c := _prime(speed)
@@ -165,6 +166,7 @@ func test_velocity_match_zero_stops_the_foot_at_both_ends(t) -> void:
 
 func test_foot_clearance_follows_the_parameter(t) -> void:
 	var mid := []
+	_p.set_value("swing_peak", 0.5)   # the bump peaks mid-swing, where it is measured
 	for hgt in [0.0, 0.07, 0.15]:
 		_p.set_value("step_height", hgt)
 		var c := _prime(1.2)
@@ -393,12 +395,13 @@ func test_the_right_leg_is_the_left_leg_half_a_cycle_later(t) -> void:
 
 
 func test_arms_swing_against_the_legs(t) -> void:
+	_p.set_value("arm_phase", 0.0)
 	_prime(1.4)
 	var p0: Dictionary = _m.pose_at(0.0)
 	t.ok(p0.thigh_l > p0.thigh_r, "left leg forward at left heel strike")
 	t.ok(p0.arm_l < 0.0 and p0.arm_r > 0.0, "so the left arm is back and the right arm forward")
-	t.near(p0.arm_r, deg_to_rad(24.0) * p0.gait_amount, 1e-9, "amplitude from the parameter")
-	_p.set_value("arm_phase", 30.0)
+	t.near(p0.arm_r, deg_to_rad(_p.get_value("arm_swing")) * cos(deg_to_rad(_p.get_value("arm_phase"))) * p0.gait_amount, 1e-9, "amplitude from the parameter (at the default timing offset)")
+	_p.set_value("arm_phase", -30.0)
 	var late: Dictionary = _m.pose_at(0.0)
 	t.ok(absf(late.arm_r - p0.arm_r) > 0.05, "the timing offset shifts the swing")
 
@@ -408,7 +411,7 @@ func test_pelvis_and_shoulders_turn_against_each_other(t) -> void:
 	var pose: Dictionary = _m.pose_at(0.0)
 	t.ok(pose.pelvis_yaw < 0.0, "pelvis turned so the left (forward) hip leads")
 	t.ok(pose.chest_yaw > 0.0, "shoulders turned the other way")
-	t.near(rad_to_deg(pose.pelvis_yaw), -5.0 * pose.gait_amount, 1e-6, "amplitudes from the parameters")
+	t.near(rad_to_deg(pose.pelvis_yaw), -float(_p.get_value("pelvis_rotation")) * pose.gait_amount, 1e-6, "amplitudes from the parameters")
 	var mid: Dictionary = _m.pose_at(0.25)
 	t.ok(mid.pelvis.x < 0.0, "hips shifted toward the left stance foot at left mid stance")
 	t.ok(mid.pelvis_tilt < 0.0, "and the right (swing) hip dropped: tilt about +Z negative")

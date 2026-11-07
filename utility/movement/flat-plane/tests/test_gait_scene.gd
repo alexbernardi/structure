@@ -73,7 +73,7 @@ func test_it_loads_and_walks(t) -> void:
 	var s := await _boot()
 	await _run(s, 2.0)
 	t.ok(s.model.pose.active, "the gait model is running")
-	t.near(s.speed, 1.2, 1e-9, "at the default belt speed")
+	t.near(s.speed, s.gait_params.def("walk_speed").default, 1e-9, "at the default belt speed")
 	t.ok(s.visual.gait_weight > 0.99, "and drives the skeleton")
 	t.ok(s.model.phase > 0.0, "the cycle advanced")
 	t.ok(s.cam.current and s.cam.projection == Camera3D.PROJECTION_ORTHOGONAL, "side camera is orthographic by default")
@@ -135,7 +135,7 @@ func test_slip_is_actually_measured(t) -> void:
 		s._measure_slip(DT)
 		s.gait_params.set_value("time_scale", 1.0)
 		seen = maxf(seen, maxf(s._slip_peak[0], s._slip_peak[1]))
-	t.near(seen, 0.6, 0.05, "the measured slip is the mismatch: %.2f m/s" % seen)
+	t.near(seen, 0.5 * s.speed, 0.05, "the measured slip is the mismatch (half the belt speed here): %.2f m/s" % seen)
 
 func test_keys_and_views(t) -> void:
 	var s := await _boot()
@@ -251,7 +251,7 @@ func test_the_shipped_presets_load_and_apply(t) -> void:
 	t.ok(s.tuning.load_preset("brisk"), "brisk loads")
 	t.near(s.gait_params.get_value("walk_speed"), 1.8, 1e-9, "brisk walk speed")
 	t.ok(s.tuning.load_preset("default"), "default loads")
-	t.near(s.gait_params.get_value("walk_speed"), 1.2, 1e-9, "and restores the defaults")
+	t.near(s.gait_params.get_value("walk_speed"), s.gait_params.def("walk_speed").default, 1e-9, "and restores the defaults")
 	t.ok(s.gait_params.is_on("foot_roll"), "including the switches")
 
 
@@ -291,3 +291,35 @@ func test_the_overlay_draws_without_errors(t) -> void:
 	for i in 3:
 		await _tree.process_frame
 	t.ok(true, "drawn in every mode (model off, frozen) without an engine error")
+
+
+func _key(code: int) -> InputEventKey:
+	var ev := InputEventKey.new()
+	ev.keycode = code
+	ev.physical_keycode = code
+	ev.pressed = true
+	return ev
+
+
+func test_the_keyboard_shortcuts_of_the_tuning_layer_work_in_the_lab(t) -> void:
+	var s := await _boot_tuned()
+	t.eq(s.tuning.engine.bank, 0, "starts on the first bank")
+	s.tuning._unhandled_input(_key(KEY_PAGEDOWN))
+	t.eq(s.tuning.engine.bank, 1, "PgDn: next bank")
+	s.tuning._unhandled_input(_key(KEY_PAGEUP))
+	t.eq(s.tuning.engine.bank, 0, "PgUp: previous bank")
+	s.gait_params.set_value("step_length", 0.5)
+	s.tuning._unhandled_input(_key(KEY_HOME))
+	t.near(s.gait_params.get_value("step_length"), s.gait_params.def("step_length").default, 1e-9, "Home: reset every parameter")
+	s.gait_params.set_value("arm_swing", 40.0)
+	s.tuning._unhandled_input(_key(KEY_F5))
+	var saved := []
+	var dir := DirAccess.open(PRESET_COPY)
+	for f in dir.get_files():
+		if f.begins_with("tuned_"):
+			saved.append(f)
+	t.eq(saved.size(), 1, "F5: saved the current values as a preset (%s)" % str(saved))
+	if not saved.is_empty():
+		var doc: Variant = JSON.parse_string(FileAccess.get_file_as_string("%s/%s" % [PRESET_COPY, saved[0]]))
+		t.near(doc.targets.gait.arm_swing, 40.0, 1e-9, "with the values as they were")
+		t.ok(doc.targets.has("rig") and doc.targets.has("body"), "for the gait, proportion and body targets")

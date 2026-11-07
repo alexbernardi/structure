@@ -1,3 +1,9 @@
+## Measures how smooth the walk is, for the current gait parameters (the shipped defaults unless overridden):
+##   * the hip height against its best-fit sine at twice the stride frequency (the clean up-and-down of a real walk);
+##   * the lowering of the hips needed to keep the knees from locking;
+##   * the angular acceleration of the knee, thigh and foot: median and worst, and where the worst is.
+## Run:  godot --headless --path utility/movement/flat-plane --script res://tools/gait_smoothness.gd [-- id=value ...]
+## e.g.  ... -- loading_dip=0.02 walk_speed=2   (any gait parameter id; the speeds measured are fixed below)
 extends SceneTree
 
 const GP = preload("res://animation/gait_params.gd")
@@ -47,8 +53,8 @@ func _initialize() -> void:
 			for k in series:
 				series[k].append(pose[k])
 		var f := _fit(ys)
-		var msg := "v=%.1f hips: p-p %.1f mm, sine amp %.1f mm, residual %.1f %% of amp, assist %.1f mm   |" % [speed, 2000.0 * f.amp, 1000.0 * f.amp, 100.0 * f.ratio, 1000.0 * assist]
-		# angular acceleration (second difference per cycle^2), worst and the 99th percentile ratio
+		var msg := "v=%.1f hips: p-p %.1f mm, sine amp %.1f mm, residual %.1f %% of amp, lowered %.1f mm   |" % [speed, 2000.0 * f.amp, 1000.0 * f.amp, 100.0 * f.ratio, 1000.0 * assist]
+		# angular acceleration (second difference per cycle^2), worst and the ratio to the median
 		for k in ["knee_l", "thigh_l", "foot_l"]:
 			var acc := []
 			for i in n:

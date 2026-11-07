@@ -57,11 +57,15 @@ func test_rig_definitions_are_consistent_and_visual_only(t) -> void:
 	t.ok(p.definitions().size() >= 19, "%d proportions" % p.definitions().size())
 
 
-func test_the_defaults_are_exactly_the_original_rig(t) -> void:
+func test_a_null_rig_is_the_original_rig_and_original_values_give_the_same_dims(t) -> void:
 	var d := RigParams.dims(null)
-	var q := RigParams.dims(RigParams.create())
+	var original = RigParams.create()
+	for id in RigParams.ORIGINAL:
+		original.set_value(id, float(RigParams.ORIGINAL[id]))
+	var q := RigParams.dims(original)
 	for k in d:
-		t.eq(d[k], q[k], "dims %s: null and an all-default parameter set agree" % k)
+		t.eq(d[k], q[k], "dims %s: null and a set holding the original values agree" % k)
+	t.ok(RigParams.dims(RigParams.create()).scale != 1.0, "(the saved defaults are the proportions tuned on 2026-11-07, not the original rig)")
 	t.near(d.thigh, Visual.THIGH, 1e-12, "thigh")
 	t.near(d.shin, Visual.SHIN, 1e-12, "shin")
 	t.near(d.ankle_h, Visual.ANKLE_H, 1e-12, "ankle height")
@@ -73,6 +77,7 @@ func test_the_defaults_are_exactly_the_original_rig(t) -> void:
 
 func test_scale_multiplies_every_length_and_radius(t) -> void:
 	var p = RigParams.create()
+	p.set_value("scale", 1.0)
 	var base := RigParams.dims(p)
 	p.set_value("scale", 1.25)
 	var big := RigParams.dims(p)
@@ -90,10 +95,13 @@ func _visual() -> Node:
 	return v
 
 
-func test_applying_default_proportions_changes_nothing(t) -> void:
+func test_applying_the_original_proportions_changes_nothing(t) -> void:
 	var a := await _visual()
 	var b := await _visual()
-	b.apply_rig(RigParams.create())
+	var original = RigParams.create()
+	for id in RigParams.ORIGINAL:
+		original.set_value(id, float(RigParams.ORIGINAL[id]))
+	b.apply_rig(original)
 	for bone in a.bone_index:
 		t.ok(a.skeleton.get_bone_rest(a.bone_index[bone]).is_equal_approx(b.skeleton.get_bone_rest(b.bone_index[bone])), "%s rest pose unchanged" % bone)
 	for bone in a._meshes:
@@ -116,6 +124,7 @@ func test_applying_default_proportions_changes_nothing(t) -> void:
 func test_each_length_parameter_moves_its_joint_by_exactly_that_much(t) -> void:
 	var v := await _visual()
 	var rig = RigParams.create()
+	rig.set_value("scale", 1.0)
 	rig.set_value("thigh_length", 0.55)
 	rig.set_value("shin_length", 0.38)
 	rig.set_value("upper_arm_length", 0.34)
@@ -136,7 +145,7 @@ func test_each_length_parameter_moves_its_joint_by_exactly_that_much(t) -> void:
 	t.near(_dist(v, "neck", "head"), 0.12, 1e-4, "neck length")
 	t.near(_dist(v, "thigh_l", "thigh_r"), 0.26, 1e-4, "hip joints are 2 x hip width apart")
 	t.near(_dist(v, "upper_arm_l", "upper_arm_r"), 0.54, 1e-4, "shoulder joints are 2 x shoulder width apart")
-	t.near(v.joint_height("foot_l"), 0.065, 1e-3, "standing pose: the ankle is at its height above the ground (hips follow the legs)")
+	t.near(v.joint_height("foot_l"), rig.get_value("ankle_height"), 1e-3, "standing pose: the ankle is at its height above the ground (hips follow the legs)")
 	v.queue_free()
 	await _tree.process_frame
 
@@ -144,6 +153,8 @@ func test_each_length_parameter_moves_its_joint_by_exactly_that_much(t) -> void:
 func test_thickness_and_size_rebuild_the_meshes(t) -> void:
 	var v := await _visual()
 	var rig = RigParams.create()
+	rig.set_value("scale", 1.0)
+	rig.set_value("shoulder_width", 0.23)
 	rig.set_value("thigh_radius", 0.11)
 	rig.set_value("forearm_radius", 0.03)
 	rig.set_value("head_radius", 0.14)
@@ -210,9 +221,10 @@ func test_a_proportion_change_reaches_the_skeleton_and_the_gait_plan(t) -> void:
 	var step_before: float = s.model.cycle.reach
 	s.rig_params.set_value("thigh_length", 0.58)
 	await _run(s, 0.1)
-	t.near(_dist(s.visual, "thigh_l", "shin_l"), 0.58, 1e-4, "the skeleton re-proportions without a restart (was %.3f)" % leg_before)
-	t.ok(s.model.cycle.reach > step_before + 0.1, "and the gait model plans for the longer leg")
-	t.near(s.visual.dims.thigh, 0.58, 1e-9, "the visual's dimensions follow")
+	var k: float = s.rig_params.get_value("scale")
+	t.near(_dist(s.visual, "thigh_l", "shin_l"), 0.58 * k, 1e-4, "the skeleton re-proportions without a restart (was %.3f)" % leg_before)
+	t.ok(s.model.cycle.reach > step_before + 0.05, "and the gait model plans for the longer leg")
+	t.near(s.visual.dims.thigh, 0.58 * k, 1e-9, "the visual's dimensions follow")
 
 
 func test_planted_feet_still_do_not_slip_with_a_different_body(t) -> void:
@@ -227,8 +239,9 @@ func test_changing_proportions_while_walking_does_not_pop(t) -> void:
 	await _run(s, 1.0)
 	var last: float = s.visual.joint_height("head")
 	var worst := 0.0
+	var base_scale: float = s.rig_params.get_value("scale")
 	for i in 60:
-		s.rig_params.set_value("scale", 1.0 + 0.002 * i)   # a slow drag of the size handle
+		s.rig_params.set_value("scale", base_scale * (1.0 + 0.002 * i))   # a slow drag of the size handle
 		s.advance(1.0 / 60.0)
 		var h: float = s.visual.joint_height("head")
 		worst = maxf(worst, absf(h - last))
@@ -395,8 +408,8 @@ func test_a_click_away_from_every_handle_is_left_alone_and_backspace_resets(t) -
 	ev.keycode = KEY_BACKSPACE
 	ev.pressed = true
 	t.ok(s.rig_editor.handle_input(ev), "Backspace is consumed in edit mode")
-	t.eq(s.rig_params.get_value("thigh_length"), 0.45, "the thigh is back")
-	t.eq(s.rig_params.get_value("head_radius"), 0.105, "and the head")
+	t.eq(s.rig_params.get_value("thigh_length"), s.rig_params.def("thigh_length").default, "the thigh is back")
+	t.eq(s.rig_params.get_value("head_radius"), s.rig_params.def("head_radius").default, "and the head")
 
 
 func test_edit_mode_freezes_the_walk_and_resumes_it_afterwards(t) -> void:

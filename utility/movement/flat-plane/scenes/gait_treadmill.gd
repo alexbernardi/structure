@@ -21,6 +21,7 @@ const RigEditor = preload("res://ui/rig_editor.gd")
 const BodyParams = preload("res://animation/body_params.gd")
 const BodyDynamics = preload("res://animation/body_dynamics.gd")
 const Params = preload("res://movement/movement_params.gd")
+const Actions = preload("res://movement/input_actions.gd")
 const Midi = preload("res://midi/midi_manager.gd")
 const Tuning = preload("res://tuning/tuning_system.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")
@@ -82,6 +83,7 @@ func _ready() -> void:
 			var kv := a.substr(2).split("=", true, 1)
 			_args[kv[0]] = kv[1] if kv.size() > 1 else "true"
 	_args.merge(options, true)
+	Actions.register()   # the tuning shortcuts (F3 F4 F5 PgUp PgDn [ ] Home) are input actions
 	for k in _args:
 		if String(k).begins_with("gait."):
 			gait_params.set_value(String(k).substr(5), float(_args[k]))

@@ -1,6 +1,6 @@
 # 0004 - Movement Lab 2.0: procedural locomotion and body dynamics
 
-Status: in progress     Owner: agent + Alex (hardware owner, playtester)     Date: 2026-11-07
+Status: in progress - paused at a stopping point chosen by the user on 2026-11-07     Owner: agent + Alex (hardware owner, playtester)     Date: 2026-11-07
 Branch: `task/0004-movement-lab-2` (from `task/0003-midi-movement-lab` at `9d384a1`)
 
 ## Goal
@@ -129,7 +129,8 @@ the white loop is the planned ankle path, the green ring is the planted contact 
 bottom show stance and swing. **Compare with the toggles bank:** each `fx_*` switch removes one effect, `foot_roll` off gives a flat-footed
 walk, `gait_model` off shows the original walk. Keys 1-5 change the camera, wheel zooms, T toggles the belt, B the body dynamics.
 **Judge:** does the foot placement, heel-to-toe roll, knee bend, hip bob/sway/rotation and arm swing read as a human walk, and which
-variables are missing? Status: **WAITING for the user.**
+variables are missing? Status: the user's first reply asked for a smoother hip motion and for editable proportions (next section); a later reply called it
+"a good stopping point". Neither reply individually confirmed the walk's look, so that stays **not confirmed**; the saved defaults below are the user's own tuning.
 
 ## Gait lab revision after the first look (user feedback, 2026-11-07)
 User: "i have some good settings on default, we will start from there on out building out the different modes. first off tho. the model is
@@ -157,6 +158,32 @@ also can you make it so ... change in limb size and position. a setting that the
   (posed ankles within 0.3 mm of the plan, soles on the ground), drag maths incl. clamping and sub-step drags, view-dependent handles, freeze/resume.
   Cost: ``cycle_for`` 1.2 ms on a cache miss (only while a setting or the speed changes), 52 us per steady frame, ``apply_rig`` 1.3 ms.
 - Not verified by me: that the walk now *looks* smooth to a human eye, and how the drag handles feel with a real mouse. That is the checkpoint.
+- Correction, same day: "defaults reproduce the original rig exactly" above held until the defaults were saved (next section). The original rig is now
+  ``RigParams.ORIGINAL`` and is what a null rig means; the tests compare the original values and the sandbox visual bone by bone.
+
+## Defaults saved from the user's live tuning (user request, 2026-11-07)
+User: "save all the values now for default that it currently is set at. still going to tweak this later. but save it. document what we've done inside of
+the movement workshop". The live values existed only in the running window, so the user pressed the controller's Up button (save preset); that produced
+``presets_gait/tuned_20261107_060205.json`` (kept untouched as the record). Its gait and proportion values are now the parameter defaults in
+``animation/gait_params.gd`` and ``animation/rig_params.gd`` (body parameters were unchanged), and ``presets_gait/default.json`` is regenerated from them
+(verified equal to the saved preset, gait and rig). The values before the session are kept as ``presets_gait/first_defaults.json``.
+- Gait: walk 1.55 m/s, step 0.61 m, hip height 0.90, velocity match 0.7, foot clearance 0.065 m, peak 0.53, knee limit 13 deg, heel strike 15 deg, toe-off 31 deg,
+  heel rise 0.71, bob 32 mm, loading dip 2 mm, sway 18 mm, pelvis rotation 4.5 deg, shoulder counter 7.5 deg, torso lean 14 deg, arm swing 27 deg, elbow bend 57 deg,
+  arm timing +9 deg, zoom 0.8. Proportions: size 0.91, thigh 0.495, shin 0.48, ankle 0.075, foot 0.255, torso 0.30, chest 0.255, neck 0.035, head 0.1225, shoulder
+  0.215, upper arm 0.295, torso width 0.96 and depth 1.1, shin and forearm thickness 0.0575 and 0.0425.
+- Measured on these values (``tools/gait_smoothness.gd``): hips within 2.7 % of a pure sine; the knee's acceleration at heel strike is 14.7x its median at
+  1.2 m/s because velocity match 0.7 deliberately breaks the smooth hand-over (5.0x at 1.0). Recorded as KI-016; the user's value is kept.
+- Tests were made independent of the default values (they read them from the definitions), and the rig step for limb thickness became 0.5 mm so the
+  original radii are representable. **412/412** utility tests.
+- Bug found and fixed while doing this: the lab never registered the tuning input actions, so F3/F4/F5/PgUp/PgDn/[ ]/Home did nothing there (only the
+  controller buttons worked). ``Actions.register()`` is now called and tested.
+- Documentation: new [MOVEMENT-LAB-2.md](../DOCUMENTATION/MOVEMENT-LAB-2.md) (status, launch, architecture, design, limits, lessons) and the generated
+  [MOVEMENT-LAB-PARAMETERS.md](../DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md); KI-013..017, performance numbers, START-HERE and the task index updated.
 
 ## Outcome
-(filled in as phases complete)
+Paused by the user at a good stopping point on 2026-11-07, mid-task. Done: phase 0 (audit, baselines, guards), phase 1 (analytic springs, user-confirmed),
+phase 2 (procedural body inertia, user approved the variables), and a treadmill gait lab with a procedural walk, live-editable proportions, a drag-and-drop
+handle editor, 7 MIDI banks, and the user's own tuning saved as the defaults (412 automated tests). Not done: phases 3-9 proper (the gait is not in the
+sandbox yet, foot IK on terrain, technique flags, banks A/C, preset A/B, telemetry and recording, guided playtests) and the 0003 phase 4 hardware checkpoint.
+Not verified by anyone but the user, and not individually confirmed by them: how the walk looks and how the handles feel. Next steps and limits:
+[MOVEMENT-LAB-2.md](../DOCUMENTATION/MOVEMENT-LAB-2.md) sections 7 and 9. To resume: read that page, then the open items at the top of this note.

@@ -115,4 +115,5 @@ Suites and how to write tests: [DOCUMENTATION/TESTING.md](DOCUMENTATION/TESTING.
 | Conventions (code, units, assets, git) | [PROTOCOLS/CONVENTIONS.md](PROTOCOLS/CONVENTIONS.md) |
 | The gameplay loop mapped to code and tests | [GAMEPLAY-MAPS/FIRST-LOOP.md](GAMEPLAY-MAPS/FIRST-LOOP.md) |
 | Plans | [PLANNING/BOOTSTRAP-PLAN.md](PLANNING/BOOTSTRAP-PLAN.md), [PLANNING/MILESTONES.md](PLANNING/MILESTONES.md) |
+| Movement Lab (MIDI-tuned movement, procedural body and gait, treadmill lab): status, launch, architecture | [DOCUMENTATION/MOVEMENT-LAB-2.md](DOCUMENTATION/MOVEMENT-LAB-2.md), [parameters and MIDI banks](DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md), [task 0004](TASKS/0004-movement-lab-2.md) |
 | Asset inventory | [INVENTORY/ASSETS.md](INVENTORY/ASSETS.md) |

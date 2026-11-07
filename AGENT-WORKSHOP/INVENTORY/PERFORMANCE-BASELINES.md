@@ -44,6 +44,11 @@ First human session (task 0002, vsync on, Docker server, 2 players): 143.9 FPS a
 
 ## Other measured facts
 
+- Movement Lab (utility, headless on the development machine; compare only against the same machine): `core.step` 2.3 us, `body.simulate` 15 us
+  (29 us on stairs), `visual.update_pose` 7.6 us, springs 1.5 / 2.0 / 4.2 us (scalar / vector / rotation), body dynamics update 68 us (3 us with the
+  master off), gait update at a steady speed 52 us, `cycle_for` on a cache miss 1.2 ms, `Visual.apply_rig` 1.3 ms. Details and method:
+  `DOCUMENTATION/MOVEMENT-LAB-2.md` section 6; benchmarks in `utility/movement/flat-plane/benchmarks/`.
+
 - Server image `structure-server`: 344 MB unpacked (~109 MB compressed); build ~70 s cold, seconds with cache.
 - Container start to `server.ready`: ~1 s; `docker stop` to exit (graceful save): ~1.8 s.
 - Godot headless import of the sandbox: ~2-3 s. Asset pipeline (Blender 5.0.1 background): a few seconds per asset.

@@ -1,5 +1,8 @@
 # Movement Lab audit (Phase 0 of task 0004)
 
+> Current state, launch instructions and architecture of the whole lab: [MOVEMENT-LAB-2.md](MOVEMENT-LAB-2.md). This page is the phase 0 audit (APIs,
+> skeleton facts, baselines and guards) and is not updated as later phases land, except where noted.
+
 Baseline of `utility/movement/flat-plane/` before "Movement Lab 2.0" changes anything. Every number here was produced
 by a script in `utility/movement/flat-plane/tools/` or a test, on 2026-11-07, Godot 4.7.2-stable, Windows 11
 (RTX 3090, 3440x1440). Re-run: `tools/audit.gd`, `tools/audit_baseline.gd`, `tools/audit_tables.gd`, and
