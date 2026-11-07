@@ -15,6 +15,7 @@ Requirements: Python >= 3.11, Git (+ Git LFS), Docker Desktop for container work
 asset pipeline. Godot is downloaded and verified by `setup`.
 
 ```powershell
+git clone https://github.com/alexbernardi/structure.git; cd structure
 python TOOLS/cli/structure.py setup     # downloads pinned Godot 4.7.2 into .tools/, imports projects
 python TOOLS/cli/structure.py play      # local dedicated server + game window (WASD, mouse, Space, E, Q)
 python TOOLS/cli/structure.py test      # all automated suites (Docker suite needs Docker Desktop)
@@ -34,3 +35,8 @@ python TOOLS/cli/structure.py test      # all automated suites (Docker suite nee
 | [TOOLS/](TOOLS/README.md) | `structure.py` developer CLI, diagnostics, visualisation |
 
 Agents: read [AGENTS.md](AGENTS.md) first.
+
+## License
+
+Public domain under [The Unlicense](LICENSE). Contributions are accepted under the same terms. Third-party
+assets or code may only be added if their license is compatible and recorded in `COMMON-ASSETS` metadata.

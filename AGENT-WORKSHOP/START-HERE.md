@@ -15,6 +15,8 @@ gameplay- and simulation-first: no art direction or lore yet ([CONCEPTS/PILLARS.
 **Phase: M0 bootstrap foundation - complete; first human play session done** (loop playable unaided, "felt good",
 no rubber-banding; two bugs found and fixed). Next milestone (needs approval): [PLANNING/MILESTONES.md](PLANNING/MILESTONES.md).
 Build 0.1.0 - network protocol v1 - world schema v1 - Godot 4.7.2-stable.
+Canonical repository: <https://github.com/alexbernardi/structure> (public, [Unlicense](../LICENSE), branch `main`).
+Agents on other machines: clone, run `setup`, then pull before starting a task and push task notes with the work.
 
 | Area | What exists |
 |---|---|
