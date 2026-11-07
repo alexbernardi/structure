@@ -48,9 +48,34 @@ off switch and unit-labelled, clamped parameters; no claim of visual/physical/ha
 
 ## Validation (running log)
 - Phase 0, 2026-11-07: `structure.py test utility` 235/235; baselines in the audit doc; benchmarks recorded.
+- Phase 1, 2026-11-07: **282/282** (47 new: 36 spring tests, 11 diagnostic tests). Automated results only - the visual
+  checkpoint below is NOT yet confirmed by the user.
+  - Exactness: matches a 0.2 ms RK4 reference to ~1e-6 in 8 regimes x 3 frequencies with a moving goal; steps compose
+    exactly (M(d1+d2) = M(d2)M(d1), 400 random cases, 1e-9); results identical from 15 Hz to 1 kHz (1e-9).
+  - Regimes: underdamped overshoot equals exp(-pi z / sqrt(1-z^2)) within 2e-4 and first-peak time within 2 ms for
+    z = 0.05..0.9; successive-peak ratio equals exp(-2 pi z / sqrt(1-z^2)); critical and overdamped never overshoot and
+    never cross; critical settles faster than any overdamped; undamped conserves energy to 1e-9 over 100 s and keeps its
+    frequency (150 cycles / 100 s at 1.5 Hz).
+  - Stability: 7 frequencies (0-1000 Hz) x 11 damping ratios (0-1000) x 8 timesteps (1 ms - 1 s) x 200 steps: all
+    finite, energy never grew; 40 random moving/jumping-target runs bounded; dt = 0, negative, NaN, huge, NaN/INF/1e9
+    parameters all handled; NaN targets are rejected and a corrupted state snaps back.
+  - A naive semi-implicit Euler spring (kept only for comparison) is rate-dependent (240 vs 60 Hz differ) and explodes at
+    12 Hz / 30 fps, where the analytic spring stays bounded.
+  - Vector and rotation springs are single precision (Godot's Vector3/Quaternion): ~1e-6 per step, ~1e-5 accumulated over
+    hundreds of steps, bounded. Scalar uses doubles. Documented in `animation/springs.gd`.
+  - Cost: Scalar 1.45 us, Vector 1.95 us, Rotation 4.19 us per step (cached coefficients); 2.9 us when dt changes every call.
 - Debugging notes worth keeping: (a) a probe that ran from `SceneTree._initialize` fought the scene's own `_process`
   because `_ready` had not run yet - wait one frame before disabling a scene's processing (fixed in all scene tests);
-  (b) the first physics-identity test failed for the same reason (body stepped twice per tick), not because of animation.
+  (b) the first physics-identity test failed for the same reason (body stepped twice per tick), not because of animation;
+  (c) `Quaternion.angle_to` loses ~1e-4 rad near zero (acos) - measure rotation error via the rotation vector;
+  (d) GDScript has no `%e` format; (e) `rotation` clashes with `Control.rotation`.
+
+## Phase 1 checkpoint (needs the user)
+Spring diagnostic: `godot --path utility/movement/flat-plane res://scenes/spring_diagnostic.tscn`
+(plots target, response, velocity, measured vs theoretical overshoot; three-regime overlay; naive-Euler comparison; rotation
+dial). **Verify:** underdamped rings and overshoots, critical settles fastest without overshoot, overdamped is slower;
+the readout's measured overshoot matches the theory line; at 12 Hz / 30 Hz tick the red naive spring explodes while the
+cyan one does not; the dial's actual arrow always takes the short way round. Status: **awaiting user confirmation**.
 
 ## Outcome
 (filled in as phases complete)
