@@ -180,10 +180,48 @@ the movement workshop". The live values existed only in the running window, so t
 - Documentation: new [MOVEMENT-LAB-2.md](../DOCUMENTATION/MOVEMENT-LAB-2.md) (status, launch, architecture, design, limits, lessons) and the generated
   [MOVEMENT-LAB-PARAMETERS.md](../DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md); KI-013..017, performance numbers, START-HERE and the task index updated.
 
+## Animation graph follow-up (implemented; interactive acceptance pending)
+
+User approved generated walk clips plus a real, editor-visible AnimationPlayer/AnimationTree in **both** treadmill and
+third-person sandbox. Preserve captured defaults and MIDI mapping. Plan: serialize a reusable primitive visual scene and
+blend tree; generate gait clips from the existing planner; layer the existing procedural fallback and body dynamics through
+the tree without competing bone writers; expose graph values to the registry/presets/MIDI; test poses, regeneration,
+playback, persistence and physics separation. Terrain IK and a distinct running gait remain out of scope.
+
+Acceptance: open the reusable visual scene in Godot and edit the graph; live gait/proportion edits regenerate the walk;
+both scenes animate through the tree; saved user values remain unchanged; relevant automated tests pass. Human animation
+and controller acceptance must still be requested after automated verification.
+
+Implemented an editor-visible reusable primitive rig with AnimationPlayer, generated `walk`/`RESET` clips, live
+`legacy`/`body` clips and the shared blend tree. The visual now calculates pose dictionaries; the tree is the sole
+per-frame bone writer in both scenes. Each character owns its animation library. Original sandbox proportions/collider
+and all saved preset/MIDI data are preserved; gait and graph targets join its registry. Appended two walk banks and
+Animation Graph to the sandbox; only Animation Graph to the treadmill. Existing banks are not reassigned.
+
+Graph controls: WalkBlend, BodyAdd and WalkSpeed, synchronized bidirectionally with MIDI/registry/presets. Live rig/gait
+changes regenerate the clip without phase reset. Fixed the coupled treadmill double-time-scale bug; belt, planner and
+tree now share one clock. Additive poses use the current rig's RESET origin, including after resizing. Synthetic-port
+scene tests disable OS rescan to avoid replacing their injected test ports during long runs.
+
+Validation: **420/420 utility tests in 28 files**; headless editor import succeeded, and `structure.py check` reports
+**0 errors / 0 warnings**. Tests include graph output, raw generated ankle placement within 1 mm on
+73 sampled default phases, clip isolation, rig regeneration, native playback clock, preset round-trip and bit-identical
+physics with/without animation. Vulkan GUI renders of both scenes completed without engine errors and were inspected
+for visible humanoid/ground placement (not a smoothness or hardware verdict). Measured steady treadmill frame **0.32 ms**;
+96-sample clip regeneration **7.2 ms**. 64 samples failed the 1 mm accuracy criterion (1.214 mm); 96 passes while costing
+less than the original 128-sample 9.25 ms bake. Re-generation is synchronous during speed/settings changes.
+
+Known limits: distinct running/turning gaits and terrain IK remain absent; the sandbox reads real movement speed and
+keeps its original rig, whereas the treadmill keeps the user's tuned rig. Generated/live clips are not durable hand-keyed
+assets; edit planner values or the graph. Remote graph edits persist via F5; old presets without a graph target retain it.
+Follow-up: user verifies the graph blends/playback in both scenes and the new MIDI bank, then reports any jolts/pose issues.
+
 ## Outcome
 Paused by the user at a good stopping point on 2026-11-07, mid-task. Done: phase 0 (audit, baselines, guards), phase 1 (analytic springs, user-confirmed),
 phase 2 (procedural body inertia, user approved the variables), and a treadmill gait lab with a procedural walk, live-editable proportions, a drag-and-drop
 handle editor, 7 MIDI banks, and the user's own tuning saved as the defaults (412 automated tests). Not done: phases 3-9 proper (the gait is not in the
 sandbox yet, foot IK on terrain, technique flags, banks A/C, preset A/B, telemetry and recording, guided playtests) and the 0003 phase 4 hardware checkpoint.
-Not verified by anyone but the user, and not individually confirmed by them: how the walk looks and how the handles feel. Next steps and limits:
+The subsequent graph follow-up above integrates walking into the sandbox and exposes AnimationTree editing in both scenes;
+it does not complete the remaining gait/terrain phases. Not individually human-confirmed: how the new graph-driven walk
+looks and how the handles feel. Next steps and limits:
 [MOVEMENT-LAB-2.md](../DOCUMENTATION/MOVEMENT-LAB-2.md) sections 7 and 9. To resume: read that page, then the open items at the top of this note.

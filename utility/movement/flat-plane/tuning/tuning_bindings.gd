@@ -43,6 +43,7 @@ static func default_data() -> Dictionary:
 	var body: Array = ["max_walkable_slope", "slope_speed_penalty", "step_height", "stand_height", "crouch_height", "auto_jump", "", ""]
 	var banks: Array = [_bank("Ground", ground, m), _bank("Jump & Air", jump, m), _bank("Slope & Body", body, m)]
 	banks.append_array(body_banks())
+	banks.append_array(walk_banks())
 	return {
 		"schema": SCHEMA,
 		"knob_scale": 1.0,
@@ -123,8 +124,17 @@ static func gait_data() -> Dictionary:
 		if not v.is_empty():
 			view[str(i + 1)] = v
 	d.banks = [_bank("Walk Cycle", cycle, g), _bank("Pelvis & Torso", pelvis, g), _bank("Feet & Arms", feet, g), {"name": "Toggles", "strips": toggles}, {"name": "View & Playback", "strips": view},
-		_bank("Proportions 1", proportions, "rig."), {"name": "Proportions 2", "strips": prop2}]
+		_bank("Proportions 1", proportions, "rig."), {"name": "Proportions 2", "strips": prop2}, graph_bank()]
 	return d
+
+
+static func graph_bank() -> Dictionary:
+	return _bank("Animation Graph", ["walk_blend", "body_blend", "playback_speed"], "graph.")
+
+
+static func walk_banks() -> Array:
+	return [_bank("Walk Cycle", ["step_length", "duty_factor", "step_height", "swing_peak", "stand_height", "velocity_match", "knee_min_flex", "gait_model"], "gait."),
+		_bank("Walk Upper Body", ["pelvis_bob", "pelvis_sway", "pelvis_rotation", "shoulder_counter", "torso_lean", "arm_swing", "elbow_bend", "arm_phase"], "gait."), graph_bank()]
 
 
 ## Each strip's knob fine-adjusts the same parameter its fader sets coarsely.

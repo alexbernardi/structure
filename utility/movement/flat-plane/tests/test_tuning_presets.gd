@@ -5,6 +5,8 @@ const Presets = preload("res://tuning/preset_store.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
 const Params = preload("res://movement/movement_params.gd")
 const BodyParams = preload("res://animation/body_params.gd")
+const GaitParams = preload("res://animation/gait_params.gd")
+const GraphParams = preload("res://animation/graph_params.gd")
 
 const BIND_TMP := "user://test_tuning_bindings.json"
 const PRESET_DIR := "user://test_presets"
@@ -38,7 +40,10 @@ func _reg():
 func test_default_bindings_are_valid_and_cover_the_parameters(t) -> void:
 	var b := Bindings.new()
 	t.eq(Bindings.validate(b.data), [], "valid")
-	t.eq(b.unresolved(_reg()), [], "every bound parameter exists")
+	var complete = _reg()
+	complete.register("gait", "Walk (visual)", GaitParams.create())
+	complete.register("graph", "Animation graph", GraphParams.create())
+	t.eq(b.unresolved(complete), [], "every bound parameter exists")
 	var bound := b.referenced_keys()
 	for key in _reg().keys():
 		t.ok(bound.has(key), "%s is reachable from some bank" % key)
@@ -46,7 +51,7 @@ func test_default_bindings_are_valid_and_cover_the_parameters(t) -> void:
 
 func test_default_layout(t) -> void:
 	var b := Bindings.new()
-	t.eq(b.bank_count(), 6, "movement banks plus the three body banks")
+	t.eq(b.bank_count(), 9, "movement/body banks plus two walk banks and the graph")
 	t.eq(b.bank_name(3), "Body Springs", "body bank names")
 	t.eq(b.bank_name(4), "Body Effects", "body bank names")
 	t.eq(b.bank_name(0), "Ground", "names")
@@ -74,7 +79,7 @@ func test_roundtrip_and_backup(t) -> void:
 	t.ok(FileAccess.file_exists(BIND_TMP + ".bak"), "previous version kept")
 	var c := Bindings.new()
 	t.ok(c.load_file(BIND_TMP).ok, "loaded")
-	t.eq(c.bank_count(), 7, "added bank persisted")
+	t.eq(c.bank_count(), 10, "added bank persisted")
 	t.eq(c.slot_key(0, 8, "fader"), "", "latest edit persisted")
 
 

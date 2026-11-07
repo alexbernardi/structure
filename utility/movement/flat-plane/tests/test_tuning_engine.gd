@@ -5,6 +5,8 @@ const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
 const Params = preload("res://movement/movement_params.gd")
 const BodyParams = preload("res://animation/body_params.gd")
+const GaitParams = preload("res://animation/gait_params.gd")
+const GraphParams = preload("res://animation/graph_params.gd")
 
 var _p
 var _reg
@@ -19,6 +21,8 @@ func before_each() -> void:
 	_reg = Registry.new()
 	_reg.register("movement", "Movement", _p)
 	_reg.register("body", "Body (visual)", BodyParams.create())
+	_reg.register("gait", "Walk (visual)", GaitParams.create())
+	_reg.register("graph", "Animation graph", GraphParams.create())
 	_b = Bindings.new()
 	_e = Engine_.new(_reg, _b)
 	_events = []

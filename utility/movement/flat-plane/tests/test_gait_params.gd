@@ -4,6 +4,7 @@ const GaitParams = preload("res://animation/gait_params.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
 const RigParams = preload("res://animation/rig_params.gd")
+const GraphParams = preload("res://animation/graph_params.gd")
 
 
 func test_definitions_are_consistent(t) -> void:
@@ -37,11 +38,12 @@ func test_the_gait_banks_are_valid_and_reach_every_parameter(t) -> void:
 	t.eq(Bindings.validate(data), [], "valid bindings")
 	var b := Bindings.new()
 	b.data = data
-	t.eq(b.bank_count(), 7, "seven banks")
+	t.eq(b.bank_count(), 8, "seven original banks plus the animation graph")
 	t.eq([b.bank_name(0), b.bank_name(1), b.bank_name(2), b.bank_name(3), b.bank_name(4), b.bank_name(5), b.bank_name(6)], ["Walk Cycle", "Pelvis & Torso", "Feet & Arms", "Toggles", "View & Playback", "Proportions 1", "Proportions 2"], "names")
 	var reg := Registry.new()
 	reg.register("gait", "Gait (visual)", GaitParams.create())
 	reg.register("rig", "Proportions (visual)", RigParams.create())
+	reg.register("graph", "Animation graph", GraphParams.create())
 	t.eq(b.unresolved(reg), [], "every bound parameter exists")
 	var bound := b.referenced_keys()
 	var missing := []

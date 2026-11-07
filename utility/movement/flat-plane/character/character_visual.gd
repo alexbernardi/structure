@@ -47,6 +47,9 @@ var _stand_hip := 0.0
 var gait_weight := 0.0   ## how much of the pose comes from the gait model (0..1)
 var dims: Dictionary = RigParams.dims(null)   ## the rig's real dimensions (metres), changed by apply_rig()
 var _meshes: Dictionary = {}
+var walk_animation
+var _rotations: Dictionary = {}
+var _positions: Dictionary = {}
 
 
 func _ready() -> void:
@@ -55,6 +58,7 @@ func _ready() -> void:
 	top_level = true
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	build()
+	walk_animation = get_node_or_null("WalkAnimation")
 
 
 ## Places the whole humanoid at the body's (interpolated) feet position; call once per rendered frame before update_pose.
@@ -63,6 +67,14 @@ func follow(body: Node3D, vertical_offset := 0.0) -> void:
 
 
 func build() -> void:
+	var existing := get_node_or_null("Skeleton3D") as Skeleton3D
+	if existing != null and existing != skeleton:
+		skeleton.free()
+		skeleton = existing
+		for b in BONES:
+			bone_index[b[0]] = skeleton.find_bone(b[0])
+			_meshes[b[0]] = skeleton.get_node("Attach_%s/Mesh" % b[0])
+		_stand_hip = _hip_height(0.0, 0.0)
 	if skeleton.get_bone_count() > 0:
 		return
 	skeleton.name = "Skeleton3D"
@@ -80,6 +92,7 @@ func build() -> void:
 		attach.bone_name = b[0]
 		skeleton.add_child(attach)
 		var mi := MeshInstance3D.new()
+		mi.name = "Mesh"
 		mi.mesh = _mesh(b[3], b[4])
 		mi.position = b[5]
 		var mat := StandardMaterial3D.new()
@@ -163,6 +176,37 @@ func apply_rig(rig) -> void:
 ##         gait: pose dictionary from GaitModel.update() (optional; legs, feet, pelvis, arms and trunk twist come from it
 ##               while the character walks on the ground, fading back to the simple pose in the air, crouching or landing)}
 func update_pose(state: Dictionary, delta: float) -> void:
+	_calculate_pose(state, delta)
+	if walk_animation != null and walk_animation.model != null:
+		var full := pose_snapshot()
+		var weight := gait_weight
+		var fallback := state.duplicate()
+		fallback.erase("gait")
+		fallback.erase("landed_impact")
+		_calculate_pose(fallback, 0.0)
+		var legacy := pose_snapshot()
+		gait_weight = weight
+		walk_animation.apply_pose(full, legacy, weight)
+	else:
+		for bone in _rotations:
+			skeleton.set_bone_pose_rotation(bone_index[bone], _rotations[bone])
+		for bone in _positions:
+			skeleton.set_bone_pose_position(bone_index[bone], _positions[bone])
+
+
+func pose_snapshot() -> Dictionary:
+	return {"rotations": _rotations.duplicate(), "positions": _positions.duplicate()}
+
+
+func _set_rotation(bone: String, value: Quaternion) -> void:
+	_rotations[bone] = value
+
+
+func _set_position(bone: String, value: Vector3) -> void:
+	_positions[bone] = value
+
+
+func _calculate_pose(state: Dictionary, delta: float) -> void:
 	if skeleton.get_bone_count() == 0:
 		return
 	var speed: float = state.get("speed", 0.0)
@@ -263,14 +307,14 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	if use_gait:
 		pelvis_x += gait_pose.pelvis.x * gw
 		pelvis_rot = pelvis_rot.slerp(gait_q, gw) if gw > 0.0 else pelvis_rot
-	skeleton.set_bone_pose_position(bone_index.pelvis, Vector3(pelvis_x, pelvis_y, pelvis_z))
-	skeleton.set_bone_pose_rotation(bone_index.pelvis, pelvis_rot)
+	_set_position("pelvis", Vector3(pelvis_x, pelvis_y, pelvis_z))
+	_set_rotation("pelvis", pelvis_rot)
 
 	# With the gait model the legs are posed in the world's forward plane whatever the hips do, so the planned feet land
 	# where they were planned: the thighs undo the pelvis rotation.
 	var leg_frame := Quaternion.IDENTITY.slerp(gait_q.inverse(), gw) if gw > 0.0 else Quaternion.IDENTITY
-	skeleton.set_bone_pose_rotation(bone_index.thigh_l, leg_frame * Quaternion(Vector3.RIGHT, thigh_l))
-	skeleton.set_bone_pose_rotation(bone_index.thigh_r, leg_frame * Quaternion(Vector3.RIGHT, thigh_r))
+	_set_rotation("thigh_l", leg_frame * Quaternion(Vector3.RIGHT, thigh_l))
+	_set_rotation("thigh_r", leg_frame * Quaternion(Vector3.RIGHT, thigh_r))
 	_rot("shin_l", shin_l)
 	_rot("shin_r", shin_r)
 	_rot("foot_l", foot_l_a)
@@ -304,8 +348,8 @@ func update_pose(state: Dictionary, delta: float) -> void:
 		arm_r += dyn.arm_pitch_r
 		roll_l += dyn.arm_roll_l
 		roll_r += dyn.arm_roll_r
-	skeleton.set_bone_pose_rotation(bone_index.upper_arm_l, Quaternion(Vector3.RIGHT, arm_l) * Quaternion(Vector3.FORWARD, roll_l))
-	skeleton.set_bone_pose_rotation(bone_index.upper_arm_r, Quaternion(Vector3.RIGHT, arm_r) * Quaternion(Vector3.FORWARD, -roll_r))
+	_set_rotation("upper_arm_l", Quaternion(Vector3.RIGHT, arm_l) * Quaternion(Vector3.FORWARD, roll_l))
+	_set_rotation("upper_arm_r", Quaternion(Vector3.RIGHT, arm_r) * Quaternion(Vector3.FORWARD, -roll_r))
 
 	var breathing := sin(Time.get_ticks_msec() / 650.0) * 0.012 * idle
 	var chest_lean := -(forward_lean + 0.10 * crouch_blend + (float(gait_pose.torso_lean) * gw if use_gait else 0.0)) + breathing
@@ -314,24 +358,24 @@ func update_pose(state: Dictionary, delta: float) -> void:
 		# rotation about Y). The spine takes 40 % of the torso motion, the chest 60 % plus the shoulder counter-rotation.
 		var roll: float = dyn.torso_roll
 		var yaw: float = dyn.torso_yaw
-		skeleton.set_bone_pose_rotation(bone_index.spine, Quaternion(Vector3.UP, -yaw * 0.4) * Quaternion(Vector3.RIGHT, chest_lean * 0.4) * Quaternion(Vector3.FORWARD, roll * 0.4))
-		skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.UP, -(yaw * 0.6 + dyn.shoulder_twist)) * Quaternion(Vector3.RIGHT, chest_lean * 0.6) * Quaternion(Vector3.FORWARD, roll * 0.6))
+		_set_rotation("spine", Quaternion(Vector3.UP, -yaw * 0.4) * Quaternion(Vector3.RIGHT, chest_lean * 0.4) * Quaternion(Vector3.FORWARD, roll * 0.4))
+		_set_rotation("chest", Quaternion(Vector3.UP, -(yaw * 0.6 + dyn.shoulder_twist)) * Quaternion(Vector3.RIGHT, chest_lean * 0.6) * Quaternion(Vector3.FORWARD, roll * 0.6))
 		var head_pitch_back: float = -dyn.head_pitch   # compensation tilts the upward-pointing bones backward (+X)
-		skeleton.set_bone_pose_rotation(bone_index.neck, Quaternion(Vector3.UP, -dyn.head_yaw * 0.5) * Quaternion(Vector3.RIGHT, head_pitch_back * 0.6) * Quaternion(Vector3.FORWARD, dyn.head_roll * 0.5))
-		skeleton.set_bone_pose_rotation(bone_index.head, Quaternion(Vector3.UP, -dyn.head_yaw * 0.5) * Quaternion(Vector3.RIGHT, head_pitch_back * 0.4) * Quaternion(Vector3.FORWARD, dyn.head_roll * 0.5))
+		_set_rotation("neck", Quaternion(Vector3.UP, -dyn.head_yaw * 0.5) * Quaternion(Vector3.RIGHT, head_pitch_back * 0.6) * Quaternion(Vector3.FORWARD, dyn.head_roll * 0.5))
+		_set_rotation("head", Quaternion(Vector3.UP, -dyn.head_yaw * 0.5) * Quaternion(Vector3.RIGHT, head_pitch_back * 0.4) * Quaternion(Vector3.FORWARD, dyn.head_roll * 0.5))
 	else:
-		skeleton.set_bone_pose_rotation(bone_index.spine, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, sin(phase) * 0.14 * gait))
-		skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, -sin(phase) * 0.10 * gait))
-		skeleton.set_bone_pose_rotation(bone_index.neck, Quaternion(Vector3.RIGHT, lean * 0.6))
-		skeleton.set_bone_pose_rotation(bone_index.head, Quaternion(Vector3.RIGHT, lean * 0.3))
+		_set_rotation("spine", Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, sin(phase) * 0.14 * gait))
+		_set_rotation("chest", Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, -sin(phase) * 0.10 * gait))
+		_set_rotation("neck", Quaternion(Vector3.RIGHT, lean * 0.6))
+		_set_rotation("head", Quaternion(Vector3.RIGHT, lean * 0.3))
 	if gw > 0.0:
 		# keep the trunk facing forward whatever the hips do, then turn the shoulders against them
-		skeleton.set_bone_pose_rotation(bone_index.spine, leg_frame * skeleton.get_bone_pose_rotation(bone_index.spine))
-		skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.UP, float(gait_pose.chest_yaw) * gw) * skeleton.get_bone_pose_rotation(bone_index.chest))
+		_set_rotation("spine", leg_frame * _rotations.spine)
+		_set_rotation("chest", Quaternion(Vector3.UP, float(gait_pose.chest_yaw) * gw) * _rotations.chest)
 
 
 func _rot(bone: String, angle: float) -> void:
-	skeleton.set_bone_pose_rotation(bone_index[bone], Quaternion(Vector3.RIGHT, angle))
+	_set_rotation(bone, Quaternion(Vector3.RIGHT, angle))
 
 
 ## Current global height of a bone's joint above the character origin (used by tests and debugging).

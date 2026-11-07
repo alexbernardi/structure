@@ -49,6 +49,7 @@ func _boot(extra := {}) -> void:
 	_s.set_physics_process(false)
 	_s.set_process(false)
 	if _s.midi != null:
+		_s.midi.rescan_interval = 0.0   # synthetic ports must not be replaced by an OS device scan mid-test
 		_s.midi._apply_ports(["SMC-Mixer", "MIDIIN2 (SMC-Mixer)"])
 	await _tree.physics_frame
 	await _tree.physics_frame

@@ -237,6 +237,23 @@
 					"fader": "rig.torso_depth"
 				}
 			}
+		},
+		{
+			"name": "Animation Graph",
+			"strips": {
+				"1": {
+					"fader": "graph.walk_blend",
+					"knob": "graph.walk_blend"
+				},
+				"2": {
+					"fader": "graph.body_blend",
+					"knob": "graph.body_blend"
+				},
+				"3": {
+					"fader": "graph.playback_speed",
+					"knob": "graph.playback_speed"
+				}
+			}
 		}
 	],
 	"global_actions": {
@@ -253,7 +270,7 @@
 		"global_stop": "reset_all"
 	},
 	"knob_scale": 1.0,
-	"schema": 1,
+	"schema": 1.0,
 	"strip_actions": {
 		"mute": "reset_param",
 		"rec": "revert_param",

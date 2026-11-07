@@ -45,6 +45,24 @@ const EXAMPLES := {
 
 
 func _initialize() -> void:
+	if OS.get_cmdline_user_args().has("--add-missing-banks"):
+		var bindings := Bindings.new()
+		var loaded := bindings.load_file(BINDINGS_PATH)
+		if not loaded.ok:
+			push_error("Cannot append gait banks: %s" % loaded.errors)
+			quit(1)
+			return
+		var names: Array[String] = []
+		for bank in bindings.data.banks:
+			names.append(bank.name)
+		for bank in Bindings.gait_data().banks:
+			if bank.name not in names:
+				bindings.data.banks.append(bank)
+		var saved := bindings.save_file(BINDINGS_PATH)
+		if not saved.ok:
+			push_error("Cannot save gait banks: %s" % saved.error)
+		quit(0 if saved.ok else 1)
+		return
 	var force := OS.get_cmdline_user_args().has("--force")
 	if force or not FileAccess.file_exists(BINDINGS_PATH):
 		var b := Bindings.new()

@@ -27,6 +27,7 @@ Agents on other machines: clone, run `setup`, then pull before starting a task a
 | Systems | room template + `movement` room (tests, benchmarks, golden fixture) integrated through the gateway |
 | Assets | Blender 5.0.1 pipeline example `resource_stone` (spec -> GLB -> validation -> Godot), reproducible bytes |
 | Quality | 8 automated suites, performance baselines, structured logs, static `check` |
+| Movement utility | MIDI treadmill and third-person walk via editable AnimationPlayer/AnimationTree; saved gait/proportions preserved; graph controls also available in MIDI/presets. See [Movement Lab](DOCUMENTATION/MOVEMENT-LAB-2.md) section 5; interactive acceptance pending |
 
 Verified and unverified items, test results and open problems: [TASKS/0001-bootstrap.md](TASKS/0001-bootstrap.md).
 

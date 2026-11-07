@@ -83,7 +83,7 @@ Visual only: springs for the torso, pelvis, head, shoulders and arms.
 
 ## Gait (`gait.*`)
 
-Visual only: the procedural walk of the treadmill lab. The `view_*` and `edit_rig` switches only change what the lab shows.
+Visual only: generated walk in both scenes. `walk_speed`, `view_*` and `edit_rig` only affect the treadmill lab.
 
 | id | label | unit | min | max | default | step | group | affects |
 |---|---|---|---|---|---|---|---|---|
@@ -158,6 +158,16 @@ Visual only: limb lengths, joint offsets and thickness. A null rig means the ori
 | `shin_radius` | Shin thickness | m | 0.025 | 0.11 | **0.0575** | 0.0005 | thickness | visual |
 | `upper_arm_radius` | Upper arm thickness | m | 0.025 | 0.1 | **0.05** | 0.0005 | thickness | visual |
 | `forearm_radius` | Forearm thickness | m | 0.02 | 0.09 | **0.0425** | 0.0005 | thickness | visual |
+
+## AnimationTree (`graph.*`)
+
+Visual only: walk/fallback blend, additive body layer and normalized playback speed in both scenes.
+
+| id | label | unit | min | max | default | step | group | affects |
+|---|---|---|---|---|---|---|---|---|
+| `walk_blend` | Walk graph blend | ratio | 0 | 1 | **1** | 0.01 | graph | visual |
+| `body_blend` | Body additive blend | ratio | 0 | 1 | **1** | 0.01 | graph | visual |
+| `playback_speed` | Graph playback speed | x | 0.05 | 2 | **1** | 0.05 | graph | visual |
 
 ## MIDI banks: flat-plane sandbox (`config/tuning_bindings.json`)
 
@@ -241,6 +251,45 @@ parameter's step. Switches use a fader at or above half = on, a knob step toggle
 | 6 | `body.bob_height` | - |
 | 7 | `body.weight_shift_gain` | `body.weight_shift_max` |
 | 8 | `body.landing_gain` | `body.landing_max` |
+
+**Bank 7 - Walk Cycle**
+
+| strip | fader | knob |
+|---|---|---|
+| 1 | `gait.step_length` | `gait.step_length` |
+| 2 | `gait.duty_factor` | `gait.duty_factor` |
+| 3 | `gait.step_height` | `gait.step_height` |
+| 4 | `gait.swing_peak` | `gait.swing_peak` |
+| 5 | `gait.stand_height` | `gait.stand_height` |
+| 6 | `gait.velocity_match` | `gait.velocity_match` |
+| 7 | `gait.knee_min_flex` | `gait.knee_min_flex` |
+| 8 | `gait.gait_model` | `gait.gait_model` |
+
+**Bank 8 - Walk Upper Body**
+
+| strip | fader | knob |
+|---|---|---|
+| 1 | `gait.pelvis_bob` | `gait.pelvis_bob` |
+| 2 | `gait.pelvis_sway` | `gait.pelvis_sway` |
+| 3 | `gait.pelvis_rotation` | `gait.pelvis_rotation` |
+| 4 | `gait.shoulder_counter` | `gait.shoulder_counter` |
+| 5 | `gait.torso_lean` | `gait.torso_lean` |
+| 6 | `gait.arm_swing` | `gait.arm_swing` |
+| 7 | `gait.elbow_bend` | `gait.elbow_bend` |
+| 8 | `gait.arm_phase` | `gait.arm_phase` |
+
+**Bank 9 - Animation Graph**
+
+| strip | fader | knob |
+|---|---|---|
+| 1 | `graph.walk_blend` | `graph.walk_blend` |
+| 2 | `graph.body_blend` | `graph.body_blend` |
+| 3 | `graph.playback_speed` | `graph.playback_speed` |
+| 4 | - | - |
+| 5 | - | - |
+| 6 | - | - |
+| 7 | - | - |
+| 8 | - | - |
 
 ## MIDI banks: treadmill gait lab (`config/gait_bindings.json`)
 
@@ -333,4 +382,17 @@ parameter's step. Switches use a fader at or above half = on, a knob step toggle
 | 5 | `rig.head_radius` | - |
 | 6 | `rig.torso_width` | - |
 | 7 | `rig.torso_depth` | - |
+| 8 | - | - |
+
+**Bank 8 - Animation Graph**
+
+| strip | fader | knob |
+|---|---|---|
+| 1 | `graph.walk_blend` | `graph.walk_blend` |
+| 2 | `graph.body_blend` | `graph.body_blend` |
+| 3 | `graph.playback_speed` | `graph.playback_speed` |
+| 4 | - | - |
+| 5 | - | - |
+| 6 | - | - |
+| 7 | - | - |
 | 8 | - | - |

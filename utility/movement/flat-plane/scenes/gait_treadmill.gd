@@ -100,10 +100,9 @@ func _ready() -> void:
 	rig_params.changed.connect(func(_id: String, _v: float) -> void: _rig_dirty = true)
 	dynamics = BodyDynamics.new(body_params)
 	_build_world()
-	visual = Visual.new()
-	visual.name = "Visual"
-	add_child(visual)
+	visual = get_node("Visual")
 	visual.apply_rig(rig_params)
+	visual.walk_animation.setup(visual, model)
 	cam = Camera3D.new()
 	cam.name = "Camera"
 	add_child(cam)
@@ -242,7 +241,8 @@ func _build_tuning() -> void:
 		"bindings_path": String(_args.get("tuning-bindings", BINDINGS_PATH)),
 		"preset_dir": String(_args.get("preset-dir", PRESET_DIR)),
 		"state_path": String(_args.get("tuning-state", STATE_PATH)),
-		"extra_targets": [["gait", "Gait (visual)", gait_params], ["rig", "Proportions (visual)", rig_params], ["body", "Body (visual)", body_params]],
+		"extra_targets": [["gait", "Gait (visual)", gait_params], ["rig", "Proportions (visual)", rig_params], ["body", "Body (visual)", body_params],
+			["graph", "Animation graph", visual.walk_animation.params]],
 	}
 	tuning.setup(Params.new(), midi, opts)
 	tuning.scene_action.connect(_on_tuning_action)
@@ -354,15 +354,17 @@ func _apply_camera_if_changed() -> void:
 
 ## One rendered frame: the belt follows the speed setting, the model advances, the body model and the skeleton follow.
 func advance(delta: float) -> void:
+	visual.walk_animation.sync_parameters()
 	_update_edit_mode()
 	if _rig_dirty:
 		_rig_dirty = false
 		visual.apply_rig(rig_params)
 	var target: float = gait_params.get_value("walk_speed")
 	speed = target if _first else move_toward(speed, target, SPEED_ACCEL * delta)
-	var scaled := delta * float(gait_params.get_value("time_scale"))
+	var graph_speed: float = visual.walk_animation.params.get_value("playback_speed")
+	var scaled := delta * float(gait_params.get_value("time_scale")) * graph_speed
 	var frozen: bool = gait_params.is_on("freeze")
-	var pose: Dictionary = model.update(0.0 if frozen else scaled, speed)
+	var pose: Dictionary = model.update(0.0 if frozen else delta * graph_speed, speed)
 	if not frozen:
 		belt_offset += speed * scaled
 	_move_stripes()
@@ -397,7 +399,7 @@ func _measure_slip(delta: float) -> void:
 	if not pose.get("active", false) or delta <= 0.0 or gait_params.is_on("freeze"):
 		_sole_valid = [false, false, false, false]
 		return
-	var scaled := delta * float(gait_params.get_value("time_scale"))
+	var scaled := delta * float(gait_params.get_value("time_scale")) * float(visual.walk_animation.params.get_value("playback_speed"))
 	for side in 2:
 		var s := "l" if side == 0 else "r"
 		var contact: bool = pose.contact_l if side == 0 else pose.contact_r

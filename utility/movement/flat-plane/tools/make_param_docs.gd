@@ -7,6 +7,7 @@ const Params = preload("res://movement/movement_params.gd")
 const BodyParams = preload("res://animation/body_params.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const RigParams = preload("res://animation/rig_params.gd")
+const GraphParams = preload("res://animation/graph_params.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 
 const OUT := "../../../AGENT-WORKSHOP/DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md"
@@ -46,8 +47,9 @@ func _initialize() -> void:
 	md += "parameters are the values saved after the first tuning session (2026-11-07); `first_defaults` in `presets_gait/` keeps the ones before.\n\n"
 	md += "## Movement (simulation, `movement.*`)\n\nThese change the physics.\n\n" + _table(Params.definitions(), false)
 	md += "\n## Body dynamics (`body.*`)\n\nVisual only: springs for the torso, pelvis, head, shoulders and arms.\n\n" + _table(BodyParams.definitions(), true)
-	md += "\n## Gait (`gait.*`)\n\nVisual only: the procedural walk of the treadmill lab. The `view_*` and `edit_rig` switches only change what the lab shows.\n\n" + _table(GaitParams.definitions(), true)
+	md += "\n## Gait (`gait.*`)\n\nVisual only: generated walk in both scenes. `walk_speed`, `view_*` and `edit_rig` only affect the treadmill lab.\n\n" + _table(GaitParams.definitions(), true)
 	md += "\n## Proportions (`rig.*`)\n\nVisual only: limb lengths, joint offsets and thickness. A null rig means the original rig; these defaults are the tuned ones.\n\n" + _table(RigParams.definitions(), true)
+	md += "\n## AnimationTree (`graph.*`)\n\nVisual only: walk/fallback blend, additive body layer and normalized playback speed in both scenes.\n\n" + _table(GraphParams.definitions(), true)
 	md += "\n## MIDI banks: flat-plane sandbox (`config/tuning_bindings.json`)\n\nFaders set a value (with soft takeover: a fader does nothing until it reaches the parameter's current value), knobs step it by the\nparameter's step. Switches use a fader at or above half = on, a knob step toggles.\n" + _banks(Bindings.default_data())
 	md += "\n## MIDI banks: treadmill gait lab (`config/gait_bindings.json`)\n" + _banks(Bindings.gait_data())
 	var path := ProjectSettings.globalize_path("res://").path_join(OUT).simplify_path()

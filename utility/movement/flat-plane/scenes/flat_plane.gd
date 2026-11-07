@@ -16,6 +16,8 @@ const Midi = preload("res://midi/midi_manager.gd")
 const Tuning = preload("res://tuning/tuning_system.gd")
 const BodyParams = preload("res://animation/body_params.gd")
 const BodyDynamics = preload("res://animation/body_dynamics.gd")
+const GaitParams = preload("res://animation/gait_params.gd")
+const GaitModel = preload("res://animation/gait_model.gd")
 
 var params: Params = Params.new()
 var world
@@ -27,6 +29,8 @@ var midi
 var tuning
 var body_params = BodyParams.create()   ## visual-only parameters, tuned like the movement ones (target "body")
 var dynamics   ## BodyDynamics: the spring model that drives the torso, pelvis, head and arms
+var gait_params = GaitParams.create()
+var gait_model
 ## Procedural presentation on/off. The physical controller never reads it: with animation off the body moves identically.
 var animation_enabled := true
 var options := {}   ## overrides command-line options (used by tests)
@@ -67,9 +71,11 @@ func _ready() -> void:
 		cam.snap()
 		_teleported = true)
 
-	visual = Visual.new()
-	visual.name = "Visual"
-	body.add_child(visual)
+	visual = get_node("Visual")
+	visual.reparent(body)
+	visual.apply_rig(null)   # sandbox collision and original visual proportions remain unchanged
+	gait_model = GaitModel.new(gait_params)
+	visual.walk_animation.setup(visual, gait_model)
 	dynamics = BodyDynamics.new(body_params)
 
 	cam = OrbitCamera.new()
@@ -112,7 +118,8 @@ func _build_tuning() -> void:
 	for pair in [["tuning-bindings", "bindings_path"], ["preset-dir", "preset_dir"], ["tuning-state", "state_path"]]:
 		if _args.has(pair[0]):
 			opts[pair[1]] = String(_args[pair[0]])
-	opts["extra_targets"] = [["body", "Body (visual)", body_params]]
+	opts["extra_targets"] = [["body", "Body (visual)", body_params], ["gait", "Walk (visual)", gait_params],
+		["graph", "Animation graph", visual.walk_animation.params]]
 	tuning.setup(params, midi, opts)
 	tuning.scene_action.connect(_on_tuning_action)
 	tuning.editor_toggled.connect(_on_editor_toggled)
@@ -228,13 +235,15 @@ func _process(delta: float) -> void:
 	var visual_offset: float = body.step_offset
 	visual.follow(body, visual_offset)
 	if animation_enabled:
+		visual.walk_animation.sync_parameters()
+		var pose: Dictionary = gait_model.update(delta * float(visual.walk_animation.params.get_value("playback_speed")), speed)
 		var state := {"speed": speed, "vy": v.y, "grounded": body.core.grounded, "crouching": body.core.crouching,
-			"accel_forward": fwd_accel, "heading": heading, "landed_impact": _pending_impact}
+			"accel_forward": fwd_accel, "heading": heading, "landed_impact": _pending_impact, "gait": pose}
 		# The model sees the mean acceleration of the physics ticks since the last frame, so it does not depend on how
 		# many ticks happened to fall in this frame.
 		var accel := _accel_sum / float(_accel_ticks) if _accel_ticks > 0 else Vector3.ZERO
 		state["dyn"] = dynamics.update(delta, {"velocity": v, "accel": Vector3(accel.x, 0.0, accel.z), "heading": heading,
-			"grounded": body.core.grounded, "gait_phase": visual.phase, "gait_amount": visual.gait_amount,
+			"grounded": body.core.grounded, "gait_phase": float(pose.get("phase", 0.0)) * TAU, "gait_amount": float(pose.get("gait_amount", 0.0)),
 			"landed_impact": _pending_impact, "teleported": _teleported})
 		visual.update_pose(state, delta)
 	_pending_impact = 0.0

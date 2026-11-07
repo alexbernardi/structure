@@ -211,7 +211,7 @@ func test_the_registry_holds_the_gait_and_body_targets_and_every_binding_resolve
 	var reg = s.tuning.registry
 	t.ok(reg.has_target("gait") and reg.has_target("rig") and reg.has_target("body") and not reg.has_target("movement"), "gait, proportions and body targets only")
 	t.eq(s.tuning.bindings.unresolved(reg), [], "no binding points at a missing parameter")
-	t.eq(s.tuning.bindings.bank_count(), 7, "the seven gait banks")
+	t.eq(s.tuning.bindings.bank_count(), 8, "the original gait banks plus the animation graph")
 	var bound: Array = s.tuning.bindings.referenced_keys()
 	var missing := []
 	for key in reg.keys():
