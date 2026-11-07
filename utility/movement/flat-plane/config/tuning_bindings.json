@@ -98,6 +98,110 @@
 					"knob": "movement.auto_jump"
 				}
 			}
+		},
+		{
+			"name": "Body Springs",
+			"strips": {
+				"1": {
+					"fader": "body.torso_lean_amp",
+					"knob": "body.torso_freq"
+				},
+				"2": {
+					"fader": "body.hip_sway_amp",
+					"knob": "body.torso_damping"
+				},
+				"3": {
+					"fader": "body.rotation_lag",
+					"knob": "body.hip_freq"
+				},
+				"4": {
+					"fader": "body.landing_compression",
+					"knob": "body.hip_damping"
+				},
+				"5": {
+					"fader": "body.landing_rebound",
+					"knob": "body.rotation_freq"
+				},
+				"6": {
+					"fader": "body.follow_through",
+					"knob": "body.rotation_damping"
+				},
+				"7": {
+					"fader": "body.head_stabilization",
+					"knob": "body.landing_freq"
+				},
+				"8": {
+					"fader": "body.arm_swing_amp",
+					"knob": "body.landing_damping"
+				}
+			}
+		},
+		{
+			"name": "Body Effects",
+			"strips": {
+				"1": {
+					"fader": "body.fx_torso_lean",
+					"knob": "body.body_dynamics"
+				},
+				"2": {
+					"fader": "body.fx_torso_lateral"
+				},
+				"3": {
+					"fader": "body.fx_anticipation"
+				},
+				"4": {
+					"fader": "body.fx_pelvis_shift"
+				},
+				"5": {
+					"fader": "body.fx_pelvis_gait"
+				},
+				"6": {
+					"fader": "body.fx_landing"
+				},
+				"7": {
+					"fader": "body.fx_head"
+				},
+				"8": {
+					"fader": "body.fx_arms",
+					"knob": "body.fx_facing_lag"
+				}
+			}
+		},
+		{
+			"name": "Body Detail",
+			"strips": {
+				"1": {
+					"fader": "body.lean_accel_gain",
+					"knob": "body.lean_max_deg"
+				},
+				"2": {
+					"fader": "body.lean_speed_gain",
+					"knob": "body.lateral_lean_max_deg"
+				},
+				"3": {
+					"fader": "body.lateral_lean_gain",
+					"knob": "body.shoulder_counter_amp"
+				},
+				"4": {
+					"fader": "body.anticipation_lead",
+					"knob": "body.head_freq"
+				},
+				"5": {
+					"fader": "body.sway_distance",
+					"knob": "body.head_max_yaw_deg"
+				},
+				"6": {
+					"fader": "body.bob_height"
+				},
+				"7": {
+					"fader": "body.weight_shift_gain",
+					"knob": "body.weight_shift_max"
+				},
+				"8": {
+					"fader": "body.landing_gain",
+					"knob": "body.landing_max"
+				}
+			}
 		}
 	],
 	"global_actions": {
@@ -114,7 +218,7 @@
 		"global_stop": "reset_all"
 	},
 	"knob_scale": 1.0,
-	"schema": 1,
+	"schema": 1.0,
 	"strip_actions": {
 		"mute": "reset_param",
 		"rec": "revert_param",

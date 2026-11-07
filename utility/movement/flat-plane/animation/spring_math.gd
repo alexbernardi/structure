@@ -110,6 +110,24 @@ static func frequency_from_halflife(halflife: float) -> float:
 	return LN2 / (TAU * maxf(halflife, 1e-6))
 
 
+## Peak displacement of the impulse response (x(0) = 0, x'(0) = v0) in units of v0 / w. Multiply by v0 / w to get the
+## largest excursion; use it the other way round to pick the velocity kick that produces a chosen excursion.
+static func impulse_peak_factor(damping_ratio: float) -> float:
+	var z := maxf(damping_ratio, 0.0)
+	if z < 1e-9:
+		return 1.0
+	if z < 1.0 - 1e-9:
+		var s := sqrt(1.0 - z * z)
+		return exp(-z / s * atan2(s, z))
+	if z < 1.0 + 1e-9:
+		return exp(-1.0)
+	var root := sqrt(z * z - 1.0)
+	var r1 := z - root
+	var r2 := z + root
+	var t_peak := log(r2 / r1) / (r2 - r1)
+	return (exp(-r1 * t_peak) - exp(-r2 * t_peak)) / (r2 - r1)
+
+
 # ------------------------------------------------------------------ first-order exact damper (no oscillation)
 
 ## Fraction of the remaining distance kept after dt for a damper that halves the distance every `halflife` seconds.

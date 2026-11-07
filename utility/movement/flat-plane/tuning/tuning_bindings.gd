@@ -41,14 +41,12 @@ static func default_data() -> Dictionary:
 	var ground: Array = ["max_ground_speed", "ground_accel", "ground_friction", "braking", "stop_speed", "sprint_multiplier", "crouch_speed", ""]
 	var jump: Array = ["jump_impulse", "gravity", "max_fall_speed", "coyote_time", "jump_buffer_time", "air_accel", "air_speed_cap", "air_control"]
 	var body: Array = ["max_walkable_slope", "slope_speed_penalty", "step_height", "stand_height", "crouch_height", "auto_jump", "", ""]
+	var banks: Array = [_bank("Ground", ground, m), _bank("Jump & Air", jump, m), _bank("Slope & Body", body, m)]
+	banks.append_array(body_banks())
 	return {
 		"schema": SCHEMA,
 		"knob_scale": 1.0,
-		"banks": [
-			_bank("Ground", ground, m),
-			_bank("Jump & Air", jump, m),
-			_bank("Slope & Body", body, m),
-		],
+		"banks": banks,
 		"strip_actions": {"mute": "reset_param", "solo": "lock_param", "rec": "revert_param", "select": "select_param"},
 		"global_actions": {
 			"global_play": "respawn", "global_stop": "reset_all", "global_record": "record_toggle",
@@ -58,6 +56,31 @@ static func default_data() -> Dictionary:
 			"global_nav_left": "teleport_prev", "global_nav_right": "teleport_next",
 		},
 	}
+
+
+## Procedural body banks (visual only). Faders carry the amplitudes and knobs the spring frequency and damping of each
+## group; the second bank puts every effect switch on a fader so each one can be isolated; the third holds the gains
+## and limits behind the amplitudes.
+static func body_banks() -> Array:
+	var b := "body."
+	var springs: Array = ["torso_lean_amp", "hip_sway_amp", "rotation_lag", "landing_compression", "landing_rebound", "follow_through", "head_stabilization", "arm_swing_amp"]
+	var spring_knobs: Array = ["torso_freq", "torso_damping", "hip_freq", "hip_damping", "rotation_freq", "rotation_damping", "landing_freq", "landing_damping"]
+	var effects: Array = ["fx_torso_lean", "fx_torso_lateral", "fx_anticipation", "fx_pelvis_shift", "fx_pelvis_gait", "fx_landing", "fx_head", "fx_arms"]
+	var effect_knobs: Array = ["body_dynamics", "", "", "", "", "", "", "fx_facing_lag"]
+	var detail_faders: Array = ["lean_accel_gain", "lean_speed_gain", "lateral_lean_gain", "anticipation_lead", "sway_distance", "bob_height", "weight_shift_gain", "landing_gain"]
+	var detail_knobs: Array = ["lean_max_deg", "lateral_lean_max_deg", "shoulder_counter_amp", "head_freq", "head_max_yaw_deg", "", "weight_shift_max", "landing_max"]
+	var s1 := {}
+	var s2 := {}
+	var s3 := {}
+	for i in 8:
+		s3[str(i + 1)] = {"fader": b + String(detail_faders[i])}
+		if detail_knobs[i] != "":
+			s3[str(i + 1)]["knob"] = b + String(detail_knobs[i])
+		s1[str(i + 1)] = {"fader": b + String(springs[i]), "knob": b + String(spring_knobs[i])}
+		s2[str(i + 1)] = {"fader": b + String(effects[i])}
+		if effect_knobs[i] != "":
+			s2[str(i + 1)]["knob"] = b + String(effect_knobs[i])
+	return [{"name": "Body Springs", "strips": s1}, {"name": "Body Effects", "strips": s2}, {"name": "Body Detail", "strips": s3}]
 
 
 ## Each strip's knob fine-adjusts the same parameter its fader sets coarsely.

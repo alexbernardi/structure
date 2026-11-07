@@ -2,6 +2,7 @@ extends RefCounted
 
 const SCENE := "res://scenes/flat_plane.tscn"
 const Events = preload("res://midi/midi_events.gd")
+const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Behavior = preload("res://midi/control_behavior.gd")
 const DT := 1.0 / 120.0
 
@@ -310,7 +311,7 @@ func test_save_bindings_persists_edits_and_a_bad_file_is_reported(t) -> void:
 	f.close()
 	await _boot()
 	t.ok(not _s.tuning.load_errors.is_empty(), "a rejected file is reported")
-	t.eq(_s.tuning.bindings.bank_count(), 3, "defaults are used meanwhile")
+	t.eq(_s.tuning.bindings.bank_count(), Bindings.default_data().banks.size(), "defaults are used meanwhile")
 	t.eq(FileAccess.get_file_as_string(BIND_COPY), "{\"schema\": 4}", "the bad file is not overwritten on startup")
 
 

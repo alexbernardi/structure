@@ -14,6 +14,8 @@ const InputSource = preload("res://movement/input_source.gd")
 const WindowState = preload("res://scenes/window_state.gd")
 const Midi = preload("res://midi/midi_manager.gd")
 const Tuning = preload("res://tuning/tuning_system.gd")
+const BodyParams = preload("res://animation/body_params.gd")
+const BodyDynamics = preload("res://animation/body_dynamics.gd")
 
 var params: Params = Params.new()
 var world
@@ -23,12 +25,17 @@ var cam
 var live = InputSource.Live.new()
 var midi
 var tuning
+var body_params = BodyParams.create()   ## visual-only parameters, tuned like the movement ones (target "body")
+var dynamics   ## BodyDynamics: the spring model that drives the torso, pelvis, head and arms
 ## Procedural presentation on/off. The physical controller never reads it: with animation off the body moves identically.
 var animation_enabled := true
 var options := {}   ## overrides command-line options (used by tests)
 
 var _args := {}
 var _pending_impact := 0.0
+var _accel_sum := Vector3.ZERO   # physics acceleration summed since the last rendered frame
+var _accel_ticks := 0
+var _teleported := false
 var _frames := 0
 var _readout: Label
 var _landmark_index := 0
@@ -56,11 +63,14 @@ func _ready() -> void:
 	body.spawn_transform = world.spawn_transform
 	body.global_transform = world.spawn_transform
 	body.landed.connect(func(impact: float) -> void: _pending_impact = impact)
-	body.respawned.connect(func() -> void: cam.snap())
+	body.respawned.connect(func() -> void:
+		cam.snap()
+		_teleported = true)
 
 	visual = Visual.new()
 	visual.name = "Visual"
 	body.add_child(visual)
+	dynamics = BodyDynamics.new(body_params)
 
 	cam = OrbitCamera.new()
 	cam.name = "OrbitCamera"
@@ -102,6 +112,7 @@ func _build_tuning() -> void:
 	for pair in [["tuning-bindings", "bindings_path"], ["preset-dir", "preset_dir"], ["tuning-state", "state_path"]]:
 		if _args.has(pair[0]):
 			opts[pair[1]] = String(_args[pair[0]])
+	opts["extra_targets"] = [["body", "Body (visual)", body_params]]
 	tuning.setup(params, midi, opts)
 	tuning.scene_action.connect(_on_tuning_action)
 	tuning.editor_toggled.connect(_on_editor_toggled)
@@ -145,6 +156,7 @@ func teleport_to_landmark(step: int) -> void:
 	elif name == "tunnel":
 		yaw = PI
 	body.teleport(world.landmarks[name] + Vector3(0.0, 0.05, 0.0))
+	_teleported = true
 	cam.yaw = yaw
 	cam.snap()
 	if tuning != null:
@@ -163,7 +175,9 @@ func _build_readout() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("release_mouse"):
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_B and not (tuning != null and tuning.editor != null and tuning.editor.visible):
+		toggle_body_dynamics()
+	elif event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not _args.has("no-capture") and not (tuning != null and tuning.editor != null and tuning.editor.visible):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -176,6 +190,14 @@ func _notification(what: int) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
+## B: the spring body model on / off (off = the original simple pose). Physics is unaffected either way.
+func toggle_body_dynamics() -> void:
+	var on: bool = body_params.is_on("body_dynamics")
+	body_params.set_value("body_dynamics", 0.0 if on else 1.0)
+	if tuning != null:
+		tuning.toast.emit("Body dynamics %s" % ("off" if on else "ON"), "info")
+
+
 func _physics_process(dt: float) -> void:
 	var frame: Dictionary = live.sample(cam.yaw)
 	if _args.has("autowalk"):   # smoke/screenshot aid: walk forward and sprint without a keyboard
@@ -183,7 +205,14 @@ func _physics_process(dt: float) -> void:
 		frame.yaw = 0.0   # fixed heading (-Z) so the camera options can frame the character from any side
 		frame.sprint = true
 		frame.jump_pressed = _args.has("autojump") and Engine.get_physics_frames() % 90 == 0
+	simulate_tick(frame, dt)
+
+
+## One physics tick of the body, plus the acceleration bookkeeping the (visual-only) body model reads next frame.
+func simulate_tick(frame: Dictionary, dt: float) -> void:
 	body.simulate(frame, dt)
+	_accel_sum += body.core.acceleration
+	_accel_ticks += 1
 
 
 func _process(delta: float) -> void:
@@ -199,10 +228,20 @@ func _process(delta: float) -> void:
 	var visual_offset: float = body.step_offset
 	visual.follow(body, visual_offset)
 	if animation_enabled:
-		visual.update_pose({"speed": speed, "vy": v.y, "grounded": body.core.grounded, "crouching": body.core.crouching,
-			"accel_forward": fwd_accel, "heading": heading, "landed_impact": _pending_impact}, delta)
+		var state := {"speed": speed, "vy": v.y, "grounded": body.core.grounded, "crouching": body.core.crouching,
+			"accel_forward": fwd_accel, "heading": heading, "landed_impact": _pending_impact}
+		# The model sees the mean acceleration of the physics ticks since the last frame, so it does not depend on how
+		# many ticks happened to fall in this frame.
+		var accel := _accel_sum / float(_accel_ticks) if _accel_ticks > 0 else Vector3.ZERO
+		state["dyn"] = dynamics.update(delta, {"velocity": v, "accel": Vector3(accel.x, 0.0, accel.z), "heading": heading,
+			"grounded": body.core.grounded, "gait_phase": visual.phase, "gait_amount": visual.gait_amount,
+			"landed_impact": _pending_impact, "teleported": _teleported})
+		visual.update_pose(state, delta)
 	_pending_impact = 0.0
-	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s\nWASD move   Mouse look   Space jump   Shift sprint   Ctrl/C crouch   R respawn\nEsc frees the mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset all   F6/F7/F8 window   F11 fullscreen" % [
+	_teleported = false
+	_accel_sum = Vector3.ZERO
+	_accel_ticks = 0
+	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s\nWASD move   Mouse look   Space jump   Shift sprint   Ctrl/C crouch   R respawn\nEsc frees the mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset all   B body dynamics   F6/F7/F8 window   F11 fullscreen" % [
 		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching else ""]
 	if _args.has("screenshot") and _frames == int(_args.get("screenshot-frame", 90)):
 		get_viewport().get_texture().get_image().save_png(String(_args.screenshot))

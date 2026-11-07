@@ -87,7 +87,7 @@ Not yet parameters (hard-coded constants): body radius 0.35, step-up detection t
 
 Layer 1, *physical -> logical control*: learned and **verified 59/59** on the SMC-Mixer (`config/midi_mapping.json`,
 task 0003 phase 1; **not to be overwritten**). Layer 2, *logical control -> parameter/action*:
-`config/tuning_bindings.json`, three banks (data, editable, validated):
+`config/tuning_bindings.json`, six banks (data, editable, validated; banks 4-6 added in Phase 2):
 
 **Bank 1 Ground** - faders and knobs both: strip 1 max ground speed, 2 ground acceleration, 3 ground friction,
 4 braking, 5 friction stop speed, 6 sprint multiplier, 7 crouch speed, 8 unassigned.
@@ -95,6 +95,13 @@ task 0003 phase 1; **not to be overwritten**). Layer 2, *logical control -> para
 6 air acceleration, 7 air speed cap, 8 air steering.
 **Bank 3 Slope & Body** - 1 max walkable slope, 2 uphill speed penalty, 3 step-up height, 4 standing height,
 5 crouching height, 6 auto-jump, 7-8 unassigned.
+**Bank 4 Body Springs** (visual only; the brief's Bank B) - faders: torso lean amplitude, hip sway amplitude, rotational lag,
+landing compression, landing rebound, follow-through, head stabilisation, arm swing amplitude; knobs: torso, hip, rotation and
+landing spring frequency and damping ratio (strips 1-8 in that order: torso freq, torso damping, hip freq, hip damping, ...).
+**Bank 5 Body Effects** - faders 1-8 switch torso lean, lean into turns, turn anticipation, pelvis weight shift, pelvis bob/sway,
+landing compression, head stabilisation, shoulders/arms on and off; knob 1 is the master switch, knob 8 rotation lag.
+**Bank 6 Body Detail** - the gains and limits behind the amplitudes (lean per acceleration / speed / turn, anticipation lead, sway,
+bob, weight shift, landing gain, head frequency, maximum head turn and so on).
 Each knob currently fine-adjusts the same parameter as its fader.
 
 Buttons: strip M reset parameter, S lock/unlock, R revert to preset value, Select show details. Transport: Play respawn,
@@ -103,9 +110,9 @@ Stop reset all, Record (input recording: **placeholder, not implemented**), Rewi
 
 Soft takeover (pickup) is in place for faders (`tuning/soft_takeover.gd`); knobs are relative and never jump.
 
-**Gap against the brief's Phase 6 banks:** the brief's Bank A (turn/acceleration/stopping response, momentum retention,
-gravity *multiplier*, air drag), Bank B (body springs) and Bank C (gait/IK) reference parameters that do not exist
-yet. They arrive with Phases 2-5; the existing three banks stay as they are until then.
+**Gap against the brief's Phase 6 banks:** Bank B (body springs) exists since Phase 2. Bank A (turn/acceleration/stopping response,
+momentum retention, gravity *multiplier*, air drag) and Bank C (gait/IK) reference parameters that do not exist yet; they arrive
+with Phases 3-5. The first three banks stay as they are.
 
 ## 6. Baseline behaviour (Stage I controller, defaults, flat floor, core only)
 

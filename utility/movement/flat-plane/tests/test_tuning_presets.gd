@@ -4,6 +4,7 @@ const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Presets = preload("res://tuning/preset_store.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
 const Params = preload("res://movement/movement_params.gd")
+const BodyParams = preload("res://animation/body_params.gd")
 
 const BIND_TMP := "user://test_tuning_bindings.json"
 const PRESET_DIR := "user://test_presets"
@@ -28,6 +29,7 @@ func _write(path: String, text: String) -> void:
 func _reg():
 	var r := Registry.new()
 	r.register("movement", "Movement", Params.new())
+	r.register("body", "Body (visual)", BodyParams.create())
 	return r
 
 
@@ -44,7 +46,9 @@ func test_default_bindings_are_valid_and_cover_the_parameters(t) -> void:
 
 func test_default_layout(t) -> void:
 	var b := Bindings.new()
-	t.eq(b.bank_count(), 3, "three banks")
+	t.eq(b.bank_count(), 6, "movement banks plus the three body banks")
+	t.eq(b.bank_name(3), "Body Springs", "body bank names")
+	t.eq(b.bank_name(4), "Body Effects", "body bank names")
 	t.eq(b.bank_name(0), "Ground", "names")
 	t.eq(b.slot_key(0, 1, "fader"), "movement.max_ground_speed", "strip 1 fader")
 	t.eq(b.slot_key(0, 1, "knob"), "movement.max_ground_speed", "the knob fine-adjusts the same parameter")
@@ -70,7 +74,7 @@ func test_roundtrip_and_backup(t) -> void:
 	t.ok(FileAccess.file_exists(BIND_TMP + ".bak"), "previous version kept")
 	var c := Bindings.new()
 	t.ok(c.load_file(BIND_TMP).ok, "loaded")
-	t.eq(c.bank_count(), 4, "added bank persisted")
+	t.eq(c.bank_count(), 7, "added bank persisted")
 	t.eq(c.slot_key(0, 8, "fader"), "", "latest edit persisted")
 
 
@@ -81,7 +85,7 @@ func test_assign_clear_and_validation_of_edits(t) -> void:
 	t.ok(b.assign(0, 8, "fader", ""), "clear")
 	t.ok(not b.data.banks[0].strips.has("8"), "empty strips are removed")
 	t.ok(not b.assign(0, 9, "fader", "movement.gravity"), "no strip 9")
-	t.ok(not b.assign(5, 1, "fader", "movement.gravity"), "no bank 5")
+	t.ok(not b.assign(b.bank_count(), 1, "fader", "movement.gravity"), "no bank past the last")
 	t.ok(not b.assign(0, 1, "slider", "movement.gravity"), "no such slot kind")
 	t.ok(not b.assign(0, 1, "fader", "gravity"), "key must be target.id")
 	t.eq(Bindings.validate(b.data), [], "the data stayed valid through all of that")

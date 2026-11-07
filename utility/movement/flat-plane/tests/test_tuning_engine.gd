@@ -4,6 +4,7 @@ const Engine_ = preload("res://tuning/tuning_engine.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
 const Params = preload("res://movement/movement_params.gd")
+const BodyParams = preload("res://animation/body_params.gd")
 
 var _p
 var _reg
@@ -17,6 +18,7 @@ func before_each() -> void:
 	_p = Params.new()
 	_reg = Registry.new()
 	_reg.register("movement", "Movement", _p)
+	_reg.register("body", "Body (visual)", BodyParams.create())
 	_b = Bindings.new()
 	_e = Engine_.new(_reg, _b)
 	_events = []
@@ -212,13 +214,14 @@ func test_locked_parameters_ignore_everything(t) -> void:
 
 
 func test_bank_buttons_wrap(t) -> void:
+	var last: int = _b.bank_count() - 1
 	_press("global_bank_next")
 	t.eq(_e.bank, 1, "next")
-	_press("global_bank_next")
-	_press("global_bank_next")
+	for i in last:
+		_press("global_bank_next")
 	t.eq(_e.bank, 0, "wraps to the first bank")
 	_press("global_bank_prev")
-	t.eq(_e.bank, 2, "previous wraps to the last")
+	t.eq(_e.bank, last, "previous wraps to the last")
 
 
 func test_unhandled_actions_are_forwarded(t) -> void:

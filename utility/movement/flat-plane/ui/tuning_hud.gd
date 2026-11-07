@@ -171,7 +171,7 @@ func _detail(e, y: float) -> float:
 		return y + 28.0
 	var k: String = e.selected_key
 	var d: Dictionary = reg.def_of(k)
-	_text(Vector2(PAD, y + 20.0), "%s  [%s]" % [reg.label_of(k), k], 14, C_FLASH)
+	_text(Vector2(PAD, y + 20.0), "%s  [%s]   affects: %s" % [reg.label_of(k), k, String(d.get("affects", "physics"))], 14, C_FLASH)
 	_text(Vector2(PAD, y + 40.0), "range %s .. %s %s    default %s    step %s    preset %s" % [
 		str(d.min), str(d.max), d.unit, reg.format_value(k, float(d.default)), str(d.step), reg.format_value(k, float(e.baseline.get(k, d.default)))], 12, C_DIM, HORIZONTAL_ALIGNMENT_LEFT, WIDTH - PAD * 2)
 	return y + 52.0

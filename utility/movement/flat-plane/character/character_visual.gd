@@ -1,6 +1,8 @@
 ## Primitive humanoid: a Skeleton3D built in code, Godot primitive meshes attached to its bones, and a procedural
-## animator (walk/run cycle, lean, crouch, jump/fall pose, landing dip). Knows nothing about collision or input:
-## it only consumes a small state dictionary from update_pose().
+## animator (walk/run cycle, crouch, jump/fall pose). Knows nothing about collision or input: it only consumes a small
+## state dictionary from update_pose(). When the state carries a dyn pose from BodyDynamics (animation/body_dynamics.gd),
+## the torso, pelvis, head, shoulders, arms and facing come from that spring model; without it (or with the model's
+## master switch off) the original simple lean/dip pose is used, unchanged.
 extends Node3D
 
 const FOOT_H := 0.07
@@ -33,6 +35,7 @@ var skeleton := Skeleton3D.new()
 var bone_index: Dictionary = {}
 
 var phase := 0.0
+var gait_amount := 0.0   ## 0..1 from the horizontal speed (read by the body dynamics)
 var crouch_blend := 0.0
 var air_blend := 0.0
 var lean := 0.0
@@ -105,7 +108,8 @@ static func _hip_height(thigh_angle: float, knee_angle: float) -> float:
 
 
 ## state: {speed: horizontal m/s, vy: vertical m/s, grounded: bool, crouching: bool, accel_forward: m/s^2,
-##         heading: world yaw of horizontal velocity (rad) or NAN, landed_impact: m/s (optional, one tick)}
+##         heading: world yaw of horizontal velocity (rad) or NAN, landed_impact: m/s (optional, one tick),
+##         dyn: pose dictionary from BodyDynamics.update() (optional)}
 func update_pose(state: Dictionary, delta: float) -> void:
 	if skeleton.get_bone_count() == 0:
 		return
@@ -113,22 +117,33 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	var grounded: bool = state.get("grounded", true)
 	var crouching: bool = state.get("crouching", false)
 	var vy: float = state.get("vy", 0.0)
+	var dyn: Dictionary = state.get("dyn", {})
+	var use_dyn: bool = dyn.get("active", false)
 
 	crouch_blend = move_toward(crouch_blend, 1.0 if crouching else 0.0, delta * 7.0)
 	air_blend = move_toward(air_blend, 0.0 if grounded else 1.0, delta * 9.0)
 	var gait := clampf(speed / 6.5, 0.0, 1.0)
+	gait_amount = gait
 	if grounded and speed > 0.15:
 		phase += delta * lerpf(5.0, 12.0, gait)
 		phase = fmod(phase, TAU)
-	var target_lean := clampf(speed * 0.022 + float(state.get("accel_forward", 0.0)) * 0.0035, -0.15, 0.38)
-	lean = lerpf(lean, target_lean, 1.0 - exp(-8.0 * delta))
-	if state.get("landed_impact", 0.0) > 0.0:
-		dip = clampf(float(state.landed_impact) / 14.0, 0.0, 0.22)
-	dip = lerpf(dip, 0.0, 1.0 - exp(-10.0 * delta))
-
-	var heading: float = state.get("heading", NAN)
-	if not is_nan(heading) and speed > 0.4:
-		_turn_yaw = lerp_angle(_turn_yaw, heading, 1.0 - exp(-12.0 * delta))
+	var forward_lean := lean   # + = leaning forward
+	var pelvis_drop := 0.0     # - = hips lowered by a landing
+	if use_dyn:
+		forward_lean = dyn.torso_pitch
+		pelvis_drop = dyn.pelvis_drop
+		_turn_yaw = dyn.facing_yaw
+	else:
+		var target_lean := clampf(speed * 0.022 + float(state.get("accel_forward", 0.0)) * 0.0035, -0.15, 0.38)
+		lean = lerpf(lean, target_lean, 1.0 - exp(-8.0 * delta))
+		forward_lean = lean
+		if state.get("landed_impact", 0.0) > 0.0:
+			dip = clampf(float(state.landed_impact) / 14.0, 0.0, 0.22)
+		dip = lerpf(dip, 0.0, 1.0 - exp(-10.0 * delta))
+		pelvis_drop = -dip
+		var heading: float = state.get("heading", NAN)
+		if not is_nan(heading) and speed > 0.4:
+			_turn_yaw = lerp_angle(_turn_yaw, heading, 1.0 - exp(-12.0 * delta))
 	rotation.y = _turn_yaw
 
 	var swing := sin(phase) * lerpf(0.35, 0.85, gait)
@@ -153,13 +168,28 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	thigh_r = lerpf(thigh_r, -0.15 - 0.2 * rising, air_blend)
 	shin_l = lerpf(shin_l, -0.9 - 0.3 * rising, air_blend)
 	shin_r = lerpf(shin_r, -0.7, air_blend)
+	if use_dyn and pelvis_drop < 0.0:
+		# A landing lowers the hips by bending both knees (thigh forward, shin back twice as far keeps the foot under
+		# the hip), so the feet stay on the ground instead of sinking into it.
+		var flex := acos(clampf(1.0 + pelvis_drop / (THIGH + SHIN), -1.0, 1.0)) * (1.0 - air_blend) * (1.0 - crouch_blend)
+		thigh_l += flex
+		thigh_r += flex
+		shin_l -= 2.0 * flex
+		shin_r -= 2.0 * flex
 
 	var hip := maxf(_hip_height(thigh_l, shin_l), _hip_height(thigh_r, shin_r))
 	if air_blend > 0.5:
 		hip = _stand_hip - 0.10 * air_blend
 	var bob := absf(cos(phase)) * 0.03 * gait * (1.0 - air_blend)
 	var pelvis_y := hip + bob - dip
-	skeleton.set_bone_pose_position(bone_index.pelvis, Vector3(0.0, pelvis_y, 0.0))
+	var pelvis_x := 0.0
+	var pelvis_z := 0.0
+	if use_dyn:
+		pelvis_y = hip + dyn.bob * (1.0 - air_blend) + maxf(pelvis_drop, 0.0)   # compression is in the knees (above)
+		pelvis_x = dyn.pelvis_shift.x + dyn.sway
+		pelvis_z = dyn.pelvis_shift.z
+	skeleton.set_bone_pose_position(bone_index.pelvis, Vector3(pelvis_x, pelvis_y, pelvis_z))
+	skeleton.set_bone_pose_rotation(bone_index.pelvis, Quaternion(Vector3.UP, -dyn.pelvis_twist) if use_dyn else Quaternion.IDENTITY)
 
 	_rot("thigh_l", thigh_l)
 	_rot("shin_l", shin_l)
@@ -170,9 +200,9 @@ func update_pose(state: Dictionary, delta: float) -> void:
 
 	# Convention: a positive rotation about X swings a hanging limb forward (-Z). Arms swing opposite to the legs,
 	# elbows bend forward, and the arms rise forward when jumping.
-	var arm := lerpf(0.25, 0.85, gait) * (1.0 - idle)
-	var arm_l := -sin(phase) * arm
-	var arm_r := -sin(phase + PI) * arm
+	var arm: float = lerpf(0.25, 0.85, gait) * (1.0 - idle) * (float(dyn.arm_scale) if use_dyn else 1.0)
+	var arm_l: float = -sin(phase) * arm
+	var arm_r: float = -sin(phase + PI) * arm
 	var fore := (0.15 + 0.7 * gait) * (1.0 - idle * 0.7)
 	var arm_air := lerpf(-0.3, 1.0, (rising + 1.0) / 2.0)
 	arm_l = lerpf(arm_l, arm_air, air_blend)
@@ -182,15 +212,33 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	var elbow := fore + 0.3 * air_blend + 0.4 * crouch_blend
 	_rot("forearm_l", elbow)
 	_rot("forearm_r", elbow)
-	skeleton.set_bone_pose_rotation(bone_index.upper_arm_l, Quaternion(Vector3.RIGHT, arm_l) * Quaternion(Vector3.FORWARD, 0.10 + 0.5 * air_blend))
-	skeleton.set_bone_pose_rotation(bone_index.upper_arm_r, Quaternion(Vector3.RIGHT, arm_r) * Quaternion(Vector3.FORWARD, -0.10 - 0.5 * air_blend))
+	var roll_l := 0.10 + 0.5 * air_blend   # + = away from the body
+	var roll_r := 0.10 + 0.5 * air_blend
+	if use_dyn:
+		arm_l += dyn.arm_pitch_l
+		arm_r += dyn.arm_pitch_r
+		roll_l += dyn.arm_roll_l
+		roll_r += dyn.arm_roll_r
+	skeleton.set_bone_pose_rotation(bone_index.upper_arm_l, Quaternion(Vector3.RIGHT, arm_l) * Quaternion(Vector3.FORWARD, roll_l))
+	skeleton.set_bone_pose_rotation(bone_index.upper_arm_r, Quaternion(Vector3.RIGHT, arm_r) * Quaternion(Vector3.FORWARD, -roll_r))
 
 	var breathing := sin(Time.get_ticks_msec() / 650.0) * 0.012 * idle
-	var chest_lean := -(lean + 0.10 * crouch_blend) + breathing
-	skeleton.set_bone_pose_rotation(bone_index.spine, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, sin(phase) * 0.14 * gait))
-	skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, -sin(phase) * 0.10 * gait))
-	skeleton.set_bone_pose_rotation(bone_index.neck, Quaternion(Vector3.RIGHT, lean * 0.6))
-	skeleton.set_bone_pose_rotation(bone_index.head, Quaternion(Vector3.RIGHT, lean * 0.3))
+	var chest_lean := -(forward_lean + 0.10 * crouch_blend) + breathing
+	if use_dyn:
+		# pitch + = forward (a negative rotation about X); roll + = to the right and yaw + = to the right (a negative
+		# rotation about Y). The spine takes 40 % of the torso motion, the chest 60 % plus the shoulder counter-rotation.
+		var roll: float = dyn.torso_roll
+		var yaw: float = dyn.torso_yaw
+		skeleton.set_bone_pose_rotation(bone_index.spine, Quaternion(Vector3.UP, -yaw * 0.4) * Quaternion(Vector3.RIGHT, chest_lean * 0.4) * Quaternion(Vector3.FORWARD, roll * 0.4))
+		skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.UP, -(yaw * 0.6 + dyn.shoulder_twist)) * Quaternion(Vector3.RIGHT, chest_lean * 0.6) * Quaternion(Vector3.FORWARD, roll * 0.6))
+		var head_pitch_back: float = -dyn.head_pitch   # compensation tilts the upward-pointing bones backward (+X)
+		skeleton.set_bone_pose_rotation(bone_index.neck, Quaternion(Vector3.UP, -dyn.head_yaw * 0.5) * Quaternion(Vector3.RIGHT, head_pitch_back * 0.6) * Quaternion(Vector3.FORWARD, dyn.head_roll * 0.5))
+		skeleton.set_bone_pose_rotation(bone_index.head, Quaternion(Vector3.UP, -dyn.head_yaw * 0.5) * Quaternion(Vector3.RIGHT, head_pitch_back * 0.4) * Quaternion(Vector3.FORWARD, dyn.head_roll * 0.5))
+	else:
+		skeleton.set_bone_pose_rotation(bone_index.spine, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, sin(phase) * 0.14 * gait))
+		skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, -sin(phase) * 0.10 * gait))
+		skeleton.set_bone_pose_rotation(bone_index.neck, Quaternion(Vector3.RIGHT, lean * 0.6))
+		skeleton.set_bone_pose_rotation(bone_index.head, Quaternion(Vector3.RIGHT, lean * 0.3))
 
 
 func _rot(bone: String, angle: float) -> void:

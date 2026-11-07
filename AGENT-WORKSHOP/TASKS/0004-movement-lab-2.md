@@ -34,7 +34,7 @@ technique experiments, MIDI banks, presets and A/B, telemetry and tests, guided 
 |---|---|---|---|
 | 0 | Audit, baselines, guards, this plan | done: 235 tests | agent |
 | 1 | `animation/springs.gd`: analytic scalar / Vector3 / angular springs, target velocity, amplitude, limits, reset and teleport | regime, RK4-reference, dt-consistency, stability-sweep tests; **spring diagnostic scene** | **user checkpoint** |
-| 2 | Body inertia: torso, pelvis, head/shoulders, arm swing as springs driven by simulated velocity, acceleration, angular velocity; each effect switchable; joint limits | tests on pose response; run/stop/turn/reverse with MIDI | **user checkpoint** |
+| 2 | (built, awaiting checkpoint) Body inertia: torso, pelvis, head/shoulders, arm swing as springs driven by simulated velocity, acceleration, angular velocity; each effect switchable; joint limits | tests on pose response; run/stop/turn/reverse with MIDI | **user checkpoint** |
 | 3 | Procedural gait (stride, cadence, width, height, stance/swing, speed-driven) | state-transition tests; all directions without pose pops | **user checkpoint** |
 | 4 | Foot placement + IK (rays, planting, slope alignment, knee limits, pelvis height) using `TwoBoneIK3D` if the rig allows, else a small custom solver | reachability, plant-release, stair/ramp tests; ramp and stairs already in the sandbox | **user checkpoint** |
 | 5 | Technique experiments behind feature flags (momentum, air strafing, braking asymmetry, slope speed, optional hop/slide) | each flag: off = baseline unchanged (guard tests), on = measured delta from recorded inputs | user playtest |
@@ -69,13 +69,35 @@ off switch and unit-labelled, clamped parameters; no claim of visual/physical/ha
   (b) the first physics-identity test failed for the same reason (body stepped twice per tick), not because of animation;
   (c) `Quaternion.angle_to` loses ~1e-4 rad near zero (acos) - measure rotation error via the rotation vector;
   (d) GDScript has no `%e` format; (e) `rotation` clashes with `Control.rotation`.
+- Phase 2, 2026-11-07: **338/338** (56 new). Automated results only - the Phase 2 checkpoint below is NOT yet confirmed.
+  - Model (nimation/body_dynamics.gd, parameters nimation/body_params.gd, generic set nimation/param_set.gd): torso pitch/yaw/roll,
+    pelvis weight shift, gait bob/sway, landing compression with rebound, facing lag, head stabilisation and arm
+    follow-through, all springs from Phase 1; hard joint limits; 10 switches (master + 9 effects) each tested on and off.
+  - ~40 `body.*` parameters, every one tagged `affects: visual` and shown in the HUD detail line; none is read by the simulation.
+  - Guard: physics trajectories (position, velocity, grounded over a run/turn/jump/stop script) are bit-identical with the
+    model on, with it switched off, and with animation disabled.
+  - Scene wiring: the model gets the mean physics acceleration since the last frame, so the result does not depend on how many
+    ticks fell in a frame. Landing compression is done through the knees (feet stay planted, tested). B toggles the model.
+  - MIDI: banks Body Springs / Body Effects / Body Detail appended to the shipped bindings with `tools/make_tuning_files.gd --add-missing-banks`;
+    every body parameter is reachable; synthetic events through the learned mapping change the values live; presets save/restore both targets.
+  - Cost: `BodyDynamics.update` 68 us (all effects), 3 us with the master off; `scene._process` 91 us on vs 20 us off (about 1 % of a 144 Hz frame).
+  - Existing presets only list movement parameters, so loading one leaves the body parameters alone; presets that cover both come in Phase 7.
 
 ## Phase 1 checkpoint (needs the user)
 Spring diagnostic: `godot --path utility/movement/flat-plane res://scenes/spring_diagnostic.tscn`
 (plots target, response, velocity, measured vs theoretical overshoot; three-regime overlay; naive-Euler comparison; rotation
 dial). **Verify:** underdamped rings and overshoots, critical settles fastest without overshoot, overdamped is slower;
 the readout's measured overshoot matches the theory line; at 12 Hz / 30 Hz tick the red naive spring explodes while the
-cyan one does not; the dial's actual arrow always takes the short way round. Status: **awaiting user confirmation**.
+cyan one does not; the dial's actual arrow always takes the short way round.
+Status: **CONFIRMED by the user on 2026-11-07** ("All of it looked right" - all four checks).
+
+## Phase 2 checkpoint (needs the user)
+Run the sandbox: `godot --path utility/movement/flat-plane`. **Verify by eye:** the torso leans
+forward as you accelerate and back as you brake; sharp turns roll it toward the inside; reversing makes the body swing round
+through its spring rather than snapping; a hard landing compresses the knees and rebounds; the head stays steadier than the
+torso; B switches between the spring body and the old pose. **Verify with the controller:** on banks 4-6 (Body Springs, Body Effects,
+Body Detail) the faders and knobs change the motion immediately, and the Body Effects faders turn each effect off on its own.
+Status: **WAITING for the user.**
 
 ## Outcome
 (filled in as phases complete)

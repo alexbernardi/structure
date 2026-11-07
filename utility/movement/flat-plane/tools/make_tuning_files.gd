@@ -2,7 +2,8 @@
 ##   config/tuning_bindings.json   (the default banks and button actions)
 ##   presets/*.json                (a "default" preset plus a few example starting points)
 ## Run:  godot --headless --path utility/movement/flat-plane --script res://tools/make_tuning_files.gd
-## Existing files are only overwritten with --force; the example values are starting points to tune from, not
+## Existing files are only overwritten with --force; --add-missing-banks appends banks that are new in code to the
+## existing bindings file and changes nothing else. The example values are starting points to tune from, not
 ## claims about how any of them feels.
 extends SceneTree
 
@@ -32,8 +33,32 @@ const EXAMPLES := {
 
 
 func _initialize() -> void:
-	var force := OS.get_cmdline_user_args().has("--force")
+	var args := OS.get_cmdline_user_args()
+	var force := args.has("--force")
 	var made := 0
+	if args.has("--add-missing-banks") and FileAccess.file_exists(Bindings.DEFAULT_PATH):
+		# Appends default banks the shipped file does not have yet, without touching anything already there.
+		var existing := Bindings.new()
+		var loaded := existing.load_file(Bindings.DEFAULT_PATH)
+		if not loaded.ok:
+			print("bindings: not changed, current file is invalid: ", loaded.errors[0])
+			quit(1)
+			return
+		var names: Array = []
+		for bank in existing.data.banks:
+			names.append(bank.name)
+		var added: Array = []
+		for bank in Bindings.default_data().banks:
+			if not names.has(bank.name):
+				existing.data.banks.append(bank)
+				added.append(bank.name)
+		if not added.is_empty():
+			var saved := existing.save_file(Bindings.DEFAULT_PATH)
+			print("bindings: added banks ", added, " -> ", "written" if saved.ok else saved.error)
+		else:
+			print("bindings: no banks missing")
+		quit(0)
+		return
 	if force or not FileAccess.file_exists(Bindings.DEFAULT_PATH):
 		var b := Bindings.new()
 		var r := b.save_file(Bindings.DEFAULT_PATH)

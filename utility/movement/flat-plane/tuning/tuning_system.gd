@@ -33,13 +33,16 @@ var last_midi_text := ""
 var _ui_layer: CanvasLayer
 
 
-## `opts`: bindings_path, preset_dir, state_path ("" = do not remember), no_ui (tests).
+## `opts`: bindings_path, preset_dir, state_path ("" = do not remember), no_ui (tests), extra_targets (Array of
+## [name, label, source]) registered before the bindings are checked so other systems' parameters can be bound.
 func setup(params, midi_manager: Node, opts := {}) -> void:
 	midi = midi_manager
 	bindings_path = String(opts.get("bindings_path", Bindings.DEFAULT_PATH))
 	state_path = String(opts.get("state_path", DEFAULT_STATE_PATH))
 	presets = Presets.new(String(opts.get("preset_dir", Presets.DEFAULT_DIR)))
 	registry.register("movement", "Movement", params)
+	for t in opts.get("extra_targets", []):
+		registry.register(String(t[0]), String(t[1]), t[2])
 	var r: Dictionary = bindings.load_file(bindings_path)
 	if not r.ok and not r.get("missing", false):
 		load_errors = r.errors   # keep the defaults in memory; the bad file is not overwritten until the user saves
