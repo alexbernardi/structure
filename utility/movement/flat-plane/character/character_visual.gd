@@ -1,0 +1,189 @@
+## Primitive humanoid: a Skeleton3D built in code, Godot primitive meshes attached to its bones, and a procedural
+## animator (walk/run cycle, lean, crouch, jump/fall pose, landing dip). Knows nothing about collision or input:
+## it only consumes a small state dictionary from update_pose().
+extends Node3D
+
+const FOOT_H := 0.07
+const THIGH := 0.45
+const SHIN := 0.44
+const ANKLE_H := 0.065     # foot joint height above the ground when the sole is flat
+const HIP_DROP := 0.05     # thigh joints sit this far below the pelvis joint
+
+## name, parent, rest origin (relative to the parent joint), mesh kind, mesh size, mesh offset from the joint, colour
+const BONES := [
+	["pelvis", "", Vector3(0.0, 1.01, 0.0), "box", Vector3(0.32, 0.18, 0.20), Vector3(0, 0.0, 0), "pants"],
+	["spine", "pelvis", Vector3(0.0, 0.08, 0.0), "box", Vector3(0.30, 0.22, 0.18), Vector3(0, 0.10, 0), "shirt"],
+	["chest", "spine", Vector3(0.0, 0.20, 0.0), "box", Vector3(0.36, 0.28, 0.21), Vector3(0, 0.12, 0), "shirt"],
+	["neck", "chest", Vector3(0.0, 0.26, 0.0), "capsule", Vector3(0.045, 0.14, 0.0), Vector3(0, 0.04, 0), "skin"],
+	["head", "neck", Vector3(0.0, 0.08, 0.0), "sphere", Vector3(0.105, 0.0, 0.0), Vector3(0, 0.09, 0), "skin"],
+	["upper_arm_l", "chest", Vector3(-0.23, 0.22, 0.0), "capsule", Vector3(0.050, 0.30, 0.0), Vector3(0, -0.14, 0), "shirt"],
+	["forearm_l", "upper_arm_l", Vector3(0.0, -0.29, 0.0), "capsule", Vector3(0.042, 0.28, 0.0), Vector3(0, -0.13, 0), "skin"],
+	["upper_arm_r", "chest", Vector3(0.23, 0.22, 0.0), "capsule", Vector3(0.050, 0.30, 0.0), Vector3(0, -0.14, 0), "shirt"],
+	["forearm_r", "upper_arm_r", Vector3(0.0, -0.29, 0.0), "capsule", Vector3(0.042, 0.28, 0.0), Vector3(0, -0.13, 0), "skin"],
+	["thigh_l", "pelvis", Vector3(-0.10, -0.05, 0.0), "capsule", Vector3(0.075, 0.46, 0.0), Vector3(0, -0.22, 0), "pants"],
+	["shin_l", "thigh_l", Vector3(0.0, -THIGH, 0.0), "capsule", Vector3(0.058, 0.44, 0.0), Vector3(0, -0.21, 0), "pants"],
+	["foot_l", "shin_l", Vector3(0.0, -SHIN, 0.0), "box", Vector3(0.10, FOOT_H, 0.25), Vector3(0, -0.03, -0.06), "shoe"],
+	["thigh_r", "pelvis", Vector3(0.10, -0.05, 0.0), "capsule", Vector3(0.075, 0.46, 0.0), Vector3(0, -0.22, 0), "pants"],
+	["shin_r", "thigh_r", Vector3(0.0, -THIGH, 0.0), "capsule", Vector3(0.058, 0.44, 0.0), Vector3(0, -0.21, 0), "pants"],
+	["foot_r", "shin_r", Vector3(0.0, -SHIN, 0.0), "box", Vector3(0.10, FOOT_H, 0.25), Vector3(0, -0.03, -0.06), "shoe"],
+]
+const COLOURS := {"skin": Color(0.88, 0.70, 0.55), "shirt": Color(0.25, 0.45, 0.80), "pants": Color(0.22, 0.24, 0.30), "shoe": Color(0.12, 0.12, 0.13)}
+
+var skeleton := Skeleton3D.new()
+var bone_index: Dictionary = {}
+
+var phase := 0.0
+var crouch_blend := 0.0
+var air_blend := 0.0
+var lean := 0.0
+var dip := 0.0
+var _turn_yaw := 0.0
+var _stand_hip := 0.0
+
+
+func _ready() -> void:
+	build()
+
+
+func build() -> void:
+	if skeleton.get_bone_count() > 0:
+		return
+	skeleton.name = "Skeleton3D"
+	add_child(skeleton)
+	for b in BONES:
+		var idx := skeleton.add_bone(b[0])
+		bone_index[b[0]] = idx
+		if b[1] != "":
+			skeleton.set_bone_parent(idx, bone_index[b[1]])
+		skeleton.set_bone_rest(idx, Transform3D(Basis.IDENTITY, b[2]))
+	skeleton.reset_bone_poses()
+	for b in BONES:
+		var attach := BoneAttachment3D.new()
+		attach.name = "Attach_%s" % b[0]
+		attach.bone_name = b[0]
+		skeleton.add_child(attach)
+		var mi := MeshInstance3D.new()
+		mi.mesh = _mesh(b[3], b[4])
+		mi.position = b[5]
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = COLOURS[b[6]]
+		mat.roughness = 0.85
+		mi.material_override = mat
+		attach.add_child(mi)
+	_stand_hip = _hip_height(0.0, 0.0)
+
+
+func _mesh(kind: String, size: Vector3) -> Mesh:
+	match kind:
+		"box":
+			var m := BoxMesh.new()
+			m.size = size
+			return m
+		"sphere":
+			var s := SphereMesh.new()
+			s.radius = size.x
+			s.height = size.x * 2.0
+			return s
+	var c := CapsuleMesh.new()
+	c.radius = size.x
+	c.height = maxf(size.y, size.x * 2.0)
+	return c
+
+
+## Height of the pelvis bone above the ground for a leg with the given thigh and knee angles.
+static func _hip_height(thigh_angle: float, knee_angle: float) -> float:
+	return ANKLE_H + HIP_DROP + THIGH * cos(thigh_angle) + SHIN * cos(thigh_angle + knee_angle)
+
+
+## state: {speed: horizontal m/s, vy: vertical m/s, grounded: bool, crouching: bool, accel_forward: m/s^2,
+##         heading: world yaw of horizontal velocity (rad) or NAN, landed_impact: m/s (optional, one tick)}
+func update_pose(state: Dictionary, delta: float) -> void:
+	if skeleton.get_bone_count() == 0:
+		return
+	var speed: float = state.get("speed", 0.0)
+	var grounded: bool = state.get("grounded", true)
+	var crouching: bool = state.get("crouching", false)
+	var vy: float = state.get("vy", 0.0)
+
+	crouch_blend = move_toward(crouch_blend, 1.0 if crouching else 0.0, delta * 7.0)
+	air_blend = move_toward(air_blend, 0.0 if grounded else 1.0, delta * 9.0)
+	var gait := clampf(speed / 6.5, 0.0, 1.0)
+	if grounded and speed > 0.15:
+		phase += delta * lerpf(5.0, 12.0, gait)
+		phase = fmod(phase, TAU)
+	var target_lean := clampf(speed * 0.022 + float(state.get("accel_forward", 0.0)) * 0.0035, -0.15, 0.38)
+	lean = lerpf(lean, target_lean, 1.0 - exp(-8.0 * delta))
+	if state.get("landed_impact", 0.0) > 0.0:
+		dip = clampf(float(state.landed_impact) / 14.0, 0.0, 0.22)
+	dip = lerpf(dip, 0.0, 1.0 - exp(-10.0 * delta))
+
+	var heading: float = state.get("heading", NAN)
+	if not is_nan(heading) and speed > 0.4:
+		_turn_yaw = lerp_angle(_turn_yaw, heading, 1.0 - exp(-12.0 * delta))
+	rotation.y = _turn_yaw
+
+	var swing := sin(phase) * lerpf(0.35, 0.85, gait)
+	var swing_r := sin(phase + PI) * lerpf(0.35, 0.85, gait)
+	var knee := lerpf(0.25, 1.25, gait)
+	var knee_l := -(maxf(0.0, cos(phase)) * knee + 0.08)
+	var knee_r := -(maxf(0.0, cos(phase + PI)) * knee + 0.08)
+	var idle := 1.0 - clampf(speed / 0.6, 0.0, 1.0)
+	if idle > 0.0:
+		swing *= 1.0 - idle
+		swing_r *= 1.0 - idle
+		knee_l *= 1.0 - idle
+		knee_r *= 1.0 - idle
+
+	# crouch: deep knee bend; air: tucked legs, rising vs falling changes the spread
+	var thigh_l := lerpf(swing, 1.30, crouch_blend)
+	var thigh_r := lerpf(swing_r, 1.30, crouch_blend)
+	var shin_l := lerpf(knee_l, -2.0, crouch_blend)
+	var shin_r := lerpf(knee_r, -2.0, crouch_blend)
+	var rising := clampf(vy / 6.0, -1.0, 1.0)
+	thigh_l = lerpf(thigh_l, 0.55 + 0.25 * rising, air_blend)
+	thigh_r = lerpf(thigh_r, -0.15 - 0.2 * rising, air_blend)
+	shin_l = lerpf(shin_l, -0.9 - 0.3 * rising, air_blend)
+	shin_r = lerpf(shin_r, -0.7, air_blend)
+
+	var hip := maxf(_hip_height(thigh_l, shin_l), _hip_height(thigh_r, shin_r))
+	if air_blend > 0.5:
+		hip = _stand_hip - 0.10 * air_blend
+	var bob := absf(cos(phase)) * 0.03 * gait * (1.0 - air_blend)
+	var pelvis_y := hip + bob - dip
+	skeleton.set_bone_pose_position(bone_index.pelvis, Vector3(0.0, pelvis_y, 0.0))
+
+	_rot("thigh_l", thigh_l)
+	_rot("shin_l", shin_l)
+	_rot("thigh_r", thigh_r)
+	_rot("shin_r", shin_r)
+	_rot("foot_l", -(thigh_l + shin_l) * 0.5 * (1.0 - air_blend) - 0.2 * air_blend)
+	_rot("foot_r", -(thigh_r + shin_r) * 0.5 * (1.0 - air_blend) - 0.2 * air_blend)
+
+	var arm := lerpf(0.25, 0.85, gait) * (1.0 - idle)
+	var arm_l := -sin(phase) * arm
+	var arm_r := -sin(phase + PI) * arm
+	var fore := -(0.15 + 0.7 * gait) * (1.0 - idle * 0.7)
+	arm_l = lerpf(arm_l, -0.5 - 0.5 * rising, air_blend)
+	arm_r = lerpf(arm_r, -0.5 - 0.5 * rising, air_blend)
+	arm_l = lerpf(arm_l, -0.35, crouch_blend)
+	arm_r = lerpf(arm_r, -0.35, crouch_blend)
+	_rot("forearm_l", fore - 0.3 * air_blend)
+	_rot("forearm_r", fore - 0.3 * air_blend)
+	skeleton.set_bone_pose_rotation(bone_index.upper_arm_l, Quaternion(Vector3.RIGHT, arm_l) * Quaternion(Vector3.FORWARD, 0.10 + 0.5 * air_blend))
+	skeleton.set_bone_pose_rotation(bone_index.upper_arm_r, Quaternion(Vector3.RIGHT, arm_r) * Quaternion(Vector3.FORWARD, -0.10 - 0.5 * air_blend))
+
+	var breathing := sin(Time.get_ticks_msec() / 650.0) * 0.012 * idle
+	var chest_lean := -(lean + 0.10 * crouch_blend) + breathing
+	skeleton.set_bone_pose_rotation(bone_index.spine, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, sin(phase) * 0.14 * gait))
+	skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, -sin(phase) * 0.10 * gait))
+	skeleton.set_bone_pose_rotation(bone_index.neck, Quaternion(Vector3.RIGHT, lean * 0.6))
+	skeleton.set_bone_pose_rotation(bone_index.head, Quaternion(Vector3.RIGHT, lean * 0.3))
+
+
+func _rot(bone: String, angle: float) -> void:
+	skeleton.set_bone_pose_rotation(bone_index[bone], Quaternion(Vector3.RIGHT, angle))
+
+
+## Current global height of a bone's joint above the character origin (used by tests and debugging).
+func joint_height(bone: String) -> float:
+	return skeleton.get_bone_global_pose(bone_index[bone]).origin.y
