@@ -12,6 +12,8 @@ const Params = preload("res://movement/movement_params.gd")
 const Actions = preload("res://movement/input_actions.gd")
 const InputSource = preload("res://movement/input_source.gd")
 const WindowState = preload("res://scenes/window_state.gd")
+const Midi = preload("res://midi/midi_manager.gd")
+const Tuning = preload("res://tuning/tuning_system.gd")
 
 var params: Params = Params.new()
 var world
@@ -19,12 +21,15 @@ var body
 var visual
 var cam
 var live = InputSource.Live.new()
+var midi
+var tuning
 var options := {}   ## overrides command-line options (used by tests)
 
 var _args := {}
 var _pending_impact := 0.0
 var _frames := 0
 var _readout: Label
+var _landmark_index := 0
 
 
 func _ready() -> void:
@@ -66,6 +71,7 @@ func _ready() -> void:
 	add_child(cam)
 
 	_build_readout()
+	_build_tuning()
 	if DisplayServer.get_name() != "headless" and not _args.has("no-window-state"):
 		var ws := WindowState.new()
 		ws.name = "WindowState"
@@ -73,6 +79,73 @@ func _ready() -> void:
 		ws.attach(get_window(), String(_args.get("side", "left")))
 	if not _args.has("no-capture") and DisplayServer.get_name() != "headless":
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+## MIDI controller + live tuning. Options: --no-tuning, --no-hardware (do not open MIDI inputs),
+## --midi-config=<path> (mapping file; default config/midi_mapping.json), --tuning-bindings=<path>, --preset-dir=<path>.
+func _build_tuning() -> void:
+	if _args.has("no-tuning"):
+		return
+	midi = Midi.new()
+	midi.name = "Midi"
+	add_child(midi)
+	var hardware := not _args.has("no-hardware") and DisplayServer.get_name() != "headless"
+	midi.autosave = not _args.has("midi-config")
+	midi.start(String(_args.get("midi-config", "res://config/midi_mapping.json")), hardware)
+	tuning = Tuning.new()
+	tuning.name = "Tuning"
+	add_child(tuning)
+	var opts := {"no_ui": _args.has("no-tuning-ui") or DisplayServer.get_name() == "headless" and not _args.has("tuning-ui")}
+	for pair in [["tuning-bindings", "bindings_path"], ["preset-dir", "preset_dir"], ["tuning-state", "state_path"]]:
+		if _args.has(pair[0]):
+			opts[pair[1]] = String(_args[pair[0]])
+	tuning.setup(params, midi, opts)
+	tuning.scene_action.connect(_on_tuning_action)
+	tuning.editor_toggled.connect(_on_editor_toggled)
+
+
+func _on_editor_toggled(open: bool) -> void:
+	live.enabled = not open
+	if DisplayServer.get_name() != "headless":
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
+
+
+## Things only the scene can do on behalf of controller buttons.
+func _on_tuning_action(action: String, _ctx: Dictionary) -> void:
+	match action:
+		"respawn":
+			body.respawn()
+		"teleport_next":
+			teleport_to_landmark(1)
+		"teleport_prev":
+			teleport_to_landmark(-1)
+		"record_toggle":
+			tuning.toast.emit("Input recording is not available yet", "warn")
+
+
+func landmark_names() -> Array[String]:
+	var out: Array[String] = ["spawn"]
+	for k in world.landmarks:
+		if k != "spawn":
+			out.append(String(k))
+	return out
+
+
+## Moves the character to the next / previous test landmark (ramps, stairs, tunnel, ledge ...), facing it sensibly.
+func teleport_to_landmark(step: int) -> void:
+	var names := landmark_names()
+	_landmark_index = (_landmark_index + step + names.size()) % names.size()
+	var name := names[_landmark_index]
+	var yaw := 0.0
+	if name.begins_with("stairs"):
+		yaw = -PI / 2.0
+	elif name == "tunnel":
+		yaw = PI
+	body.teleport(world.landmarks[name] + Vector3(0.0, 0.05, 0.0))
+	cam.yaw = yaw
+	cam.snap()
+	if tuning != null:
+		tuning.toast.emit("Teleported to %s (%d/%d)" % [name, _landmark_index + 1, names.size()], "info")
 
 
 func _build_readout() -> void:
@@ -89,7 +162,7 @@ func _build_readout() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not _args.has("no-capture"):
+	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not _args.has("no-capture") and not (tuning != null and tuning.editor != null and tuning.editor.visible):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -125,7 +198,7 @@ func _process(delta: float) -> void:
 	visual.update_pose({"speed": speed, "vy": v.y, "grounded": body.core.grounded, "crouching": body.core.crouching,
 		"accel_forward": fwd_accel, "heading": heading, "landed_impact": _pending_impact}, delta)
 	_pending_impact = 0.0
-	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s\nWASD move   Mouse look   Space jump   Shift sprint   Ctrl/C crouch   R respawn\nEsc frees the mouse (then drag / resize the window; click the view to recapture)   F6 left  F7 right  F8 centre  F11 fullscreen" % [
+	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s\nWASD move   Mouse look   Space jump   Shift sprint   Ctrl/C crouch   R respawn\nEsc frees the mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset all   F6/F7/F8 window   F11 fullscreen" % [
 		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching else ""]
 	if _args.has("screenshot") and _frames == int(_args.get("screenshot-frame", 90)):
 		get_viewport().get_texture().get_image().save_png(String(_args.screenshot))

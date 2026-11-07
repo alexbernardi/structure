@@ -13,6 +13,13 @@ const ACTIONS := {
 	"release_mouse": [KEY_ESCAPE],
 	"toggle_hud": [KEY_F3],
 	"toggle_midi": [KEY_F2],
+	"toggle_editor": [KEY_F4],
+	"bank_next": [KEY_PAGEDOWN],
+	"bank_prev": [KEY_PAGEUP],
+	"reset_all_params": [KEY_HOME],
+	"preset_next": [KEY_BRACKETRIGHT],
+	"preset_prev": [KEY_BRACKETLEFT],
+	"preset_save": [KEY_F5],
 }
 
 

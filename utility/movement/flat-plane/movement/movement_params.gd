@@ -78,6 +78,17 @@ static func from_normalized(id: String, t: float) -> float:
 	return clamp_value(id, lerpf(float(d.min), float(d.max), clampf(t, 0.0, 1.0)))
 
 
+## Rounds to the parameter's step (measured from its minimum) so controller-set values are clean numbers.
+static func snap(id: String, v: float) -> float:
+	var d := def(id)
+	if d.is_empty():
+		return v
+	var step := float(d.step)
+	var snapped := v if step <= 0.0 else float(d.min) + snappedf(v - float(d.min), step)
+	# Round-trip through a decimal string: the nearest double to the decimal value, so 4.5 + 0.1 stores as 4.6, not 4.6000000000000005.
+	return clamp_value(id, float("%.6f" % snapped))
+
+
 static func to_normalized(id: String, v: float) -> float:
 	var d := def(id)
 	return clampf((v - float(d.min)) / (float(d.max) - float(d.min)), 0.0, 1.0)

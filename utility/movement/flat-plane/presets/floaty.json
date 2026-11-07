@@ -1,0 +1,31 @@
+{
+	"name": "floaty",
+	"note": "Example: low gravity, long hang time, lots of air steering.",
+	"saved": "2026-11-07T08:42:34",
+	"schema": 1,
+	"targets": {
+		"movement": {
+			"air_accel": 20.0,
+			"air_control": 0.6,
+			"air_speed_cap": 2.0,
+			"auto_jump": 0.0,
+			"braking": 20.0,
+			"coyote_time": 0.1,
+			"crouch_height": 1.1,
+			"crouch_speed": 2.0,
+			"gravity": 9.8,
+			"ground_accel": 45.0,
+			"ground_friction": 7.0,
+			"jump_buffer_time": 0.1,
+			"jump_impulse": 6.0,
+			"max_fall_speed": 20.0,
+			"max_ground_speed": 4.5,
+			"max_walkable_slope": 46.0,
+			"slope_speed_penalty": 0.4,
+			"sprint_multiplier": 1.6,
+			"stand_height": 1.8,
+			"step_height": 0.35,
+			"stop_speed": 1.0
+		}
+	}
+}

@@ -166,6 +166,50 @@ func test_events_arrive_through_the_input_pipeline(t) -> void:
 	t.eq(_changes.size(), 1, "InputEventMIDI reaches _input and is routed")
 
 
+func _join_rescan(m) -> void:
+	var guard := 0
+	while m._rescan_thread != null and guard < 600:
+		await Engine.get_main_loop().process_frame
+		m._poll_rescan_thread()
+		guard += 1
+
+
+func test_async_rescan_runs_on_a_worker_and_applies_the_result(t) -> void:
+	t.ok(_m.rescan_async(), "started on a worker thread")
+	t.ok(not _m.rescan_async(), "only one at a time")
+	await _join_rescan(_m)
+	t.ok(_m._rescan_thread == null, "finished and joined")
+	for n in _m.port_names:
+		t.ok(n is String, "ports listed as strings")
+
+
+func test_rescan_waits_while_a_button_is_held(t) -> void:
+	_map_capture_controls()
+	_m.rescan_interval = 0.01
+	_m.handle_midi(Events.make_input_event(Events.KIND_NOTE, 0, 16, 127))   # strip1_mute is momentary: held
+	_m._last_event_msec = -1_000_000
+	_m._process(0.1)
+	t.ok(_m._rescan_thread == null, "no reopen while a button is down (its release could be lost)")
+	_m.handle_midi(Events.make_input_event(Events.KIND_NOTE, 0, 16, 0, 0, true))
+	_m._last_event_msec = -1_000_000
+	_m._process(0.1)
+	t.ok(_m._rescan_thread != null, "reopens once everything is released and quiet")
+	await _join_rescan(_m)
+	_m.rescan_interval = 0.0
+
+
+func test_rescan_waits_for_quiet_input_and_learning(t) -> void:
+	_m.rescan_interval = 0.01
+	_m._last_event_msec = Time.get_ticks_msec()
+	_m._process(0.1)
+	t.ok(_m._rescan_thread == null, "recent messages: not now")
+	_m._last_event_msec = -1_000_000
+	_m.start_learn("strip1_mute")
+	_m._process(0.1)
+	t.ok(_m._rescan_thread == null, "learning: not now")
+	_m.cancel_learn()
+	_m.rescan_interval = 0.0
+
 func test_invalid_config_file_is_reported_not_overwritten(t) -> void:
 	var f := FileAccess.open(TMP, FileAccess.WRITE)
 	f.store_string("{\"schema\": 7}")

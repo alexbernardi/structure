@@ -141,10 +141,18 @@ func _ray_down(space: PhysicsDirectSpaceState3D, point: Vector3, above: float, r
 	var from := point + Vector3.UP * above
 	return space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * (above + reach), collision_mask, [get_rid()]))
 
+
 func respawn() -> void:
+	teleport(spawn_transform.origin, spawn_transform.basis)
+	respawned.emit()
+
+
+## Places the body somewhere else and clears its motion. Resetting interpolation stops the renderer from drawing the
+## character streaking from the old spot to the new one.
+func teleport(pos: Vector3, basis := Basis.IDENTITY) -> void:
 	step_offset = 0.0
-	global_transform = spawn_transform
+	global_transform = Transform3D(basis, pos)
 	velocity = Vector3.ZERO
 	core.reset()
 	_was_grounded = false
-	respawned.emit()
+	reset_physics_interpolation()

@@ -1,0 +1,124 @@
+{
+	"banks": [
+		{
+			"name": "Ground",
+			"strips": {
+				"1": {
+					"fader": "movement.max_ground_speed",
+					"knob": "movement.max_ground_speed"
+				},
+				"2": {
+					"fader": "movement.ground_accel",
+					"knob": "movement.ground_accel"
+				},
+				"3": {
+					"fader": "movement.ground_friction",
+					"knob": "movement.ground_friction"
+				},
+				"4": {
+					"fader": "movement.braking",
+					"knob": "movement.braking"
+				},
+				"5": {
+					"fader": "movement.stop_speed",
+					"knob": "movement.stop_speed"
+				},
+				"6": {
+					"fader": "movement.sprint_multiplier",
+					"knob": "movement.sprint_multiplier"
+				},
+				"7": {
+					"fader": "movement.crouch_speed",
+					"knob": "movement.crouch_speed"
+				}
+			}
+		},
+		{
+			"name": "Jump & Air",
+			"strips": {
+				"1": {
+					"fader": "movement.jump_impulse",
+					"knob": "movement.jump_impulse"
+				},
+				"2": {
+					"fader": "movement.gravity",
+					"knob": "movement.gravity"
+				},
+				"3": {
+					"fader": "movement.max_fall_speed",
+					"knob": "movement.max_fall_speed"
+				},
+				"4": {
+					"fader": "movement.coyote_time",
+					"knob": "movement.coyote_time"
+				},
+				"5": {
+					"fader": "movement.jump_buffer_time",
+					"knob": "movement.jump_buffer_time"
+				},
+				"6": {
+					"fader": "movement.air_accel",
+					"knob": "movement.air_accel"
+				},
+				"7": {
+					"fader": "movement.air_speed_cap",
+					"knob": "movement.air_speed_cap"
+				},
+				"8": {
+					"fader": "movement.air_control",
+					"knob": "movement.air_control"
+				}
+			}
+		},
+		{
+			"name": "Slope & Body",
+			"strips": {
+				"1": {
+					"fader": "movement.max_walkable_slope",
+					"knob": "movement.max_walkable_slope"
+				},
+				"2": {
+					"fader": "movement.slope_speed_penalty",
+					"knob": "movement.slope_speed_penalty"
+				},
+				"3": {
+					"fader": "movement.step_height",
+					"knob": "movement.step_height"
+				},
+				"4": {
+					"fader": "movement.stand_height",
+					"knob": "movement.stand_height"
+				},
+				"5": {
+					"fader": "movement.crouch_height",
+					"knob": "movement.crouch_height"
+				},
+				"6": {
+					"fader": "movement.auto_jump",
+					"knob": "movement.auto_jump"
+				}
+			}
+		}
+	],
+	"global_actions": {
+		"global_bank_next": "bank_next",
+		"global_bank_prev": "bank_prev",
+		"global_forward": "preset_next",
+		"global_nav_down": "hud_cycle",
+		"global_nav_left": "teleport_prev",
+		"global_nav_right": "teleport_next",
+		"global_nav_up": "preset_save",
+		"global_play": "respawn",
+		"global_record": "record_toggle",
+		"global_rewind": "preset_prev",
+		"global_stop": "reset_all"
+	},
+	"knob_scale": 1.0,
+	"schema": 1,
+	"strip_actions": {
+		"mute": "reset_param",
+		"rec": "revert_param",
+		"select": "select_param",
+		"solo": "lock_param"
+	}
+}

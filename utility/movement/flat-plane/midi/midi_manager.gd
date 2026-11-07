@@ -29,7 +29,8 @@ var config = Config.new()
 var learn = Learn.new()
 var config_path := Config.DEFAULT_PATH
 var config_errors: Array[String] = []
-var rescan_interval := 2.0  ## seconds between hot-plug checks (each costs ~40 ms); 0 disables polling
+var rescan_interval := 2.0  ## seconds between hot-plug checks; 0 disables polling
+var threaded_rescan := true  ## reopening the inputs costs ~40 ms: do it off the main thread so the game never hitches
 var autosave := true
 
 var port_names: Array[String] = []
@@ -39,6 +40,8 @@ var connected := false
 var control_state: Dictionary = {}
 
 var _started := false
+var _rescan_thread: Thread
+var _buttons_down: Dictionary = {}  ## control id -> true while a mapped momentary button is held
 var _since_rescan := 0.0
 var _last_event_msec := -1_000_000
 var _verify_block_until: Dictionary = {}
@@ -60,19 +63,57 @@ func start(path := Config.DEFAULT_PATH, open_hardware := true) -> void:
 
 func stop() -> void:
 	_started = false
+	_finish_rescan_thread()
 	OS.close_midi_inputs()
 
 
-## Re-enumerates inputs. Godot only lists devices when the inputs are opened, so a rescan closes and reopens them
-## (skipped while messages are arriving or a learn gesture is in progress, to avoid losing events).
+func _exit_tree() -> void:
+	_finish_rescan_thread()
+
+
+func _finish_rescan_thread() -> void:
+	if _rescan_thread != null:
+		_rescan_thread.wait_to_finish()
+		_rescan_thread = null
+
+
+## Re-enumerates inputs. Godot only lists devices when the inputs are opened, so a rescan closes and reopens them.
+## This blocks for ~40 ms: use rescan_async() while a game is running.
 func rescan(reopen := true) -> void:
+	_finish_rescan_thread()
 	if reopen:
 		OS.close_midi_inputs()
 		OS.open_midi_inputs()
+	_apply_ports(_list_ports())
+
+
+func _list_ports() -> Array[String]:
 	var names: Array[String] = []
 	for n in OS.get_connected_midi_inputs():
 		names.append(String(n))
-	_apply_ports(names)
+	return names
+
+
+## Same as rescan(true) but on a worker thread; the result is applied from _process. False if one is already running.
+func rescan_async() -> bool:
+	if _rescan_thread != null:
+		return false
+	_rescan_thread = Thread.new()
+	_rescan_thread.start(_reopen_inputs)
+	return true
+
+
+func _reopen_inputs() -> Array[String]:
+	OS.close_midi_inputs()
+	OS.open_midi_inputs()
+	return _list_ports()
+
+
+func _poll_rescan_thread() -> void:
+	if _rescan_thread != null and not _rescan_thread.is_alive():
+		var names: Array[String] = _rescan_thread.wait_to_finish()
+		_rescan_thread = null
+		_apply_ports(names)
 
 
 func _apply_ports(names: Array) -> void:
@@ -132,13 +173,19 @@ func _process(delta: float) -> void:
 	if not _started:
 		return
 	learn.tick(delta)
+	_poll_rescan_thread()
 	if rescan_interval > 0.0:
 		_since_rescan += delta
 		if _since_rescan >= rescan_interval:
 			_since_rescan = 0.0
+			# Events that arrive while the inputs are closed are lost, so only reopen when nothing is happening:
+			# no recent messages, no learn gesture, and no button held (its release could be lost).
 			var quiet := Time.get_ticks_msec() - _last_event_msec > RESCAN_IDLE_MSEC
-			if quiet and not learn.is_active():
-				rescan(true)
+			if quiet and not learn.is_active() and _buttons_down.is_empty():
+				if threaded_rescan:
+					rescan_async()
+				else:
+					rescan(true)
 
 
 func _input(event: InputEvent) -> void:
@@ -185,6 +232,10 @@ func _route(ev: Dictionary) -> void:
 			if not (ev.pressed or ev.released):
 				return
 			st["pressed"] = ev.pressed
+			if ev.pressed:
+				_buttons_down[id] = true
+			else:
+				_buttons_down.erase(id)
 		"trigger":
 			if not ev.pressed:
 				return
