@@ -12,8 +12,11 @@ run/flush_stdout_on_print=true
 
 [display]
 
-window/size/viewport_width=1440
-window/size/viewport_height=810
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/resizable=true
+window/size/borderless=false
+window/stretch/mode="disabled"
 
 [filesystem]
 

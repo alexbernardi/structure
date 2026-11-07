@@ -11,6 +11,7 @@ const OrbitCamera = preload("res://character/orbit_camera.gd")
 const Params = preload("res://movement/movement_params.gd")
 const Actions = preload("res://movement/input_actions.gd")
 const InputSource = preload("res://movement/input_source.gd")
+const WindowState = preload("res://scenes/window_state.gd")
 
 var params: Params = Params.new()
 var world
@@ -56,9 +57,20 @@ func _ready() -> void:
 	cam = OrbitCamera.new()
 	cam.name = "OrbitCamera"
 	cam.target = body
+	if _args.has("cam-yaw"):
+		cam.yaw = deg_to_rad(float(_args["cam-yaw"]))
+	if _args.has("cam-pitch"):
+		cam.pitch = deg_to_rad(float(_args["cam-pitch"]))
+	if _args.has("cam-distance"):
+		cam.distance = float(_args["cam-distance"])
 	add_child(cam)
 
 	_build_readout()
+	if DisplayServer.get_name() != "headless" and not _args.has("no-window-state"):
+		var ws := WindowState.new()
+		ws.name = "WindowState"
+		add_child(ws)
+		ws.attach(get_window(), String(_args.get("side", "left")))
 	if not _args.has("no-capture") and DisplayServer.get_name() != "headless":
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -81,10 +93,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
+## Losing focus (alt-tab, clicking another window) frees the mouse so the window can be moved and resized.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		if DisplayServer.get_name() != "headless":
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
 func _physics_process(dt: float) -> void:
 	var frame: Dictionary = live.sample(cam.yaw)
 	if _args.has("autowalk"):   # smoke/screenshot aid: walk forward and sprint without a keyboard
 		frame.move = Vector2(0, 1)
+		frame.yaw = 0.0   # fixed heading (-Z) so the camera options can frame the character from any side
 		frame.sprint = true
 		frame.jump_pressed = _args.has("autojump") and Engine.get_physics_frames() % 90 == 0
 	body.simulate(frame, dt)
@@ -100,10 +120,12 @@ func _process(delta: float) -> void:
 	var fwd_accel := 0.0
 	if speed > 0.01:
 		fwd_accel = Vector3(body.core.acceleration.x, 0, body.core.acceleration.z).dot(Vector3(v.x, 0, v.z).normalized())
+	var visual_offset: float = body.step_offset
+	visual.follow(body, visual_offset)
 	visual.update_pose({"speed": speed, "vy": v.y, "grounded": body.core.grounded, "crouching": body.core.crouching,
 		"accel_forward": fwd_accel, "heading": heading, "landed_impact": _pending_impact}, delta)
 	_pending_impact = 0.0
-	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s\nWASD move   Mouse look   Space jump   Shift sprint   Ctrl/C crouch   R respawn   Esc free mouse" % [
+	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s\nWASD move   Mouse look   Space jump   Shift sprint   Ctrl/C crouch   R respawn\nEsc frees the mouse (then drag / resize the window; click the view to recapture)   F6 left  F7 right  F8 centre  F11 fullscreen" % [
 		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching else ""]
 	if _args.has("screenshot") and _frames == int(_args.get("screenshot-frame", 90)):
 		get_viewport().get_texture().get_image().save_png(String(_args.screenshot))

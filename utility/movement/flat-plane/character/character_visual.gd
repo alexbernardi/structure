@@ -42,7 +42,16 @@ var _stand_hip := 0.0
 
 
 func _ready() -> void:
+	# Posed every rendered frame from the body's interpolated position, so it must not be physics-interpolated itself:
+	# limb poses changed outside the physics tick would otherwise be sampled at the tick rate and beat against the display.
+	top_level = true
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	build()
+
+
+## Places the whole humanoid at the body's (interpolated) feet position; call once per rendered frame before update_pose.
+func follow(body: Node3D, vertical_offset := 0.0) -> void:
+	global_position = body.get_global_transform_interpolated().origin + Vector3.UP * vertical_offset
 
 
 func build() -> void:
@@ -159,16 +168,20 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	_rot("foot_l", -(thigh_l + shin_l) * 0.5 * (1.0 - air_blend) - 0.2 * air_blend)
 	_rot("foot_r", -(thigh_r + shin_r) * 0.5 * (1.0 - air_blend) - 0.2 * air_blend)
 
+	# Convention: a positive rotation about X swings a hanging limb forward (-Z). Arms swing opposite to the legs,
+	# elbows bend forward, and the arms rise forward when jumping.
 	var arm := lerpf(0.25, 0.85, gait) * (1.0 - idle)
 	var arm_l := -sin(phase) * arm
 	var arm_r := -sin(phase + PI) * arm
-	var fore := -(0.15 + 0.7 * gait) * (1.0 - idle * 0.7)
-	arm_l = lerpf(arm_l, -0.5 - 0.5 * rising, air_blend)
-	arm_r = lerpf(arm_r, -0.5 - 0.5 * rising, air_blend)
-	arm_l = lerpf(arm_l, -0.35, crouch_blend)
-	arm_r = lerpf(arm_r, -0.35, crouch_blend)
-	_rot("forearm_l", fore - 0.3 * air_blend)
-	_rot("forearm_r", fore - 0.3 * air_blend)
+	var fore := (0.15 + 0.7 * gait) * (1.0 - idle * 0.7)
+	var arm_air := lerpf(-0.3, 1.0, (rising + 1.0) / 2.0)
+	arm_l = lerpf(arm_l, arm_air, air_blend)
+	arm_r = lerpf(arm_r, arm_air, air_blend)
+	arm_l = lerpf(arm_l, 0.35, crouch_blend)
+	arm_r = lerpf(arm_r, 0.35, crouch_blend)
+	var elbow := fore + 0.3 * air_blend + 0.4 * crouch_blend
+	_rot("forearm_l", elbow)
+	_rot("forearm_r", elbow)
 	skeleton.set_bone_pose_rotation(bone_index.upper_arm_l, Quaternion(Vector3.RIGHT, arm_l) * Quaternion(Vector3.FORWARD, 0.10 + 0.5 * air_blend))
 	skeleton.set_bone_pose_rotation(bone_index.upper_arm_r, Quaternion(Vector3.RIGHT, arm_r) * Quaternion(Vector3.FORWARD, -0.10 - 0.5 * air_blend))
 
@@ -187,3 +200,13 @@ func _rot(bone: String, angle: float) -> void:
 ## Current global height of a bone's joint above the character origin (used by tests and debugging).
 func joint_height(bone: String) -> float:
 	return skeleton.get_bone_global_pose(bone_index[bone]).origin.y
+
+
+## Joint position in the character's local space (-Z is forward).
+func joint_position(bone: String) -> Vector3:
+	return skeleton.get_bone_global_pose(bone_index[bone]).origin
+
+
+## The end of a limb bone: a point `length` below its joint along the bone (e.g. the wrist for a forearm).
+func bone_tip(bone: String, length: float) -> Vector3:
+	return skeleton.get_bone_global_pose(bone_index[bone]) * Vector3(0.0, -length, 0.0)

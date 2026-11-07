@@ -5,6 +5,7 @@ extends Control
 
 const Manager = preload("res://midi/midi_manager.gd")
 const ControllerPanel = preload("res://scenes/controller_panel.gd")
+const WindowState = preload("res://scenes/window_state.gd")
 const Catalog = preload("res://midi/control_catalog.gd")
 const Learn = preload("res://midi/midi_learn.gd")
 const Events = preload("res://midi/midi_events.gd")
@@ -51,6 +52,11 @@ func _ready() -> void:
 	mgr.autosave = not demo
 	mgr.start(path, not _args.has("no-hardware") and not demo)
 	panel.bind(mgr)
+	if DisplayServer.get_name() != "headless" and not _args.has("no-window-state"):
+		var ws := WindowState.new()
+		ws.name = "WindowState"
+		add_child(ws)
+		ws.attach(get_window(), String(_args.get("side", "center")), "user://window_state_monitor.json")
 	mgr.raw_event.connect(_on_raw_event)
 	mgr.unmapped_event.connect(_on_unmapped)
 	mgr.ports_changed.connect(func(_n: Array) -> void: _refresh_status())

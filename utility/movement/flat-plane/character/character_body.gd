@@ -1,5 +1,7 @@
 ## Collision body: reports the world to the movement core, applies the velocity it returns, and handles
 ## things the core must not know about (collider resizing for crouch, headroom, stair stepping, respawn).
+## The collider is a flat-bottomed cylinder: after a step-up its base rests on the tread edge, which a capsule's rounded
+## bottom cannot do (it slides back down onto the lower tread).
 ## Driven explicitly through simulate(), once per physics tick, so ordering and replay are deterministic.
 extends CharacterBody3D
 
@@ -18,8 +20,14 @@ var core: Core = Core.new()
 var spawn_transform := Transform3D.IDENTITY
 var stepped := false          ## true on ticks where a stair step was taken (telemetry)
 var last_impact := 0.0
+## Presentation-only vertical offset (<= 0 after a step-up). The body climbs a stair in one tick; the visual and the
+## camera start that far below and ease back to zero, so the climb reads as a smooth rise instead of a pop.
+var step_offset := 0.0
 
-var _shape := CapsuleShape3D.new()
+const STEP_EASE_RATE := 14.0   ## 1/s; time constant ~70 ms
+const FLAT_TOLERANCE_DEG := 3.0
+
+var _shape := CylinderShape3D.new()
 var _collider := CollisionShape3D.new()
 var _was_grounded := false
 var _prev_vy := 0.0
@@ -52,7 +60,7 @@ func _sync_slope_settings() -> void:
 
 func _apply_shape(crouched: bool) -> void:
 	var h: float = params.get_value("crouch_height") if crouched else params.get_value("stand_height")
-	_shape.height = maxf(h, RADIUS * 2.0 + 0.01)
+	_shape.height = maxf(h, RADIUS * 2.0)
 	_collider.position.y = _shape.height / 2.0
 
 
@@ -66,10 +74,19 @@ func simulate(input: Dictionary, dt: float) -> void:
 	_apply_shape(core.crouching)
 	velocity = core.velocity
 	stepped = false
-	if grounded and not core.just_jumped and _try_step(dt):
-		stepped = true
+	var lift := 0.0
+	if grounded and not core.just_jumped:
+		lift = _try_step(dt)
+	var carried := Vector3(velocity.x, 0.0, velocity.z)
 	move_and_slide()
+	if lift > 0.0:
+		# The slide against the riser's edge bleeds speed and adds a vertical component; the step was already
+		# validated as unobstructed, so keep the momentum we had.
+		stepped = true
+		step_offset -= lift
+		velocity = carried
 	core.velocity = velocity   # collisions (walls, ceilings) change the real velocity; feed it back
+	step_offset = move_toward(step_offset * exp(-STEP_EASE_RATE * dt), 0.0, 0.05 * dt)
 	var now_grounded := is_on_floor()
 	if now_grounded and not _was_grounded:
 		last_impact = maxf(0.0, -_prev_vy)
@@ -86,40 +103,46 @@ func _can_stand() -> bool:
 	return not test_move(global_transform, Vector3.UP * (extra + 0.02))
 
 
-## Lifts the body onto a ledge up to step_height when the horizontal motion is blocked by a wall-like surface.
-## The tread height is measured with a thin ray just ahead of the capsule: its rounded bottom touches a stair
-## edge at a slanted normal, so a capsule cast would misjudge the flat top as a steep slope.
-func _try_step(dt: float) -> bool:
+## Returns the height gained (0.0 = no step). Steps up onto a flat tread that is higher than the flat ground under
+## the feet, within step_height, when the horizontal motion would be blocked. Requiring flat-below and flat-ahead is
+## what tells stairs from ramps: a ramp's surface is slanted, so the capsule simply rides up it.
+## Heights are measured with thin rays: the capsule's rounded bottom meets a stair nose at a slanted normal, so a
+## capsule cast would misread a flat tread as a slope.
+func _try_step(dt: float) -> float:
 	var step_h: float = params.get_value("step_height")
 	var motion := Vector3(velocity.x, 0.0, velocity.z) * dt
 	if step_h <= 0.0 or motion.length() < 0.0005:
-		return false
-	var hit := KinematicCollision3D.new()
-	if not test_move(global_transform, motion, hit, 0.001):
-		return false
-	if hit.get_normal().angle_to(Vector3.UP) < floor_max_angle:
-		return false   # a walkable slope or tiny bump: the capsule rides over it by itself
-	var origin := global_position + motion.normalized() * (RADIUS + 0.02) + Vector3.UP * (step_h + 0.01)
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + Vector3.DOWN * (step_h + 0.01), collision_mask, [get_rid()])
-	var tread := get_world_3d().direct_space_state.intersect_ray(query)
-	if tread.is_empty():
-		return false   # nothing within step height ahead (a taller wall starts above the ray origin)
+		return 0.0
+	if not test_move(global_transform, motion, null, 0.001):
+		return 0.0
+	var space := get_world_3d().direct_space_state
+	var flat := deg_to_rad(FLAT_TOLERANCE_DEG)
+	if not is_on_floor() or get_floor_normal().angle_to(Vector3.UP) > flat:
+		return 0.0   # not standing on flat ground (a ramp, or airborne)
+	var ahead := global_position + motion.normalized() * (RADIUS + motion.length() + 0.02)
+	var tread := _ray_down(space, ahead, step_h + 0.01, step_h + 0.01)
+	if tread.is_empty() or (tread.normal as Vector3).angle_to(Vector3.UP) > flat:
+		return 0.0   # nothing within step height, or the way ahead is slanted / a wall that starts higher
 	var lift: float = tread.position.y - global_position.y + 0.002
-	if lift < 0.01 or lift > step_h + 0.003:
-		return false
-	if (tread.normal as Vector3).angle_to(Vector3.UP) > floor_max_angle:
-		return false
+	if lift < 0.02 or lift > step_h + 0.003:
+		return 0.0
 	if test_move(global_transform, Vector3.UP * lift):
-		return false   # no headroom
+		return 0.0   # no headroom
 	var raised := global_transform
 	raised.origin.y += lift
 	if test_move(raised, motion, null, 0.001):
-		return false   # still blocked after rising: not a step
+		return 0.0   # still blocked after rising: a wall, not a step
 	global_position.y += lift
-	return true
+	return lift
 
+
+## Downward ray starting `above` metres over `point`, `reach` metres long.
+func _ray_down(space: PhysicsDirectSpaceState3D, point: Vector3, above: float, reach: float) -> Dictionary:
+	var from := point + Vector3.UP * above
+	return space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * (above + reach), collision_mask, [get_rid()]))
 
 func respawn() -> void:
+	step_offset = 0.0
 	global_transform = spawn_transform
 	velocity = Vector3.ZERO
 	core.reset()

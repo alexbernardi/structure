@@ -155,10 +155,10 @@ func test_cannot_stand_up_under_a_low_ceiling(t) -> void:
 
 func test_crouch_shrinks_the_collider_and_keeps_feet_on_the_floor(t) -> void:
 	await _run(_frame(), 0.3)
-	var shape: CapsuleShape3D = _s.body.get_child(0).shape
-	t.near(shape.height, 1.8, 0.001, "standing capsule")
+	var shape: CylinderShape3D = _s.body.get_child(0).shape
+	t.near(shape.height, 1.8, 0.001, "standing collider")
 	await _run(_frame(Vector2.ZERO, {"crouch": true}), 0.3)
-	t.near(shape.height, 1.1, 0.001, "crouching capsule")
+	t.near(shape.height, 1.1, 0.001, "crouching collider")
 	t.ok(_s.body.is_on_floor() and absf(_s.body.global_position.y) < 0.03, "still on the floor")
 
 
@@ -249,6 +249,117 @@ func test_crouch_and_air_poses(t) -> void:
 	var knee: float = v.skeleton.get_bone_pose_rotation(v.bone_index.shin_l).get_euler().x
 	t.ok(knee < -0.5, "knees tucked in the air: %.2f rad" % knee)
 
+
+func _hand(v, side: String) -> Vector3:
+	return v.bone_tip("forearm_" + side, 0.28)
+
+
+func test_arms_swing_opposite_to_the_legs(t) -> void:
+	var v = _s.visual
+	var agree := 0
+	var disagree := 0
+	for i in 240:
+		v.update_pose({"speed": 5.0, "grounded": true}, 1.0 / 60.0)
+		var feet: float = v.joint_position("foot_l").z - v.joint_position("foot_r").z   # negative = left foot forward
+		var hands: float = _hand(v, "l").z - _hand(v, "r").z
+		if absf(feet) > 0.25 and absf(hands) > 0.08:
+			if signf(feet) == -signf(hands):
+				disagree += 1   # left foot forward and left hand BACK is the correct pairing; counted below
+			else:
+				agree += 1
+	# correct gait: left foot forward (feet < 0) <=> left hand back (hands > 0), i.e. opposite signs
+	t.ok(disagree + agree > 40, "enough strides sampled: %d" % (disagree + agree))
+	t.ok(disagree > 0 and agree == 0, "hand and same-side foot always move in opposition (opposed %d, matching %d)" % [disagree, agree])
+
+
+func test_elbows_bend_forward(t) -> void:
+	var v = _s.visual
+	for i in 90:
+		v.update_pose({"speed": 5.0, "grounded": true}, 1.0 / 60.0)
+		for side in ["l", "r"]:
+			var bend: float = v.skeleton.get_bone_pose_rotation(v.bone_index["forearm_" + side]).get_euler().x
+			if bend < 0.05:
+				t.fail("forearm_%s bends backward (%.2f rad) at frame %d" % [side, bend, i])
+				return
+	t.ok(true, "elbows bend forward through the whole stride")
+
+
+func test_hands_are_in_front_of_the_body_when_jumping_and_crouching(t) -> void:
+	var v = _s.visual
+	for i in 40:
+		v.update_pose({"speed": 0.0, "grounded": false, "vy": 5.0}, 1.0 / 60.0)
+	for side in ["l", "r"]:
+		var shoulder: Vector3 = v.joint_position("upper_arm_" + side)
+		t.ok(_hand(v, side).z < shoulder.z - 0.15, "rising: hand %s is forward of the shoulder (%.2f vs %.2f)" % [side, _hand(v, side).z, shoulder.z])
+		t.ok(_hand(v, side).y > shoulder.y - 0.45, "and raised, not hanging: hand y %.2f, shoulder y %.2f" % [_hand(v, side).y, shoulder.y])
+	for i in 60:
+		v.update_pose({"speed": 0.0, "grounded": true, "crouching": true}, 1.0 / 60.0)
+	for side in ["l", "r"]:
+		t.ok(_hand(v, side).z < v.joint_position("upper_arm_" + side).z - 0.1, "crouched: hand %s forward of the shoulder" % side)
+
+
+func test_arms_hang_at_the_sides_at_rest(t) -> void:
+	var v = _s.visual
+	for i in 60:
+		v.update_pose({"speed": 0.0, "grounded": true}, 1.0 / 60.0)
+	for side in ["l", "r"]:
+		var shoulder: Vector3 = v.joint_position("upper_arm_" + side)
+		var hand: Vector3 = _hand(v, side)
+		t.ok(hand.y < shoulder.y - 0.4, "hand %s below the shoulder" % side)
+		t.ok(absf(hand.z - shoulder.z) < 0.2, "and roughly beneath it, not swung front or back (dz %.2f)" % (hand.z - shoulder.z))
+	t.ok(v.joint_position("upper_arm_l").x < 0.0 and v.joint_position("upper_arm_r").x > 0.0, "left arm on -X, right on +X (facing -Z)")
+
+
+func test_visual_is_placed_from_the_body_every_frame(t) -> void:
+	var v = _s.visual
+	t.ok(v.top_level, "not parented to the body's transform")
+	t.eq(v.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_OFF, "not physics-interpolated: limbs are posed per rendered frame")
+	_s.body.global_position = Vector3(5, 1, -3)
+	v.follow(_s.body, -0.2)
+	t.near(v.global_position.distance_to(Vector3(5, 0.8, -3)), 0.0, 0.05, "placed at the body plus the step offset")
+
+
+func test_step_up_is_eased_for_the_presentation_but_instant_for_the_physics(t) -> void:
+	await _place(_s.world.landmarks["stairs_0.30"] + Vector3(-1.5, 0.05, 0))
+	var lowest := 0.0
+	var visual_pops := 0.0
+	var prev_visual_y: float = _s.body.global_position.y + _s.body.step_offset
+	for i in 360:
+		await _tree.physics_frame
+		_s.body.simulate(_frame(Vector2(1, 0)), DT)
+		lowest = minf(lowest, _s.body.step_offset)
+		var visual_y: float = _s.body.global_position.y + _s.body.step_offset
+		if i > 20:
+			visual_pops = maxf(visual_pops, absf(visual_y - prev_visual_y))
+		prev_visual_y = visual_y
+	t.ok(lowest < -0.1, "a step registers an offset (lowest %.3f)" % lowest)
+	t.ok(visual_pops < 0.11, "what the player sees rises gradually: largest per-tick change %.3f m (the body itself climbs 0.30 m at once)" % visual_pops)
+	await _run(_frame(), 1.0)
+	t.near(_s.body.step_offset, 0.0, 0.002, "the offset has decayed once standing still")
+
+
+func test_momentum_survives_stair_climbing(t) -> void:
+	# Starts 1.5 m before the flight; the 8 steps span x = 8.0 .. 10.56 and the character reaches them at ~tick 70 and leaves the top at ~tick 106.
+	await _place(_s.world.landmarks["stairs_0.18"] + Vector3(-1.5, 0.05, 0))
+	var lowest := 99.0
+	var worst_tick := -1
+	var airborne_ticks := 0
+	var top := 0.0
+	for i in 150:
+		await _tree.physics_frame
+		_s.body.simulate(_frame(Vector2(1, 0)), DT)
+		top = maxf(top, _s.body.global_position.y)
+		if i > 80 and i < 102:   # inside the flight, before walking off its top at ~tick 106
+			var v: Vector3 = _s.body.velocity
+			var sp := Vector2(v.x, v.z).length()
+			if sp < lowest:
+				lowest = sp
+				worst_tick = i
+			if not _s.body.core.grounded:
+				airborne_ticks += 1
+	t.ok(top > 1.3, "climbed the flight: top %.2f m" % top)
+	t.ok(lowest > 3.5, "speed holds on the stairs: slowest %.2f m/s at tick %d (it was dropping to ~1.5 with the capsule)" % [lowest, worst_tick])
+	t.ok(airborne_ticks <= 2, "stays grounded while climbing: %d airborne ticks" % airborne_ticks)
 
 func test_visual_turns_toward_the_heading(t) -> void:
 	var v = _s.visual
