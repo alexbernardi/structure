@@ -83,6 +83,37 @@ static func body_banks() -> Array:
 	return [{"name": "Body Springs", "strips": s1}, {"name": "Body Effects", "strips": s2}, {"name": "Body Detail", "strips": s3}]
 
 
+## Banks for the treadmill gait lab (target "gait"); the buttons keep the same meaning as everywhere else.
+static func gait_data() -> Dictionary:
+	var d := default_data()
+	var g := "gait."
+	var cycle: Array = ["walk_speed", "step_length", "duty_factor", "step_height", "swing_peak", "stand_height", "velocity_match", "time_scale"]
+	var pelvis: Array = ["pelvis_bob", "loading_dip", "pelvis_sway", "pelvis_rotation", "pelvic_tilt", "shoulder_counter", "torso_lean", ""]
+	var feet: Array = ["heel_strike_angle", "toe_off_angle", "toe_clearance_angle", "foot_flat_at", "heel_rise_at", "arm_swing", "elbow_bend", "arm_phase"]
+	var toggle_faders: Array = ["gait_model", "auto_step_length", "foot_roll", "fx_pelvis_bob", "fx_loading_dip", "fx_pelvis_sway", "fx_pelvis_rotation", "fx_pelvic_tilt"]
+	var toggle_knobs: Array = ["fx_shoulder_counter", "fx_arm_swing", "fx_elbow_bend", "freeze", "view_belt", "view_paths", "view_joints", "view_diagram"]
+	var view_faders: Array = ["scrub", "view_zoom", "time_scale", "", "", "", "", ""]
+	var view_knobs: Array = ["scrub", "view_zoom", "view_guides", "view_ortho", "", "", "", ""]
+	var toggles := {}
+	var view := {}
+	for i in 8:
+		var t := {}
+		if toggle_faders[i] != "":
+			t["fader"] = g + String(toggle_faders[i])
+		if toggle_knobs[i] != "":
+			t["knob"] = g + String(toggle_knobs[i])
+		toggles[str(i + 1)] = t
+		var v := {}
+		if view_faders[i] != "":
+			v["fader"] = g + String(view_faders[i])
+		if view_knobs[i] != "":
+			v["knob"] = g + String(view_knobs[i])
+		if not v.is_empty():
+			view[str(i + 1)] = v
+	d.banks = [_bank("Walk Cycle", cycle, g), _bank("Pelvis & Torso", pelvis, g), _bank("Feet & Arms", feet, g), {"name": "Toggles", "strips": toggles}, {"name": "View & Playback", "strips": view}]
+	return d
+
+
 ## Each strip's knob fine-adjusts the same parameter its fader sets coarsely.
 static func _bank(name: String, ids: Array, prefix: String) -> Dictionary:
 	var strips := {}

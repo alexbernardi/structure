@@ -1,0 +1,189 @@
+{
+	"banks": [
+		{
+			"name": "Walk Cycle",
+			"strips": {
+				"1": {
+					"fader": "gait.walk_speed",
+					"knob": "gait.walk_speed"
+				},
+				"2": {
+					"fader": "gait.step_length",
+					"knob": "gait.step_length"
+				},
+				"3": {
+					"fader": "gait.duty_factor",
+					"knob": "gait.duty_factor"
+				},
+				"4": {
+					"fader": "gait.step_height",
+					"knob": "gait.step_height"
+				},
+				"5": {
+					"fader": "gait.swing_peak",
+					"knob": "gait.swing_peak"
+				},
+				"6": {
+					"fader": "gait.stand_height",
+					"knob": "gait.stand_height"
+				},
+				"7": {
+					"fader": "gait.velocity_match",
+					"knob": "gait.velocity_match"
+				},
+				"8": {
+					"fader": "gait.time_scale",
+					"knob": "gait.time_scale"
+				}
+			}
+		},
+		{
+			"name": "Pelvis & Torso",
+			"strips": {
+				"1": {
+					"fader": "gait.pelvis_bob",
+					"knob": "gait.pelvis_bob"
+				},
+				"2": {
+					"fader": "gait.loading_dip",
+					"knob": "gait.loading_dip"
+				},
+				"3": {
+					"fader": "gait.pelvis_sway",
+					"knob": "gait.pelvis_sway"
+				},
+				"4": {
+					"fader": "gait.pelvis_rotation",
+					"knob": "gait.pelvis_rotation"
+				},
+				"5": {
+					"fader": "gait.pelvic_tilt",
+					"knob": "gait.pelvic_tilt"
+				},
+				"6": {
+					"fader": "gait.shoulder_counter",
+					"knob": "gait.shoulder_counter"
+				},
+				"7": {
+					"fader": "gait.torso_lean",
+					"knob": "gait.torso_lean"
+				}
+			}
+		},
+		{
+			"name": "Feet & Arms",
+			"strips": {
+				"1": {
+					"fader": "gait.heel_strike_angle",
+					"knob": "gait.heel_strike_angle"
+				},
+				"2": {
+					"fader": "gait.toe_off_angle",
+					"knob": "gait.toe_off_angle"
+				},
+				"3": {
+					"fader": "gait.toe_clearance_angle",
+					"knob": "gait.toe_clearance_angle"
+				},
+				"4": {
+					"fader": "gait.foot_flat_at",
+					"knob": "gait.foot_flat_at"
+				},
+				"5": {
+					"fader": "gait.heel_rise_at",
+					"knob": "gait.heel_rise_at"
+				},
+				"6": {
+					"fader": "gait.arm_swing",
+					"knob": "gait.arm_swing"
+				},
+				"7": {
+					"fader": "gait.elbow_bend",
+					"knob": "gait.elbow_bend"
+				},
+				"8": {
+					"fader": "gait.arm_phase",
+					"knob": "gait.arm_phase"
+				}
+			}
+		},
+		{
+			"name": "Toggles",
+			"strips": {
+				"1": {
+					"fader": "gait.gait_model",
+					"knob": "gait.fx_shoulder_counter"
+				},
+				"2": {
+					"fader": "gait.auto_step_length",
+					"knob": "gait.fx_arm_swing"
+				},
+				"3": {
+					"fader": "gait.foot_roll",
+					"knob": "gait.fx_elbow_bend"
+				},
+				"4": {
+					"fader": "gait.fx_pelvis_bob",
+					"knob": "gait.freeze"
+				},
+				"5": {
+					"fader": "gait.fx_loading_dip",
+					"knob": "gait.view_belt"
+				},
+				"6": {
+					"fader": "gait.fx_pelvis_sway",
+					"knob": "gait.view_paths"
+				},
+				"7": {
+					"fader": "gait.fx_pelvis_rotation",
+					"knob": "gait.view_joints"
+				},
+				"8": {
+					"fader": "gait.fx_pelvic_tilt",
+					"knob": "gait.view_diagram"
+				}
+			}
+		},
+		{
+			"name": "View & Playback",
+			"strips": {
+				"1": {
+					"fader": "gait.scrub",
+					"knob": "gait.scrub"
+				},
+				"2": {
+					"fader": "gait.view_zoom",
+					"knob": "gait.view_zoom"
+				},
+				"3": {
+					"fader": "gait.time_scale",
+					"knob": "gait.view_guides"
+				},
+				"4": {
+					"knob": "gait.view_ortho"
+				}
+			}
+		}
+	],
+	"global_actions": {
+		"global_bank_next": "bank_next",
+		"global_bank_prev": "bank_prev",
+		"global_forward": "preset_next",
+		"global_nav_down": "hud_cycle",
+		"global_nav_left": "teleport_prev",
+		"global_nav_right": "teleport_next",
+		"global_nav_up": "preset_save",
+		"global_play": "respawn",
+		"global_record": "record_toggle",
+		"global_rewind": "preset_prev",
+		"global_stop": "reset_all"
+	},
+	"knob_scale": 1.0,
+	"schema": 1,
+	"strip_actions": {
+		"mute": "reset_param",
+		"rec": "revert_param",
+		"select": "select_param",
+		"solo": "lock_param"
+	}
+}

@@ -42,6 +42,7 @@ var lean := 0.0
 var dip := 0.0
 var _turn_yaw := 0.0
 var _stand_hip := 0.0
+var gait_weight := 0.0   ## how much of the pose comes from the gait model (0..1)
 
 
 func _ready() -> void:
@@ -109,7 +110,9 @@ static func _hip_height(thigh_angle: float, knee_angle: float) -> float:
 
 ## state: {speed: horizontal m/s, vy: vertical m/s, grounded: bool, crouching: bool, accel_forward: m/s^2,
 ##         heading: world yaw of horizontal velocity (rad) or NAN, landed_impact: m/s (optional, one tick),
-##         dyn: pose dictionary from BodyDynamics.update() (optional)}
+##         dyn: pose dictionary from BodyDynamics.update() (optional),
+##         gait: pose dictionary from GaitModel.update() (optional; legs, feet, pelvis, arms and trunk twist come from it
+##               while the character walks on the ground, fading back to the simple pose in the air, crouching or landing)}
 func update_pose(state: Dictionary, delta: float) -> void:
 	if skeleton.get_bone_count() == 0:
 		return
@@ -119,6 +122,8 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	var vy: float = state.get("vy", 0.0)
 	var dyn: Dictionary = state.get("dyn", {})
 	var use_dyn: bool = dyn.get("active", false)
+	var gait_pose: Dictionary = state.get("gait", {})
+	var use_gait: bool = gait_pose.get("active", false)
 
 	crouch_blend = move_toward(crouch_blend, 1.0 if crouching else 0.0, delta * 7.0)
 	air_blend = move_toward(air_blend, 0.0 if grounded else 1.0, delta * 9.0)
@@ -177,26 +182,50 @@ func update_pose(state: Dictionary, delta: float) -> void:
 		shin_l -= 2.0 * flex
 		shin_r -= 2.0 * flex
 
+	var foot_l_a := -(thigh_l + shin_l) * 0.5 * (1.0 - air_blend) - 0.2 * air_blend
+	var foot_r_a := -(thigh_r + shin_r) * 0.5 * (1.0 - air_blend) - 0.2 * air_blend
 	var hip := maxf(_hip_height(thigh_l, shin_l), _hip_height(thigh_r, shin_r))
 	if air_blend > 0.5:
 		hip = _stand_hip - 0.10 * air_blend
-	var bob := absf(cos(phase)) * 0.03 * gait * (1.0 - air_blend)
-	var pelvis_y := hip + bob - dip
+	var gw := 0.0
+	var gait_q := Quaternion.IDENTITY
+	if use_gait:
+		# The gait model owns the legs only while walking on the ground; a landing compression hands them back for its duration.
+		gw = (1.0 - air_blend) * (1.0 - crouch_blend) * clampf(1.0 + pelvis_drop / 0.02, 0.0, 1.0)
+		gait_q = gait_pose.pelvis_q
+		thigh_l = lerpf(thigh_l, gait_pose.thigh_l, gw)
+		thigh_r = lerpf(thigh_r, gait_pose.thigh_r, gw)
+		shin_l = lerpf(shin_l, -float(gait_pose.knee_l), gw)
+		shin_r = lerpf(shin_r, -float(gait_pose.knee_r), gw)
+		foot_l_a = lerpf(foot_l_a, gait_pose.foot_l, gw)
+		foot_r_a = lerpf(foot_r_a, gait_pose.foot_r, gw)
+		hip = lerpf(hip, gait_pose.pelvis.y, gw)
+	gait_weight = gw
+	var bob := absf(cos(phase)) * 0.03 * gait * (1.0 - air_blend) * (1.0 - gw)
+	var pelvis_y := hip + bob - dip * (1.0 - gw)
 	var pelvis_x := 0.0
 	var pelvis_z := 0.0
+	var pelvis_rot := Quaternion.IDENTITY
 	if use_dyn:
-		pelvis_y = hip + dyn.bob * (1.0 - air_blend) + maxf(pelvis_drop, 0.0)   # compression is in the knees (above)
-		pelvis_x = dyn.pelvis_shift.x + dyn.sway
+		pelvis_y = hip + dyn.bob * (1.0 - air_blend) * (1.0 - gw) + maxf(pelvis_drop, 0.0)   # compression is in the knees (above)
+		pelvis_x = dyn.pelvis_shift.x + dyn.sway * (1.0 - gw)
 		pelvis_z = dyn.pelvis_shift.z
+		pelvis_rot = Quaternion(Vector3.UP, -dyn.pelvis_twist * (1.0 - gw))
+	if use_gait:
+		pelvis_x += gait_pose.pelvis.x * gw
+		pelvis_rot = pelvis_rot.slerp(gait_q, gw) if gw > 0.0 else pelvis_rot
 	skeleton.set_bone_pose_position(bone_index.pelvis, Vector3(pelvis_x, pelvis_y, pelvis_z))
-	skeleton.set_bone_pose_rotation(bone_index.pelvis, Quaternion(Vector3.UP, -dyn.pelvis_twist) if use_dyn else Quaternion.IDENTITY)
+	skeleton.set_bone_pose_rotation(bone_index.pelvis, pelvis_rot)
 
-	_rot("thigh_l", thigh_l)
+	# With the gait model the legs are posed in the world's forward plane whatever the hips do, so the planned feet land
+	# where they were planned: the thighs undo the pelvis rotation.
+	var leg_frame := Quaternion.IDENTITY.slerp(gait_q.inverse(), gw) if gw > 0.0 else Quaternion.IDENTITY
+	skeleton.set_bone_pose_rotation(bone_index.thigh_l, leg_frame * Quaternion(Vector3.RIGHT, thigh_l))
+	skeleton.set_bone_pose_rotation(bone_index.thigh_r, leg_frame * Quaternion(Vector3.RIGHT, thigh_r))
 	_rot("shin_l", shin_l)
-	_rot("thigh_r", thigh_r)
 	_rot("shin_r", shin_r)
-	_rot("foot_l", -(thigh_l + shin_l) * 0.5 * (1.0 - air_blend) - 0.2 * air_blend)
-	_rot("foot_r", -(thigh_r + shin_r) * 0.5 * (1.0 - air_blend) - 0.2 * air_blend)
+	_rot("foot_l", foot_l_a)
+	_rot("foot_r", foot_r_a)
 
 	# Convention: a positive rotation about X swings a hanging limb forward (-Z). Arms swing opposite to the legs,
 	# elbows bend forward, and the arms rise forward when jumping.
@@ -210,8 +239,15 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	arm_l = lerpf(arm_l, 0.35, crouch_blend)
 	arm_r = lerpf(arm_r, 0.35, crouch_blend)
 	var elbow := fore + 0.3 * air_blend + 0.4 * crouch_blend
-	_rot("forearm_l", elbow)
-	_rot("forearm_r", elbow)
+	var elbow_l := elbow
+	var elbow_r := elbow
+	if use_gait:
+		arm_l = lerpf(arm_l, gait_pose.arm_l, gw)
+		arm_r = lerpf(arm_r, gait_pose.arm_r, gw)
+		elbow_l = lerpf(elbow_l, gait_pose.elbow_l, gw)
+		elbow_r = lerpf(elbow_r, gait_pose.elbow_r, gw)
+	_rot("forearm_l", elbow_l)
+	_rot("forearm_r", elbow_r)
 	var roll_l := 0.10 + 0.5 * air_blend   # + = away from the body
 	var roll_r := 0.10 + 0.5 * air_blend
 	if use_dyn:
@@ -223,7 +259,7 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	skeleton.set_bone_pose_rotation(bone_index.upper_arm_r, Quaternion(Vector3.RIGHT, arm_r) * Quaternion(Vector3.FORWARD, -roll_r))
 
 	var breathing := sin(Time.get_ticks_msec() / 650.0) * 0.012 * idle
-	var chest_lean := -(forward_lean + 0.10 * crouch_blend) + breathing
+	var chest_lean := -(forward_lean + 0.10 * crouch_blend + (float(gait_pose.torso_lean) * gw if use_gait else 0.0)) + breathing
 	if use_dyn:
 		# pitch + = forward (a negative rotation about X); roll + = to the right and yaw + = to the right (a negative
 		# rotation about Y). The spine takes 40 % of the torso motion, the chest 60 % plus the shoulder counter-rotation.
@@ -239,6 +275,10 @@ func update_pose(state: Dictionary, delta: float) -> void:
 		skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.RIGHT, chest_lean * 0.5) * Quaternion(Vector3.UP, -sin(phase) * 0.10 * gait))
 		skeleton.set_bone_pose_rotation(bone_index.neck, Quaternion(Vector3.RIGHT, lean * 0.6))
 		skeleton.set_bone_pose_rotation(bone_index.head, Quaternion(Vector3.RIGHT, lean * 0.3))
+	if gw > 0.0:
+		# keep the trunk facing forward whatever the hips do, then turn the shoulders against them
+		skeleton.set_bone_pose_rotation(bone_index.spine, leg_frame * skeleton.get_bone_pose_rotation(bone_index.spine))
+		skeleton.set_bone_pose_rotation(bone_index.chest, Quaternion(Vector3.UP, float(gait_pose.chest_yaw) * gw) * skeleton.get_bone_pose_rotation(bone_index.chest))
 
 
 func _rot(bone: String, angle: float) -> void:

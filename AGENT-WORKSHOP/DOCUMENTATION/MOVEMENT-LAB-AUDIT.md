@@ -110,6 +110,9 @@ Stop reset all, Record (input recording: **placeholder, not implemented**), Rewi
 
 Soft takeover (pickup) is in place for faders (`tuning/soft_takeover.gd`); knobs are relative and never jump.
 
+**Treadmill gait lab banks** (`config/gait_bindings.json`, target `gait`; separate from the three-plus-three banks above): Walk Cycle, Pelvis & Torso, Feet & Arms,
+Toggles (16 switches on faders and knobs), View & Playback.
+
 **Gap against the brief's Phase 6 banks:** Bank B (body springs) exists since Phase 2. Bank A (turn/acceleration/stopping response,
 momentum retention, gravity *multiplier*, air drag) and Bank C (gait/IK) reference parameters that do not exist yet; they arrive
 with Phases 3-5. The first three banks stay as they are.

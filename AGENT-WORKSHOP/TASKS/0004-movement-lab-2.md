@@ -35,7 +35,7 @@ technique experiments, MIDI banks, presets and A/B, telemetry and tests, guided 
 | 0 | Audit, baselines, guards, this plan | done: 235 tests | agent |
 | 1 | `animation/springs.gd`: analytic scalar / Vector3 / angular springs, target velocity, amplitude, limits, reset and teleport | regime, RK4-reference, dt-consistency, stability-sweep tests; **spring diagnostic scene** | **user checkpoint** |
 | 2 | (built, awaiting checkpoint) Body inertia: torso, pelvis, head/shoulders, arm swing as springs driven by simulated velocity, acceleration, angular velocity; each effect switchable; joint limits | tests on pose response; run/stop/turn/reverse with MIDI | **user checkpoint** |
-| 3 | Procedural gait (stride, cadence, width, height, stance/swing, speed-driven) | state-transition tests; all directions without pose pops | **user checkpoint** |
+| 3 | (first slice built: treadmill gait lab, awaiting checkpoint) Procedural gait (stride, cadence, width, height, stance/swing, speed-driven) | state-transition tests; all directions without pose pops | **user checkpoint** |
 | 4 | Foot placement + IK (rays, planting, slope alignment, knee limits, pelvis height) using `TwoBoneIK3D` if the rig allows, else a small custom solver | reachability, plant-release, stair/ramp tests; ramp and stairs already in the sandbox | **user checkpoint** |
 | 5 | Technique experiments behind feature flags (momentum, air strafing, braking asymmetry, slope speed, optional hop/slide) | each flag: off = baseline unchanged (guard tests), on = measured delta from recorded inputs | user playtest |
 | 6 | MIDI banks A/B/C as specified; keep existing banks; soft takeover; nonlinear curves | extreme/invalid MIDI tests; synthetic events through the learned mapping | **hardware checkpoint** |
@@ -82,6 +82,26 @@ off switch and unit-labelled, clamped parameters; no claim of visual/physical/ha
     every body parameter is reachable; synthetic events through the learned mapping change the values live; presets save/restore both targets.
   - Cost: `BodyDynamics.update` 68 us (all effects), 3 us with the master off; `scene._process` 91 us on vs 20 us off (about 1 % of a 144 Hz frame).
   - Existing presets only list movement parameters, so loading one leaves the body parameters alone; presets that cover both come in Phase 7.
+- Gait lab (treadmill), 2026-11-07: **389/389** (51 new). Automated results only - the checkpoint below is NOT yet confirmed.
+  - Model (`animation/gait_model.gd`, parameters `animation/gait_params.gd`): a phase-driven planner of where each ANKLE goes, then analytic
+    sagittal two-bone IK for the real bone lengths. Stance: the foot rolls heel -> flat -> toe and is fixed to the ground, so in the hips'
+    frame it moves back at exactly the walking speed. Swing: a Hermite path from toe-off to the next heel strike that leaves and lands
+    moving like the stance foot, plus a clearance bump and a floor under the sole. A reach assist lowers the hips (smooth minimum) just
+    enough that a planted foot is never pulled off the ground; the amount is reported (about 0-5 mm at the default 1.2 m/s).
+  - 43 `gait.*` parameters with units and ranges, 14 switches (master, auto step length, foot roll, 9 effects, freeze) plus view switches.
+    Defaults chosen by measurement (cadence 113 steps/min at 1.2 m/s, hip excursion 4 cm, knee flexion 14 degrees at midstance), not by taste.
+  - Verified: planted point fixed to the ground and exactly on it at 40 random settings (worst gap below 1e-6 m); no sole point under the ground at 60
+    random settings x 200 phases; swing path has no jump at toe-off/heel strike at any setting and matches the stance foot's velocity; the legs
+    reproduce every planned ankle to 1e-5 m; double support = 2 x stance - 1; left/right half a cycle apart; each switch zeroes exactly its effect;
+    NaN/inf inputs and 150 random settings give finite poses; no joint moves faster during a speed sweep than in steady walking at the top speed.
+  - Through the real skeleton: posed ankles within 0.2 mm of the plan; feet stand on the ground within 0.5 mm; the legs stay in the forward plane
+    whatever the pelvis does; the gait pose fades out in the air or when crouching; with no gait pose the visual is unchanged.
+  - Scene (`scenes/gait_treadmill.tscn`): side orthographic camera, belt at the walking speed, planted-foot slip measured on the posed skeleton
+    (below 3 mm/s at 0.8/1.2/1.8 m/s; the measurement is shown to detect a deliberate mismatch). MIDI banks Walk Cycle / Pelvis & Torso / Feet & Arms /
+    Toggles / View & Playback in `config/gait_bindings.json`; every parameter reachable; presets in `presets_gait/` (default, stroll, brisk, stiff_robot, shuffle:
+    starting points, not claims of realism).
+  - Not done in this slice: the walk is not wired into the flat-plane sandbox yet (the sandbox still uses its original gait); landing compression
+    is not combined with the gait pose (a landing hands the legs back to the simple pose); step width and running are out of scope for now.
 
 ## Phase 1 checkpoint (needs the user)
 Spring diagnostic: `godot --path utility/movement/flat-plane res://scenes/spring_diagnostic.tscn`
@@ -97,7 +117,19 @@ forward as you accelerate and back as you brake; sharp turns roll it toward the 
 through its spring rather than snapping; a hard landing compresses the knees and rebounds; the head stays steadier than the
 torso; B switches between the spring body and the old pose. **Verify with the controller:** on banks 4-6 (Body Springs, Body Effects,
 Body Detail) the faders and knobs change the motion immediately, and the Body Effects faders turn each effect off on its own.
-Status: **WAITING for the user.**
+Status: user reply on 2026-11-07: "okay all of these variables are good" - taken as approval of the body variables and banks. It was not a
+check-by-check confirmation of every behaviour above, so those stay recorded as reported, not individually verified. The user then asked
+to focus on the look of the **walk** from the side, on a treadmill, with its own bank of variables and toggles (running comes later):
+see the gait lab below.
+
+## Gait lab checkpoint (needs the user)
+Run: `godot --path utility/movement/flat-plane res://scenes/gait_treadmill.tscn` (first run opens on the left half of the screen).
+**Look at:** the side view while the belt runs at 1.2 m/s; then Space to freeze and `,` / `.` to step through the cycle (or the *cycle position* fader);
+the white loop is the planned ankle path, the green ring is the planted contact point that must slide back with the belt, the bars at the
+bottom show stance and swing. **Compare with the toggles bank:** each `fx_*` switch removes one effect, `foot_roll` off gives a flat-footed
+walk, `gait_model` off shows the original walk. Keys 1-5 change the camera, wheel zooms, T toggles the belt, B the body dynamics.
+**Judge:** does the foot placement, heel-to-toe roll, knee bend, hip bob/sway/rotation and arm swing read as a human walk, and which
+variables are missing? Status: **WAITING for the user.**
 
 ## Outcome
 (filled in as phases complete)
