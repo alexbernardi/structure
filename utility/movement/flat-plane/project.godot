@@ -1,0 +1,29 @@
+; Utility project: MIDI Movement Lab (flat-plane). Not part of the sandbox; see AGENT-WORKSHOP/DECISIONS/ADR-0009-utility-tree.md.
+
+config_version=5
+
+[application]
+
+config/name="MIDI Movement Lab - flat plane"
+config/description="Standalone lab to tune character movement live with a MIDI controller."
+run/main_scene="res://scenes/midi_monitor.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+run/flush_stdout_on_print=true
+
+[display]
+
+window/size/viewport_width=1440
+window/size/viewport_height=810
+
+[filesystem]
+
+import/blender/enabled=false
+import/fbx2gltf/enabled=false
+
+[physics]
+
+common/physics_ticks_per_second=120
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

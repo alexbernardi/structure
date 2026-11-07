@@ -10,9 +10,14 @@ from . import paths, toolchain
 BANNER_PREFIXES = ("Godot Engine v",)
 
 
+def utility_projects() -> list[Path]:
+    """Standalone utilities: utility/<area>/<tool>/project.godot (ADR-0009)."""
+    return sorted(p.parent for p in paths.UTILITY.glob("*/*/project.godot"))
+
+
 def all_projects() -> list[Path]:
     rooms = sorted(p.parent for p in paths.SYSTEM_ROOMS.glob("*/project.godot") if not p.parent.name.startswith("_"))
-    return [paths.SANDBOX_PROJECT, *rooms]
+    return [paths.SANDBOX_PROJECT, *rooms, *utility_projects()]
 
 
 def base_cmd(project: Path) -> list[str]:

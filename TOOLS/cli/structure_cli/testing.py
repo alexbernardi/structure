@@ -9,13 +9,14 @@ import time
 
 from . import assets, buildinfo, checks, godot, paths, rooms
 
-ORDER = ["check", "tools", "import", "unit", "rooms", "pipeline", "multiplayer", "docker"]
+ORDER = ["check", "tools", "import", "unit", "rooms", "utility", "pipeline", "multiplayer", "docker"]
 DESCRIPTIONS = {
     "check": "static repository checks (pins, envs, system drift, asset hashes, secrets)",
     "tools": "Python tooling unit tests (snapshots, compat rules, envs, GLB validator)",
     "import": "Godot import of every project + smoke-load of all sandbox scripts/scenes",
     "unit": "sandbox GDScript unit tests (rules, persistence, protocol, config, assets)",
     "rooms": "every system room in isolation + a room freshly scaffolded from _TEMPLATE",
+    "utility": "standalone utilities under utility/ (MIDI Movement Lab): headless GDScript tests",
     "pipeline": "asset library/consumer consistency (+ Blender regeneration with --with-blender)",
     "multiplayer": "native server + bot clients: sync, authority, cheats, persistence, safety",
     "docker": "server image, container persistence, graceful stop, Scenario B isolation",
@@ -68,6 +69,17 @@ def suite_rooms(_opts) -> bool:
     if not bench["ok"]:
         print("  template benchmark problems:", bench["problems"])
     return ok and bench["ok"]
+
+
+def suite_utility(_opts) -> bool:
+    ok = True
+    for project in godot.utility_projects():
+        print(f"  utility {project.relative_to(paths.REPO)}")
+        godot.import_project(project)
+        report = paths.RUNTIME / "test-results" / f"utility-{project.name}.json"
+        code, _ = godot.run_gd_tests(project, "test", ["res://tests"], report)
+        ok = code == 0 and ok
+    return ok
 
 
 def suite_pipeline(opts) -> bool:

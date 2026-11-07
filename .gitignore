@@ -14,6 +14,10 @@
 # --- Generated build identity (written by the CLI before runs/builds; baked into images) ---
 /SANDBOX/godot/build_manifest.json
 
+# --- Utility config scratch (atomic-save temp/backup files next to committed JSON) ---
+/utility/**/config/*.tmp
+/utility/**/config/*.bak
+
 # --- Python ---
 __pycache__/
 *.pyc
