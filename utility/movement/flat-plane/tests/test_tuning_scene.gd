@@ -44,7 +44,9 @@ func _boot(extra := {}) -> void:
 	opts.merge(extra, true)
 	_s.options = opts
 	_tree.root.add_child(_s)
+	await _tree.process_frame   # let _ready run first: it re-enables the scene's own processing
 	_s.set_physics_process(false)
+	_s.set_process(false)
 	if _s.midi != null:
 		_s.midi._apply_ports(["SMC-Mixer", "MIDIIN2 (SMC-Mixer)"])
 	await _tree.physics_frame

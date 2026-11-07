@@ -13,6 +13,7 @@ func before_each() -> void:
 	_s = load(SCENE).instantiate()
 	_s.options = {"no-capture": "true"}
 	_tree.root.add_child(_s)
+	await _tree.process_frame   # let _ready run first: it re-enables the scene's own processing
 	_s.set_physics_process(false)   # the tests drive the body themselves, one call per physics tick
 	_s.set_process(false)
 	await _tree.physics_frame

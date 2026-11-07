@@ -1,7 +1,7 @@
 ## Flat-plane movement lab: composes the independent modules (world, collision body, humanoid visual, orbit camera,
 ## input source, movement parameters) into one launchable scene.
 ##   godot --path utility/movement/flat-plane res://scenes/flat_plane.tscn
-## Options after `--`: --no-capture (keep the mouse free)  --screenshot=<abs.png>  --quit-after=<seconds>
+## Options after `--`: --no-capture (keep the mouse free)  --no-animation (physics only)  --screenshot=<abs.png>  --quit-after=<seconds>
 extends Node3D
 
 const World = preload("res://world/flat_plane_world.gd")
@@ -23,6 +23,8 @@ var cam
 var live = InputSource.Live.new()
 var midi
 var tuning
+## Procedural presentation on/off. The physical controller never reads it: with animation off the body moves identically.
+var animation_enabled := true
 var options := {}   ## overrides command-line options (used by tests)
 
 var _args := {}
@@ -39,6 +41,7 @@ func _ready() -> void:
 			var kv := a.substr(2).split("=", true, 1)
 			_args[kv[0]] = kv[1] if kv.size() > 1 else "true"
 	_args.merge(options, true)
+	animation_enabled = not _args.has("no-animation")
 	Actions.register()
 
 	world = World.new()
@@ -195,8 +198,9 @@ func _process(delta: float) -> void:
 		fwd_accel = Vector3(body.core.acceleration.x, 0, body.core.acceleration.z).dot(Vector3(v.x, 0, v.z).normalized())
 	var visual_offset: float = body.step_offset
 	visual.follow(body, visual_offset)
-	visual.update_pose({"speed": speed, "vy": v.y, "grounded": body.core.grounded, "crouching": body.core.crouching,
-		"accel_forward": fwd_accel, "heading": heading, "landed_impact": _pending_impact}, delta)
+	if animation_enabled:
+		visual.update_pose({"speed": speed, "vy": v.y, "grounded": body.core.grounded, "crouching": body.core.crouching,
+			"accel_forward": fwd_accel, "heading": heading, "landed_impact": _pending_impact}, delta)
 	_pending_impact = 0.0
 	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s\nWASD move   Mouse look   Space jump   Shift sprint   Ctrl/C crouch   R respawn\nEsc frees the mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset all   F6/F7/F8 window   F11 fullscreen" % [
 		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching else ""]
