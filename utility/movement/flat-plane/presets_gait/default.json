@@ -1,7 +1,7 @@
 {
 	"name": "default",
 	"note": "Every gait parameter at its documented default.",
-	"saved": "2026-11-07T11:08:39",
+	"saved": "2026-11-07T11:42:09",
 	"schema": 1,
 	"targets": {
 		"gait": {
@@ -9,6 +9,7 @@
 			"arm_swing": 24.0,
 			"auto_step_length": 1.0,
 			"duty_factor": 0.6,
+			"edit_rig": 0.0,
 			"elbow_bend": 20.0,
 			"foot_flat_at": 0.16,
 			"foot_roll": 1.0,
@@ -24,7 +25,8 @@
 			"gait_model": 1.0,
 			"heel_rise_at": 0.72,
 			"heel_strike_angle": 18.0,
-			"loading_dip": 0.01,
+			"knee_min_flex": 12.0,
+			"loading_dip": 0.0,
 			"pelvic_tilt": 3.0,
 			"pelvis_bob": 0.04,
 			"pelvis_rotation": 5.0,
@@ -48,6 +50,27 @@
 			"view_paths": 1.0,
 			"view_zoom": 1.0,
 			"walk_speed": 1.2
+		},
+		"rig": {
+			"ankle_height": 0.065,
+			"chest_length": 0.26,
+			"foot_length": 0.25,
+			"forearm_length": 0.29,
+			"forearm_radius": 0.042,
+			"head_radius": 0.105,
+			"hip_width": 0.1,
+			"neck_length": 0.08,
+			"scale": 1.0,
+			"shin_length": 0.44,
+			"shin_radius": 0.058,
+			"shoulder_width": 0.23,
+			"thigh_length": 0.45,
+			"thigh_radius": 0.075,
+			"torso_depth": 1.0,
+			"torso_length": 0.28,
+			"torso_width": 1.0,
+			"upper_arm_length": 0.29,
+			"upper_arm_radius": 0.05
 		}
 	}
 }

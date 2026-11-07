@@ -5,6 +5,8 @@
 ## master switch off) the original simple lean/dip pose is used, unchanged.
 extends Node3D
 
+const RigParams = preload("res://animation/rig_params.gd")
+
 const FOOT_H := 0.07
 const THIGH := 0.45
 const SHIN := 0.44
@@ -43,6 +45,8 @@ var dip := 0.0
 var _turn_yaw := 0.0
 var _stand_hip := 0.0
 var gait_weight := 0.0   ## how much of the pose comes from the gait model (0..1)
+var dims: Dictionary = RigParams.dims(null)   ## the rig's real dimensions (metres), changed by apply_rig()
+var _meshes: Dictionary = {}
 
 
 func _ready() -> void:
@@ -83,6 +87,7 @@ func build() -> void:
 		mat.roughness = 0.85
 		mi.material_override = mat
 		attach.add_child(mi)
+		_meshes[b[0]] = mi
 	_stand_hip = _hip_height(0.0, 0.0)
 
 
@@ -104,8 +109,52 @@ func _mesh(kind: String, size: Vector3) -> Mesh:
 
 
 ## Height of the pelvis bone above the ground for a leg with the given thigh and knee angles.
-static func _hip_height(thigh_angle: float, knee_angle: float) -> float:
-	return ANKLE_H + HIP_DROP + THIGH * cos(thigh_angle) + SHIN * cos(thigh_angle + knee_angle)
+func _hip_height(thigh_angle: float, knee_angle: float) -> float:
+	return dims.ankle_h + dims.hip_drop + dims.thigh * cos(thigh_angle) + dims.shin * cos(thigh_angle + knee_angle)
+
+
+## Re-proportions the humanoid live from a rig parameter set (animation/rig_params.gd): bone lengths and joint offsets move the
+## skeleton's rest pose, limb sizes and thickness rebuild the primitive meshes. Safe to call every time a value changes.
+func apply_rig(rig) -> void:
+	build()
+	dims = RigParams.dims(rig)
+	var d := dims
+	var k: float = d.scale
+	var origins := {
+		"pelvis": Vector3(0.0, d.ankle_h + d.hip_drop + d.thigh + d.shin + 0.005 * k, 0.0),
+		"spine": Vector3(0.0, d.torso * (0.08 / 0.28), 0.0), "chest": Vector3(0.0, d.torso * (0.20 / 0.28), 0.0),
+		"neck": Vector3(0.0, d.chest, 0.0), "head": Vector3(0.0, d.neck, 0.0),
+		"upper_arm_l": Vector3(-d.shoulder_x, d.chest * (0.22 / 0.26), 0.0), "upper_arm_r": Vector3(d.shoulder_x, d.chest * (0.22 / 0.26), 0.0),
+		"forearm_l": Vector3(0.0, -d.upper_arm, 0.0), "forearm_r": Vector3(0.0, -d.upper_arm, 0.0),
+		"thigh_l": Vector3(-d.hip_x, -d.hip_drop, 0.0), "thigh_r": Vector3(d.hip_x, -d.hip_drop, 0.0),
+		"shin_l": Vector3(0.0, -d.thigh, 0.0), "shin_r": Vector3(0.0, -d.thigh, 0.0),
+		"foot_l": Vector3(0.0, -d.shin, 0.0), "foot_r": Vector3(0.0, -d.shin, 0.0),
+	}
+	for bone in origins:
+		var idx: int = bone_index[bone]
+		skeleton.set_bone_rest(idx, Transform3D(Basis.IDENTITY, origins[bone]))
+		if bone != "pelvis":   # the pelvis' position is posed every frame
+			skeleton.set_bone_pose_position(idx, origins[bone])
+	var seg: float = d.torso * (0.20 / 0.28)
+	var foot_t: float = FOOT_H * k
+	var specs := {
+		"pelvis": ["box", Vector3((2.0 * d.hip_x + 0.12 * k) * d.torso_w, 0.18 * k, 0.20 * k * d.torso_d), Vector3.ZERO],
+		"spine": ["box", Vector3(0.30 * k * d.torso_w, seg * 1.1, 0.18 * k * d.torso_d), Vector3(0.0, seg * 0.5, 0.0)],
+		"chest": ["box", Vector3(maxf(2.0 * d.shoulder_x - 0.10 * k, 0.1 * k) * d.torso_w, d.chest * (0.28 / 0.26), 0.21 * k * d.torso_d), Vector3(0.0, d.chest * (0.12 / 0.26), 0.0)],
+		"neck": ["capsule", Vector3(0.045 * k, d.neck * 1.75, 0.0), Vector3(0.0, d.neck * 0.5, 0.0)],
+		"head": ["sphere", Vector3(d.head_r, 0.0, 0.0), Vector3(0.0, d.head_r * (6.0 / 7.0), 0.0)],
+	}
+	for s in ["l", "r"]:
+		specs["upper_arm_" + s] = ["capsule", Vector3(d.upper_arm_r, d.upper_arm * (0.30 / 0.29), 0.0), Vector3(0.0, -d.upper_arm * (0.14 / 0.29), 0.0)]
+		specs["forearm_" + s] = ["capsule", Vector3(d.forearm_r, d.forearm * (0.28 / 0.29), 0.0), Vector3(0.0, -d.forearm * (0.13 / 0.29), 0.0)]
+		specs["thigh_" + s] = ["capsule", Vector3(d.thigh_r, d.thigh * (0.46 / 0.45), 0.0), Vector3(0.0, -d.thigh * (0.22 / 0.45), 0.0)]
+		specs["shin_" + s] = ["capsule", Vector3(d.shin_r, d.shin, 0.0), Vector3(0.0, -d.shin * (0.21 / 0.44), 0.0)]
+		specs["foot_" + s] = ["box", Vector3(0.10 * k, foot_t, d.foot_len), Vector3(0.0, -(d.ankle_h - foot_t * 0.5), -(d.toe.x + d.heel.x) * 0.5)]
+	for bone in specs:
+		var mi: MeshInstance3D = _meshes[bone]
+		mi.mesh = _mesh(specs[bone][0], specs[bone][1])
+		mi.position = specs[bone][2]
+	_stand_hip = _hip_height(0.0, 0.0)
 
 
 ## state: {speed: horizontal m/s, vy: vertical m/s, grounded: bool, crouching: bool, accel_forward: m/s^2,
@@ -176,7 +225,7 @@ func update_pose(state: Dictionary, delta: float) -> void:
 	if use_dyn and pelvis_drop < 0.0:
 		# A landing lowers the hips by bending both knees (thigh forward, shin back twice as far keeps the foot under
 		# the hip), so the feet stay on the ground instead of sinking into it.
-		var flex := acos(clampf(1.0 + pelvis_drop / (THIGH + SHIN), -1.0, 1.0)) * (1.0 - air_blend) * (1.0 - crouch_blend)
+		var flex := acos(clampf(1.0 + pelvis_drop / (dims.thigh + dims.shin), -1.0, 1.0)) * (1.0 - air_blend) * (1.0 - crouch_blend)
 		thigh_l += flex
 		thigh_r += flex
 		shin_l -= 2.0 * flex

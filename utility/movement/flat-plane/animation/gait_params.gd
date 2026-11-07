@@ -32,7 +32,8 @@ static func definitions() -> Array[Dictionary]:
 		_d("step_height", "Foot clearance", "cycle", "m", 0.0, 0.2, 0.07, 0.005, {"hint": "peak height of the ankle's swing above its path"}),
 		_d("swing_peak", "Clearance peak timing", "cycle", "ratio", 0.3, 0.7, 0.5, 0.01, {"hint": "where in the swing the foot is highest (0.5 = midway)"}),
 		_d("velocity_match", "Swing blends into stance", "cycle", "0..1", 0.0, 1.0, 1.0, 0.05, {"hint": "1 = the swing foot leaves and lands moving exactly like the stance foot (smooth); 0 = it stops at both ends"}),
-		_d("stand_height", "Hip height", "cycle", "x leg", 0.85, 1.0, 0.93, 0.005, {"hint": "hip height at double support as a fraction of the leg length; lower = more knee bend"}),
+		_d("stand_height", "Hip height", "cycle", "x leg", 0.85, 1.0, 0.93, 0.005, {"hint": "wanted hip height at double support as a fraction of the leg length; lower = more knee bend"}),
+		_d("knee_min_flex", "Knee never straighter than", "cycle", "deg", 0.0, 30.0, 12.0, 1.0, {"hint": "the hips are lowered just enough that no knee has to lock straight: smooth and human; 0 allows a fully straight leg"}),
 		# ---- feet
 		_flag("foot_roll", "Heel-to-toe foot roll", "feet", "off = the foot stays flat on the ground and swings flat"),
 		_d("heel_strike_angle", "Heel strike angle", "feet", "deg", 0.0, 30.0, 18.0, 1.0, {"hint": "toe-up angle of the foot at the moment of landing"}),
@@ -43,7 +44,7 @@ static func definitions() -> Array[Dictionary]:
 		# ---- pelvis
 		_d("pelvis_bob", "Vertical bob", "pelvis", "m", 0.0, 0.08, 0.04, 0.002, {"hint": "hips rise over each stance leg"}),
 		_flag("fx_pelvis_bob", "Fx: vertical bob", "switches", "hips rise over each stance leg"),
-		_d("loading_dip", "Loading-response dip", "pelvis", "m", 0.0, 0.04, 0.01, 0.002, {"hint": "hips sink slightly just after each heel strike"}),
+		_d("loading_dip", "Loading-response dip", "pelvis", "m", 0.0, 0.04, 0.0, 0.002, {"hint": "hips sink slightly just after each heel strike (off by default: it makes the hip path less of a clean sine)"}),
 		_flag("fx_loading_dip", "Fx: loading dip", "switches", "hips sink just after each heel strike"),
 		_d("pelvis_sway", "Side-to-side sway", "pelvis", "m", 0.0, 0.08, 0.02, 0.002, {"hint": "hips shift over the stance foot"}),
 		_flag("fx_pelvis_sway", "Fx: side sway", "switches", "hips shift over the stance foot"),
@@ -69,6 +70,7 @@ static func definitions() -> Array[Dictionary]:
 		_flag("view_joints", "View: joints", "view", "hip, knee, ankle and toe markers"),
 		_flag("view_diagram", "View: gait diagram", "view", "stance and swing bars with the cycle position"),
 		_flag("view_ortho", "View: orthographic camera", "view", "off = perspective"),
+		_flag("edit_rig", "Edit proportions by dragging", "view", "handles on every joint and limb: drag to change lengths, widths and thickness (the walk freezes while you edit)", 0.0),
 		_d("view_zoom", "View: zoom", "view", "x", 0.5, 3.0, 1.0, 0.05, {"curve": "log"}),
 	]
 	return out

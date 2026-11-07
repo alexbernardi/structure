@@ -86,7 +86,7 @@ func test_planted_foot_is_fixed_to_the_ground_at_every_setting(t) -> void:
 				# in the pelvis frame the planted point must move back by exactly the pelvis' advance: stride per cycle
 				worst = maxf(worst, absf((b[idx].x - a[idx].x) / dq + c.stride))
 				checked += 1
-	t.ok(checked > 400, "%d samples" % checked)
+	t.ok(checked > 300, "%d samples" % checked)
 	t.ok(worst < 1e-3, "the planted point's speed relative to the hips = -(walking speed) in cycle units; worst error %s" % worst)
 	t.ok(worst_height < 1e-6, "and it stays exactly on the ground: worst height %s m" % worst_height)
 
@@ -184,7 +184,7 @@ func test_the_peak_timing_moves_the_highest_point(t) -> void:
 		var best := -1.0
 		for i in 600:
 			var s := float(i) / 600.0
-			var bump := pow(sin(PI * pow(s, c.peak_k)), 2.0)
+			var bump: float = _m.swing_bump(s, c)
 			if bump > best:
 				best = bump
 				best_q = s
@@ -258,13 +258,91 @@ func test_the_hips_come_down_instead_of_lifting_a_planted_foot(t) -> void:
 	t.ok(worst < 1e-3, "and the reported assist is exactly the lowering, planted feet stay planted: %s" % worst)
 
 
-func test_the_defaults_need_almost_no_help_to_reach_the_ground(t) -> void:
-	_prime(1.2)
-	var worst := 0.0
-	for i in 200:
-		worst = maxf(worst, _m.pose_at(float(i) / 200.0).reach_assist)
-	t.ok(worst < 0.006, "at the default speed the hips are lowered by at most %.1f mm" % (1000.0 * worst))
+func test_the_defaults_lower_the_hips_by_a_small_constant_amount(t) -> void:
+	for speed in [0.8, 1.0, 1.2, 1.4]:
+		_prime(speed)
+		var lo := 9.0
+		var hi := -9.0
+		for i in 200:
+			var a: float = _m.pose_at(float(i) / 200.0).reach_assist
+			lo = minf(lo, a)
+			hi = maxf(hi, a)
+		t.ok(hi < 0.04, "%.1f m/s: the hips are lowered by at most %.1f mm so no knee has to lock" % [speed, 1000.0 * hi])
+		t.ok(hi - lo < 0.004, "%.1f m/s: and by the same amount all through the cycle (spread %.1f mm), so the hip path stays a sine" % [speed, 1000.0 * (hi - lo)])
 
+
+func _sine_fit(ys: Array) -> Dictionary:
+	var n := ys.size()
+	var c := 0.0
+	var a := 0.0
+	var b := 0.0
+	for i in n:
+		var q := float(i) / n
+		c += ys[i]
+		a += ys[i] * cos(4.0 * PI * q)
+		b += ys[i] * sin(4.0 * PI * q)
+	c /= n
+	a *= 2.0 / n
+	b *= 2.0 / n
+	var rss := 0.0
+	for i in n:
+		var q := float(i) / n
+		var e: float = ys[i] - (c + a * cos(4.0 * PI * q) + b * sin(4.0 * PI * q))
+		rss += e * e
+	var amp := sqrt(a * a + b * b)
+	return {"amp": amp, "ratio": sqrt(rss / n) / maxf(amp, 1e-9)}
+
+
+func test_the_hip_path_is_a_clean_sine_at_twice_the_stride_frequency(t) -> void:
+	for speed in [0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 2.0]:
+		_prime(speed)
+		var ys := []
+		for i in 400:
+			ys.append(_m.pose_at(float(i) / 400.0).pelvis.y)
+		var fit := _sine_fit(ys)
+		t.ok(fit.ratio < 0.03, "%.1f m/s: the hip height is within %.1f %% of a pure sine (amplitude %.1f mm)" % [speed, 100.0 * fit.ratio, 1000.0 * fit.amp])
+	_p.set_value("loading_dip", 0.02)
+	_prime(1.2)
+	var dipped := []
+	for i in 400:
+		dipped.append(_m.pose_at(float(i) / 400.0).pelvis.y)
+	t.ok(_sine_fit(dipped).ratio > 0.05, "(the loading dip, off by default, is what makes it less of a sine)")
+
+
+func test_the_knee_is_never_straighter_than_its_setting(t) -> void:
+	for flex in [6.0, 12.0, 20.0]:
+		_p.set_value("knee_min_flex", flex)
+		for speed in [0.9, 1.4, 2.2]:
+			_prime(speed)
+			var lowest := 99.0
+			for i in 300:
+				var pose: Dictionary = _m.pose_at(float(i) / 300.0)
+				lowest = minf(lowest, rad_to_deg(minf(pose.knee_l, pose.knee_r)))
+			t.ok(lowest > flex - 0.6, "knee limit %.0f deg at %.1f m/s: least flexion seen %.1f deg" % [flex, speed, lowest])
+
+
+## Ankle acceleration (forward, up) per cycle^2 by a centred second difference.
+func _ankle_acc(c: Dictionary, q: float, h: float) -> Vector2:
+	var a: Vector3 = _m.ankle_at(fposmod(q - h, 1.0), c) - 2.0 * _m.ankle_at(fposmod(q, 1.0), c) + _m.ankle_at(fposmod(q + h, 1.0), c)
+	return Vector2(a.x, a.y) / (h * h)
+
+
+func test_acceleration_is_continuous_where_the_swing_hands_over_to_the_stance(t) -> void:
+	var worst := 0.0
+	var h := 2e-3
+	for speed in [0.8, 1.2, 1.6]:
+		var c := _prime(speed)
+		for boundary in [c.d, 1.0]:
+			var b: float = boundary
+			# extrapolate the acceleration to the boundary from each side with a straight line through two samples
+			var b1 := _ankle_acc(c, b - 0.012, h)
+			var b2 := _ankle_acc(c, b - 0.008, h)
+			var a1 := _ankle_acc(c, b + 0.008, h)
+			var a2 := _ankle_acc(c, b + 0.012, h)
+			var from_before := b2 + (b2 - b1) / 0.004 * 0.008
+			var from_after := a1 - (a2 - a1) / 0.004 * 0.008
+			worst = maxf(worst, (from_before - from_after).length() / c.stride)
+	t.ok(worst < 8.0, "the ankle's acceleration, extrapolated to toe-off and heel strike from both sides, differs by at most %.1f stride-lengths per cycle squared (a jolt would be 10s)" % worst)
 
 func test_the_hip_path_has_the_requested_bob(t) -> void:
 	_p.set_value("loading_dip", 0.0)

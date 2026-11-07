@@ -9,6 +9,7 @@ extends SceneTree
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Presets = preload("res://tuning/preset_store.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
+const RigParams = preload("res://animation/rig_params.gd")
 
 const BINDINGS_PATH := "res://config/gait_bindings.json"
 const PRESET_DIR := "res://presets_gait"
@@ -53,6 +54,9 @@ func _initialize() -> void:
 		var params = GaitParams.create()
 		for id in plan[name].values:
 			params.set_value(id, float(plan[name].values[id]))
-		var r2 := store.save_preset(name, {"gait": params.snapshot()}, String(plan[name].note))
+		var targets := {"gait": params.snapshot()}
+		if name == "default":
+			targets["rig"] = RigParams.create().snapshot()   # the factory default also restores the original proportions
+		var r2 := store.save_preset(name, targets, String(plan[name].note))
 		print("preset ", name, ": ", "written" if r2.ok else r2.error)
 	quit(0)

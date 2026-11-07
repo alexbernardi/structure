@@ -9,12 +9,15 @@
 ##   --gait.<parameter>=<value> (e.g. --gait.freeze=1 --gait.scrub=0.25), --screenshot=<png> [--screenshot-frame=N],
 ##   --quit-after=<seconds>.
 ## Keys: Space freeze/resume, , and . step the frozen cycle, 1-5 camera views, +/- or wheel zoom, T belt, B body dynamics,
+##   E edit the proportions by dragging handles (Backspace resets them), Ctrl+wheel resizes the character,
 ##   F3 HUD, F4 bindings editor, PgUp/PgDn bank, [ ] preset, F5 save preset, Home reset all, F6/F7/F8/F11 window.
 extends Node3D
 
 const Visual = preload("res://character/character_visual.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const GaitModel = preload("res://animation/gait_model.gd")
+const RigParams = preload("res://animation/rig_params.gd")
+const RigEditor = preload("res://ui/rig_editor.gd")
 const BodyParams = preload("res://animation/body_params.gd")
 const BodyDynamics = preload("res://animation/body_dynamics.gd")
 const Params = preload("res://movement/movement_params.gd")
@@ -41,6 +44,7 @@ const VIEWS := {
 const VIEW_KEYS := {KEY_1: "side", KEY_2: "side-left", KEY_3: "front", KEY_4: "back", KEY_5: "three-quarter"}
 
 var gait_params = GaitParams.create()
+var rig_params = RigParams.create()   ## proportions of the humanoid (limb lengths, widths, thickness)
 var body_params = BodyParams.create()
 var model
 var dynamics
@@ -49,6 +53,7 @@ var cam: Camera3D
 var midi
 var tuning
 var overlay
+var rig_editor
 var options := {}   ## overrides command-line options (used by tests)
 var view := "side"
 var speed := 0.0    ## the belt's (smoothed) speed
@@ -58,6 +63,9 @@ var slip_r := 0.0
 
 var _args := {}
 var _stripes: Array[Node3D] = []
+var _rig_dirty := true
+var _was_editing := false
+var _froze_for_edit := false
 var _prev_speed := 0.0
 var _first := true
 var _frames := 0
@@ -79,17 +87,21 @@ func _ready() -> void:
 			gait_params.set_value(String(k).substr(5), float(_args[k]))
 		elif String(k).begins_with("body."):
 			body_params.set_value(String(k).substr(5), float(_args[k]))
+		elif String(k).begins_with("rig."):
+			rig_params.set_value(String(k).substr(4), float(_args[k]))
 	view = String(_args.get("view", "side"))
 	if not VIEWS.has(view):
 		view = "side"
 	speed = float(gait_params.get_value("walk_speed"))
 	_prev_speed = speed
-	model = GaitModel.new(gait_params)
+	model = GaitModel.new(gait_params, rig_params)
+	rig_params.changed.connect(func(_id: String, _v: float) -> void: _rig_dirty = true)
 	dynamics = BodyDynamics.new(body_params)
 	_build_world()
 	visual = Visual.new()
 	visual.name = "Visual"
 	add_child(visual)
+	visual.apply_rig(rig_params)
 	cam = Camera3D.new()
 	cam.name = "Camera"
 	add_child(cam)
@@ -168,6 +180,9 @@ func _build_overlay() -> void:
 	overlay = Overlay.new()
 	overlay.scene = self
 	layer.add_child(overlay)
+	rig_editor = RigEditor.new()
+	rig_editor.scene = self
+	layer.add_child(rig_editor)
 
 
 # ------------------------------------------------------------------ camera
@@ -180,7 +195,7 @@ func _hud_width() -> float:
 
 func _apply_camera() -> void:
 	var zoom: float = gait_params.get_value("view_zoom")
-	var target := Vector3(0.0, 0.92, 0.0)
+	var target := Vector3(0.0, 0.92 * float(rig_params.get_value("scale")), 0.0)
 	var from: Vector3 = VIEWS[view]
 	cam.global_position = from
 	cam.look_at(target, Vector3.UP)
@@ -225,7 +240,7 @@ func _build_tuning() -> void:
 		"bindings_path": String(_args.get("tuning-bindings", BINDINGS_PATH)),
 		"preset_dir": String(_args.get("preset-dir", PRESET_DIR)),
 		"state_path": String(_args.get("tuning-state", STATE_PATH)),
-		"extra_targets": [["gait", "Gait (visual)", gait_params], ["body", "Body (visual)", body_params]],
+		"extra_targets": [["gait", "Gait (visual)", gait_params], ["rig", "Proportions (visual)", rig_params], ["body", "Body (visual)", body_params]],
 	}
 	tuning.setup(Params.new(), midi, opts)
 	tuning.scene_action.connect(_on_tuning_action)
@@ -253,14 +268,21 @@ func _next_view(step: int) -> String:
 
 # ------------------------------------------------------------------ input
 
+func _input(event: InputEvent) -> void:
+	if rig_editor != null and rig_editor.handle_input(event):
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if tuning != null and tuning.editor != null and tuning.editor.visible:
 		return
 	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_nudge("view_zoom", 1.1)
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_nudge("view_zoom", 1.0 / 1.1)
+		var wheel := 1.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else (-1.0 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else 0.0)
+		if wheel != 0.0:
+			if event.ctrl_pressed:   # Ctrl + wheel resizes the character itself
+				rig_params.set_value("scale", float(rig_params.get_value("scale")) * pow(1.02, wheel))
+			else:
+				_nudge("view_zoom", pow(1.1, wheel))
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	if VIEW_KEYS.has(event.keycode):
@@ -279,6 +301,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_nudge("view_zoom", 1.0 / 1.1)
 		KEY_T:
 			_toggle("view_belt")
+		KEY_E:
+			_toggle("edit_rig")
 		KEY_B:
 			_toggle("body_dynamics", true)
 
@@ -328,6 +352,10 @@ func _apply_camera_if_changed() -> void:
 
 ## One rendered frame: the belt follows the speed setting, the model advances, the body model and the skeleton follow.
 func advance(delta: float) -> void:
+	_update_edit_mode()
+	if _rig_dirty:
+		_rig_dirty = false
+		visual.apply_rig(rig_params)
 	var target: float = gait_params.get_value("walk_speed")
 	speed = target if _first else move_toward(speed, target, SPEED_ACCEL * delta)
 	var scaled := delta * float(gait_params.get_value("time_scale"))
@@ -347,6 +375,20 @@ func advance(delta: float) -> void:
 	visual.update_pose(state, delta)
 
 
+## Editing the proportions freezes the walk (a moving target is hard to drag) and resumes it afterwards, unless it was frozen already.
+func _update_edit_mode() -> void:
+	var editing: bool = gait_params.is_on("edit_rig")
+	if editing and not _was_editing:
+		_froze_for_edit = not gait_params.is_on("freeze")
+		if _froze_for_edit:
+			gait_params.set_value("scrub", model.phase)
+			gait_params.set_value("freeze", 1.0)
+	elif _was_editing and not editing and _froze_for_edit:
+		gait_params.set_value("freeze", 0.0)
+		_froze_for_edit = false
+	_was_editing = editing
+
+
 ## Foot slip measured on the posed skeleton, not on the model: any heel or toe that is on the ground must travel with the belt.
 func _measure_slip(delta: float) -> void:
 	var pose: Dictionary = model.pose
@@ -359,8 +401,8 @@ func _measure_slip(delta: float) -> void:
 		var contact: bool = pose.contact_l if side == 0 else pose.contact_r
 		var fp: Transform3D = visual.skeleton.get_bone_global_pose(visual.bone_index["foot_" + s])
 		var points: Array[Vector3] = [
-			visual.to_global(fp * Vector3(0.0, -GaitModel.ANKLE_H, -GaitModel.HEEL.x)),
-			visual.to_global(fp * Vector3(0.0, -GaitModel.ANKLE_H, -GaitModel.TOE.x))]
+			visual.to_global(fp * Vector3(0.0, -model.cycle.ankle_h, -model.cycle.heel.x)),
+			visual.to_global(fp * Vector3(0.0, -model.cycle.ankle_h, -model.cycle.toe.x))]
 		for k in 2:
 			var idx := side * 2 + k
 			var planted: bool = contact and points[k].y < 0.002

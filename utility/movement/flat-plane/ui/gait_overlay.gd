@@ -17,7 +17,7 @@ var scene
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 
 func _process(_delta: float) -> void:
@@ -65,9 +65,10 @@ func _guides(gp) -> void:
 		draw_line(a, a + Vector2(0, 9.0 if big else 5.0), GUIDE, 1.0)
 		if big and i != 0:
 			_txt(a + Vector2(-10, 24), "%.1f" % absf(z), 11, DIM)
-	_txt(_p(Vector3(0, 0, -1.4)) + Vector2(0, 40), "metres ahead of the hips", 11, DIM)
+	_txt(_p(Vector3(0, 0, 1.4)) + Vector2(10, 40), "metres ahead of the hips", 11, DIM)
 	# standing hip height, and the plumb line through the hips
-	var hip_h: float = Model.ANKLE_H + float(gp.get_value("stand_height")) * (Model.THIGH + Model.SHIN)
+	var dm: Dictionary = scene.visual.dims
+	var hip_h: float = dm.ankle_h + float(gp.get_value("stand_height")) * (dm.thigh + dm.shin)
 	var a1 := _p(Vector3(0, hip_h, -0.9))
 	var b1 := _p(Vector3(0, hip_h, 0.9))
 	var n := 24
@@ -106,8 +107,8 @@ func _joints() -> void:
 		var knee: Vector3 = v.to_global(v.joint_position("shin_" + s))
 		var ankle: Vector3 = v.to_global(v.joint_position("foot_" + s))
 		var foot_pose: Transform3D = v.skeleton.get_bone_global_pose(v.bone_index["foot_" + s])
-		var heel: Vector3 = v.to_global(foot_pose * Vector3(0.0, -Model.ANKLE_H, -Model.HEEL.x))
-		var toe: Vector3 = v.to_global(foot_pose * Vector3(0.0, -Model.ANKLE_H, -Model.TOE.x))
+		var heel: Vector3 = v.to_global(foot_pose * Vector3(0.0, -v.dims.ankle_h, -v.dims.heel.x))
+		var toe: Vector3 = v.to_global(foot_pose * Vector3(0.0, -v.dims.ankle_h, -v.dims.toe.x))
 		var ph := _p(hip)
 		var pk := _p(knee)
 		var pa := _p(ankle)
@@ -136,7 +137,7 @@ func _contacts(pose: Dictionary) -> void:
 func _diagram(pose: Dictionary) -> void:
 	var w := 440.0
 	var h := 18.0
-	var x0 := 24.0
+	var x0 := size.x - w - 24.0   # lower right, below the tuning HUD and clear of the walker
 	var y0 := size.y - 112.0
 	_txt(Vector2(x0, y0 - 8.0), "gait cycle (left heel strike = 0, right = 0.5)", 12, DIM)
 	var d: float = pose.duty
@@ -181,7 +182,7 @@ func _text_block(pose: Dictionary) -> void:
 	_txt(Vector2(18, y), "stride %.2f m / %.2f s   stance %.0f %%   double support %.0f %%   position %.3f" % [pose.stride_length, pose.stride_time if is_finite(pose.stride_time) else 0.0, 100.0 * pose.duty, 100.0 * pose.double_support, pose.phase], 14, DIM)
 	y += 20.0
 	var assist_mm: float = 1000.0 * pose.reach_assist
-	_txt(Vector2(18, y), "hips lowered to keep a foot reachable: %.0f mm" % assist_mm, 14, DIM if assist_mm < 8.0 else Color(1, 0.8, 0.4))
+	_txt(Vector2(18, y), "hips lowered by %.0f mm so no knee has to lock straight" % assist_mm, 14, DIM if assist_mm < 60.0 else Color(1, 0.8, 0.4))
 	y += 20.0
 	_txt(Vector2(18, y), "foot slip on the belt, measured on the skeleton: L %.0f  R %.0f mm/s" % [1000.0 * scene.slip_l, 1000.0 * scene.slip_r], 14, DIM)
 	y += 20.0

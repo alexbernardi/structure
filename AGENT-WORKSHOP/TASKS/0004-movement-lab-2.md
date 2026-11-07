@@ -131,5 +131,32 @@ walk, `gait_model` off shows the original walk. Keys 1-5 change the camera, whee
 **Judge:** does the foot placement, heel-to-toe roll, knee bend, hip bob/sway/rotation and arm swing read as a human walk, and which
 variables are missing? Status: **WAITING for the user.**
 
+## Gait lab revision after the first look (user feedback, 2026-11-07)
+User: "i have some good settings on default, we will start from there on out building out the different modes. first off tho. the model is
+like bouncing jarringly. where when I want a reference video its a smooth sine wave up and down. The movement is alittle clanky right now.
+also can you make it so ... change in limb size and position. a setting that then lets me drag and drop".
+- Their live tweaks were not saved (the state file shows bank 1 and preset "default"), so the shipped defaults are the baseline; saving a
+  preset (Up button / F5) keeps a tuned set.
+- Measured before changing anything (hip height against a best-fit sine at twice the stride frequency): residual 8-10 % of the amplitude at an easy
+  walk and 15-24 % at 1.6-2.0 m/s. The loading-response dip (default 10 mm) and the reactive reach assist were the causes. Joint accelerations
+  also spiked at heel strike (5-16x the median) because swing and stance were handed over with velocity only.
+- Changes: loading dip default 0 (still on the Pelvis & Torso bank); hip path is a pure sinusoid and, when the stride needs it, the whole sine is
+  lowered by a constant amount computed per setting (no reactive kink); the knee never locks (new "Knee never straighter than", default 12 deg);
+  rolls use quintic easing and the swing is a quintic Hermite that matches the stance foot's velocity AND acceleration; the clearance bump is
+  cubic-flat at both ends. Now: hip path within 1.3 % of a sine (0.6-2.0 m/s), ankle acceleration continuous across toe-off/heel strike.
+  Hips are 20 mm lower at the default 1.2 m/s than before, and the foot-flat slap after heel strike remains (tunable: *Foot flat at*).
+- Proportions: ``animation/rig_params.gd`` (19 parameters: scale, bone lengths, ankle height, foot length, hip and shoulder offsets, torso
+  width/depth, neck, head, limb thickness), all visual-only; defaults reproduce the original rig exactly (tested bone by bone and mesh by mesh).
+  ``Visual.apply_rig`` re-proportions live; the gait model plans for the actual leg lengths (planted-foot slip stays under 3 mm/s with a
+  different body). Controller banks "Proportions 1" and "Proportions 2"; presets save them; the default preset restores them.
+- Drag and drop: switch ``edit_rig`` on (key E, or View & Playback bank, strip 5 knob) and every joint and limb gets a handle. Orange = bone length
+  (drag the joint along the bone; also foot length and ankle height), purple = joint offset / torso width (front, back, 3/4 views), green =
+  thickness (drag the limb's edge; also head size and torso depth). The walk freezes while editing and resumes afterwards; Backspace resets the
+  proportions; Ctrl+wheel resizes the whole character (also the *Overall size* fader).
+- Validation: **410/410** (21 new). Hip sine fit, knee limit, acceleration continuity, rig bone-by-bone, mesh-by-mesh defaults, random bodies
+  (posed ankles within 0.3 mm of the plan, soles on the ground), drag maths incl. clamping and sub-step drags, view-dependent handles, freeze/resume.
+  Cost: ``cycle_for`` 1.2 ms on a cache miss (only while a setting or the speed changes), 52 us per steady frame, ``apply_rig`` 1.3 ms.
+- Not verified by me: that the walk now *looks* smooth to a human eye, and how the drag handles feel with a real mouse. That is the checkpoint.
+
 ## Outcome
 (filled in as phases complete)

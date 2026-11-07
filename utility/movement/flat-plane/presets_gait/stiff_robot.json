@@ -1,7 +1,7 @@
 {
 	"name": "stiff_robot",
 	"note": "Example: no foot roll and no body motion at all, to see what each effect adds.",
-	"saved": "2026-11-07T11:08:39",
+	"saved": "2026-11-07T11:42:09",
 	"schema": 1,
 	"targets": {
 		"gait": {
@@ -9,6 +9,7 @@
 			"arm_swing": 10.0,
 			"auto_step_length": 1.0,
 			"duty_factor": 0.6,
+			"edit_rig": 0.0,
 			"elbow_bend": 20.0,
 			"foot_flat_at": 0.16,
 			"foot_roll": 0.0,
@@ -24,7 +25,8 @@
 			"gait_model": 1.0,
 			"heel_rise_at": 0.72,
 			"heel_strike_angle": 18.0,
-			"loading_dip": 0.01,
+			"knee_min_flex": 12.0,
+			"loading_dip": 0.0,
 			"pelvic_tilt": 3.0,
 			"pelvis_bob": 0.04,
 			"pelvis_rotation": 5.0,

@@ -67,6 +67,10 @@
 				"7": {
 					"fader": "gait.torso_lean",
 					"knob": "gait.torso_lean"
+				},
+				"8": {
+					"fader": "gait.knee_min_flex",
+					"knob": "gait.knee_min_flex"
 				}
 			}
 		},
@@ -161,6 +165,76 @@
 				},
 				"4": {
 					"knob": "gait.view_ortho"
+				},
+				"5": {
+					"knob": "gait.edit_rig"
+				}
+			}
+		},
+		{
+			"name": "Proportions 1",
+			"strips": {
+				"1": {
+					"fader": "rig.scale",
+					"knob": "rig.scale"
+				},
+				"2": {
+					"fader": "rig.thigh_length",
+					"knob": "rig.thigh_length"
+				},
+				"3": {
+					"fader": "rig.shin_length",
+					"knob": "rig.shin_length"
+				},
+				"4": {
+					"fader": "rig.foot_length",
+					"knob": "rig.foot_length"
+				},
+				"5": {
+					"fader": "rig.torso_length",
+					"knob": "rig.torso_length"
+				},
+				"6": {
+					"fader": "rig.chest_length",
+					"knob": "rig.chest_length"
+				},
+				"7": {
+					"fader": "rig.upper_arm_length",
+					"knob": "rig.upper_arm_length"
+				},
+				"8": {
+					"fader": "rig.forearm_length",
+					"knob": "rig.forearm_length"
+				}
+			}
+		},
+		{
+			"name": "Proportions 2",
+			"strips": {
+				"1": {
+					"fader": "rig.ankle_height",
+					"knob": "rig.thigh_radius"
+				},
+				"2": {
+					"fader": "rig.hip_width",
+					"knob": "rig.shin_radius"
+				},
+				"3": {
+					"fader": "rig.shoulder_width",
+					"knob": "rig.upper_arm_radius"
+				},
+				"4": {
+					"fader": "rig.neck_length",
+					"knob": "rig.forearm_radius"
+				},
+				"5": {
+					"fader": "rig.head_radius"
+				},
+				"6": {
+					"fader": "rig.torso_width"
+				},
+				"7": {
+					"fader": "rig.torso_depth"
 				}
 			}
 		}

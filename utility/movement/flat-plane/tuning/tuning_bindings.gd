@@ -88,12 +88,24 @@ static func gait_data() -> Dictionary:
 	var d := default_data()
 	var g := "gait."
 	var cycle: Array = ["walk_speed", "step_length", "duty_factor", "step_height", "swing_peak", "stand_height", "velocity_match", "time_scale"]
-	var pelvis: Array = ["pelvis_bob", "loading_dip", "pelvis_sway", "pelvis_rotation", "pelvic_tilt", "shoulder_counter", "torso_lean", ""]
+	var pelvis: Array = ["pelvis_bob", "loading_dip", "pelvis_sway", "pelvis_rotation", "pelvic_tilt", "shoulder_counter", "torso_lean", "knee_min_flex"]
 	var feet: Array = ["heel_strike_angle", "toe_off_angle", "toe_clearance_angle", "foot_flat_at", "heel_rise_at", "arm_swing", "elbow_bend", "arm_phase"]
 	var toggle_faders: Array = ["gait_model", "auto_step_length", "foot_roll", "fx_pelvis_bob", "fx_loading_dip", "fx_pelvis_sway", "fx_pelvis_rotation", "fx_pelvic_tilt"]
 	var toggle_knobs: Array = ["fx_shoulder_counter", "fx_arm_swing", "fx_elbow_bend", "freeze", "view_belt", "view_paths", "view_joints", "view_diagram"]
 	var view_faders: Array = ["scrub", "view_zoom", "time_scale", "", "", "", "", ""]
-	var view_knobs: Array = ["scrub", "view_zoom", "view_guides", "view_ortho", "", "", "", ""]
+	var view_knobs: Array = ["scrub", "view_zoom", "view_guides", "view_ortho", "edit_rig", "", "", ""]
+	var proportions: Array = ["scale", "thigh_length", "shin_length", "foot_length", "torso_length", "chest_length", "upper_arm_length", "forearm_length"]
+	var prop2_faders: Array = ["ankle_height", "hip_width", "shoulder_width", "neck_length", "head_radius", "torso_width", "torso_depth", ""]
+	var prop2_knobs: Array = ["thigh_radius", "shin_radius", "upper_arm_radius", "forearm_radius", "", "", "", ""]
+	var prop2 := {}
+	for i in 8:
+		var s2 := {}
+		if prop2_faders[i] != "":
+			s2["fader"] = "rig." + String(prop2_faders[i])
+		if prop2_knobs[i] != "":
+			s2["knob"] = "rig." + String(prop2_knobs[i])
+		if not s2.is_empty():
+			prop2[str(i + 1)] = s2
 	var toggles := {}
 	var view := {}
 	for i in 8:
@@ -110,7 +122,8 @@ static func gait_data() -> Dictionary:
 			v["knob"] = g + String(view_knobs[i])
 		if not v.is_empty():
 			view[str(i + 1)] = v
-	d.banks = [_bank("Walk Cycle", cycle, g), _bank("Pelvis & Torso", pelvis, g), _bank("Feet & Arms", feet, g), {"name": "Toggles", "strips": toggles}, {"name": "View & Playback", "strips": view}]
+	d.banks = [_bank("Walk Cycle", cycle, g), _bank("Pelvis & Torso", pelvis, g), _bank("Feet & Arms", feet, g), {"name": "Toggles", "strips": toggles}, {"name": "View & Playback", "strips": view},
+		_bank("Proportions 1", proportions, "rig."), {"name": "Proportions 2", "strips": prop2}]
 	return d
 
 

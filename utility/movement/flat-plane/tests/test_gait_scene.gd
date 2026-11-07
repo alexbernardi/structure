@@ -209,15 +209,15 @@ func _turn(strip: int, steps: int) -> void:
 func test_the_registry_holds_the_gait_and_body_targets_and_every_binding_resolves(t) -> void:
 	var s := await _boot_tuned()
 	var reg = s.tuning.registry
-	t.ok(reg.has_target("gait") and reg.has_target("body") and not reg.has_target("movement"), "gait and body targets only")
+	t.ok(reg.has_target("gait") and reg.has_target("rig") and reg.has_target("body") and not reg.has_target("movement"), "gait, proportions and body targets only")
 	t.eq(s.tuning.bindings.unresolved(reg), [], "no binding points at a missing parameter")
-	t.eq(s.tuning.bindings.bank_count(), 5, "the five gait banks")
+	t.eq(s.tuning.bindings.bank_count(), 7, "the seven gait banks")
 	var bound: Array = s.tuning.bindings.referenced_keys()
 	var missing := []
 	for key in reg.keys():
-		if String(key).begins_with("gait.") and not bound.has(key):
+		if (String(key).begins_with("gait.") or String(key).begins_with("rig.")) and not bound.has(key):
 			missing.append(key)
-	t.eq(missing, [], "every gait parameter is on the controller")
+	t.eq(missing, [], "every gait and proportion parameter is on the controller")
 
 
 func test_faders_knobs_and_switches_change_the_walk_live(t) -> void:
