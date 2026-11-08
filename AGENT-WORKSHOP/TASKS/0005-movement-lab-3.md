@@ -1,6 +1,7 @@
 # 0005 - Movement Lab 3.0: natural locomotion
 
-Status: in progress. Date: 2026-11-08. Branch: `task/0005-movement-lab-3`.
+Status: done; user-approved in the 4.0 brief (limitations in KI-019). Date: 2026-11-08.
+Branch: `task/0005-movement-lab-3`, committed as `f264c44` from the pre-traversal snapshot; task 0006 builds on it.
 
 ## Goal
 

@@ -27,7 +27,7 @@ Agents on other machines: clone, run `setup`, then pull before starting a task a
 | Systems | room template + `movement` room (tests, benchmarks, golden fixture) integrated through the gateway |
 | Assets | Blender 5.0.1 pipeline example `resource_stone` (spec -> GLB -> validation -> Godot), reproducible bytes |
 | Quality | 8 automated suites, performance baselines, structured logs, static `check` |
-| Movement utility | [Movement Lab 3.0](DOCUMENTATION/MOVEMENT-LAB-3.md) authored Quaternius CC0 running on a native-retargeted primitive rig. 6 m/s run, 12 m/s Shift; no gameplay walking. Legacy remains selectable; F9 opens recorded-input side-view A/B. Four principal animation controls, original MIDI mapping and physics preserved. 479 utility tests pass; authored presentation CPU p95 ~0.15 ms. Residual sliding/terrain contact and human visual/MIDI approval remain open. The [2.0 treadmill](DOCUMENTATION/MOVEMENT-LAB-2.md), editors, presets and circling benchmark are preserved |
+| Movement utility | [Movement Lab 4.0](DOCUMENTATION/MOVEMENT-LAB-4.md): one authored running vault (CC0 Quaternius UAL2 `SafetyVault`) on top of the user-approved [3.0](DOCUMENTATION/MOVEMENT-LAB-3.md) authored Quaternius running. Run straight at a wall and it vaults automatically: Run -> Anticipate -> Vault -> Land -> Run, with physics-safe collider travel, a planted support hand and run phase kept through the vault. Vault lanes A/B/C (T / Shift+T), F10 overlay, V side view, `--trial=vault` A/B and a four-control Traversal MIDI bank. 6 m/s run, 12 m/s Shift; no gameplay walking; physics is unchanged without a vault. 495 utility tests pass. Human visual/MIDI approval of the vault is open (KI-020). The legacy gait, F9 3.0 A/B, [2.0 treadmill](DOCUMENTATION/MOVEMENT-LAB-2.md), editors, presets and circling benchmark are preserved |
 
 Verified and unverified items, test results and open problems: [TASKS/0001-bootstrap.md](TASKS/0001-bootstrap.md).
 
@@ -35,7 +35,7 @@ Verified and unverified items, test results and open problems: [TASKS/0001-boots
 
 | Path | Purpose |
 |---|---|
-| `AGENT-WORKSHOP/` | this headquarters: [PROTOCOLS](PROTOCOLS/), [BLUEPRINTS](BLUEPRINTS/README.md) (templates), [CONCEPTS](CONCEPTS/PILLARS.md), [GAMEPLAY-MAPS](GAMEPLAY-MAPS/FIRST-LOOP.md), [PLANNING](PLANNING/), [TASKS](TASKS/README.md), [DECISIONS](DECISIONS/README.md), [DOCUMENTATION](DOCUMENTATION/), [INVENTORY](INVENTORY/) |
+| `AGENT-WORKSHOP/` | this headquarters: [PROTOCOLS](PROTOCOLS/), [BLUEPRINTS](BLUEPRINTS/README.md) (templates), [CONCEPTS](CONCEPTS/PILLARS.md), [GAMEPLAY-MAPS](GAMEPLAY-MAPS/FIRST-LOOP.md), [PLANNING](PLANNING/), [TASKS](TASKS/README.md), [DECISIONS](DECISIONS/README.md), [DOCUMENTATION](DOCUMENTATION/), [INVENTORY](INVENTORY/), [RESEARCH](RESEARCH/) (sourced technique and asset reviews); `DOWNLOADS/` holds user-supplied originals and is git-ignored |
 | `SANDBOX/` | the playable Godot project, configuration notes, scenarios ([README](../SANDBOX/README.md)) |
 | `SYSTEM-ROOMS/` | isolated system laboratories ([README](../SYSTEM-ROOMS/README.md)) |
 | `COMMON-ASSETS/` | asset library with metadata and manifest ([README](../COMMON-ASSETS/README.md)) |
@@ -116,5 +116,5 @@ Suites and how to write tests: [DOCUMENTATION/TESTING.md](DOCUMENTATION/TESTING.
 | Conventions (code, units, assets, git) | [PROTOCOLS/CONVENTIONS.md](PROTOCOLS/CONVENTIONS.md) |
 | The gameplay loop mapped to code and tests | [GAMEPLAY-MAPS/FIRST-LOOP.md](GAMEPLAY-MAPS/FIRST-LOOP.md) |
 | Plans | [PLANNING/BOOTSTRAP-PLAN.md](PLANNING/BOOTSTRAP-PLAN.md), [PLANNING/MILESTONES.md](PLANNING/MILESTONES.md) |
-| Movement Lab (MIDI-tuned movement, procedural body and gait, treadmill lab): status, launch, architecture | [DOCUMENTATION/MOVEMENT-LAB-2.md](DOCUMENTATION/MOVEMENT-LAB-2.md), [parameters and MIDI banks](DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md), [task 0004](TASKS/0004-movement-lab-2.md) |
+| Movement Lab (MIDI-tuned movement, authored animation, traversal, treadmill lab): status, launch, architecture | [4.0 vault](DOCUMENTATION/MOVEMENT-LAB-4.md), [3.0 authored running](DOCUMENTATION/MOVEMENT-LAB-3.md), [2.0 treadmill](DOCUMENTATION/MOVEMENT-LAB-2.md), [parameters and MIDI banks](DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md), tasks [0004](TASKS/0004-movement-lab-2.md), [0005](TASKS/0005-movement-lab-3.md), [0006](TASKS/0006-fluid-traversal-vault.md), [traversal research](RESEARCH/fluid-traversal.md) |
 | Asset inventory | [INVENTORY/ASSETS.md](INVENTORY/ASSETS.md) |

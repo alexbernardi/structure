@@ -48,6 +48,10 @@ First human session (task 0002, vsync on, Docker server, 2 players): 143.9 FPS a
   (29 us on stairs), `visual.update_pose` 7.6 us, springs 1.5 / 2.0 / 4.2 us (scalar / vector / rotation), body dynamics update 68 us (3 us with the
   master off), gait update at a steady speed 52 us, `cycle_for` on a cache miss 1.2 ms, `Visual.apply_rig` 1.3 ms. Details and method:
   `DOCUMENTATION/MOVEMENT-LAB-2.md` section 6; benchmarks in `utility/movement/flat-plane/benchmarks/`.
+- Movement Lab 4.0 vault (`bench_traversal_vault.gd`, same machine and caveat): whole tick p50 / p95 / max 0.213 / 0.265 / 1.685 ms on
+  vault lane A (4 vaults); open ground 0.180 / 0.290 / 0.322 ms with traversal on and 0.164 / 0.195 / 0.314 ms off. Physics plus
+  perception mean 0.068 / 0.062 / 0.048 ms (lane A / open on / open off). A fresh vault plan costs 1.30 ms and is memoized; the clip
+  profile builds once in 8.8 ms. Details: `DOCUMENTATION/MOVEMENT-LAB-4.md`.
 
 - Server image `structure-server`: 344 MB unpacked (~109 MB compressed); build ~70 s cold, seconds with cache.
 - Container start to `server.ready`: ~1 s; `docker stop` to exit (graceful save): ~1.8 s.
