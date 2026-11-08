@@ -1,23 +1,4 @@
-[gd_resource type="AnimationNodeBlendTree" load_steps=10 format=3]
-
-[sub_resource type="AnimationNodeAnimation" id="Walk"]
-animation = &"walk"
-
-[sub_resource type="AnimationNodeTimeSeek" id="Seek"]
-
-[sub_resource type="AnimationNodeTimeScale" id="Speed"]
-
-[sub_resource type="AnimationNodeAnimation" id="Legacy"]
-animation = &"legacy"
-
-[sub_resource type="AnimationNodeAnimation" id="Fallback"]
-animation = &"legacy"
-
-[sub_resource type="AnimationNodeBlend2" id="Blend"]
-sync = true
-
-[sub_resource type="AnimationNodeBlend2" id="Locomotion"]
-sync = true
+[gd_resource type="AnimationNodeBlendTree" format=3 uid="uid://croksoies8k2p"]
 
 [sub_resource type="AnimationNodeAnimation" id="Body"]
 animation = &"body"
@@ -25,8 +6,28 @@ animation = &"body"
 [sub_resource type="AnimationNodeAdd2" id="Add"]
 sync = true
 
+[sub_resource type="AnimationNodeAnimation" id="Fallback"]
+animation = &"legacy"
+
+[sub_resource type="AnimationNodeAnimation" id="Legacy"]
+animation = &"legacy"
+
+[sub_resource type="AnimationNodeBlend2" id="Locomotion"]
+sync = true
+
+[sub_resource type="AnimationNodeAnimation" id="Walk"]
+animation = &"walk"
+
+[sub_resource type="AnimationNodeBlend2" id="Blend"]
+sync = true
+
+[sub_resource type="AnimationNodeTimeSeek" id="Seek"]
+
+[sub_resource type="AnimationNodeTimeScale" id="Speed"]
+
 [resource]
 resource_local_to_scene = true
+nodes/output/position = Vector2(600, -40)
 nodes/Walk/node = SubResource("Walk")
 nodes/Walk/position = Vector2(-800, -160)
 nodes/WalkSeek/node = SubResource("Seek")
@@ -45,5 +46,4 @@ nodes/Body/node = SubResource("Body")
 nodes/Body/position = Vector2(120, 160)
 nodes/BodyAdd/node = SubResource("Add")
 nodes/BodyAdd/position = Vector2(360, -40)
-nodes/output/position = Vector2(600, -40)
-node_connections = [&"WalkSeek", 0, &"Walk", &"WalkSpeed", 0, &"WalkSeek", &"WalkBlend", 0, &"Legacy", &"WalkBlend", 1, &"WalkSpeed", &"Locomotion", 0, &"Fallback", &"Locomotion", 1, &"WalkBlend", &"BodyAdd", 0, &"Locomotion", &"BodyAdd", 1, &"Body", &"output", 0, &"BodyAdd"]
+node_connections = [&"output", 0, &"BodyAdd", &"WalkSeek", 0, &"Walk", &"WalkSpeed", 0, &"WalkSeek", &"WalkBlend", 0, &"Legacy", &"WalkBlend", 1, &"WalkSpeed", &"Locomotion", 0, &"Fallback", &"Locomotion", 1, &"WalkBlend", &"BodyAdd", 0, &"Locomotion", &"BodyAdd", 1, &"Body"]

@@ -93,8 +93,13 @@ static func gait_data() -> Dictionary:
 	var feet: Array = ["heel_strike_angle", "toe_off_angle", "toe_clearance_angle", "foot_flat_at", "heel_rise_at", "arm_swing", "elbow_bend", "arm_phase"]
 	var toggle_faders: Array = ["gait_model", "auto_step_length", "foot_roll", "fx_pelvis_bob", "fx_loading_dip", "fx_pelvis_sway", "fx_pelvis_rotation", "fx_pelvic_tilt"]
 	var toggle_knobs: Array = ["fx_shoulder_counter", "fx_arm_swing", "fx_elbow_bend", "freeze", "view_belt", "view_paths", "view_joints", "view_diagram"]
-	var view_faders: Array = ["scrub", "view_zoom", "time_scale", "", "", "", "", ""]
+	var view_faders: Array = ["scrub", "view_zoom", "time_scale", "reference_fit", "", "", "", ""]
 	var view_knobs: Array = ["scrub", "view_zoom", "view_guides", "view_ortho", "edit_rig", "", "", ""]
+	var run_faders := ["run_mode", "run_speed", "run_step_length", "run_step_height", "run_midstance_at", "run_pelvis_bob", "run_arm_swing", "run_torso_lean"]
+	var run_knobs := ["run_mode", "run_knee_drive", "run_duty_factor", "run_swing_peak", "run_swing_forward", "run_flight_lift", "run_elbow_bend", "stand_height"]
+	var run_strips := {}
+	for i in 8:
+		run_strips[str(i + 1)] = {"fader": g + run_faders[i], "knob": g + run_knobs[i]}
 	var proportions: Array = ["scale", "thigh_length", "shin_length", "foot_length", "torso_length", "chest_length", "upper_arm_length", "forearm_length"]
 	var prop2_faders: Array = ["ankle_height", "hip_width", "shoulder_width", "neck_length", "head_radius", "torso_width", "torso_depth", ""]
 	var prop2_knobs: Array = ["thigh_radius", "shin_radius", "upper_arm_radius", "forearm_radius", "", "", "", ""]
@@ -124,12 +129,23 @@ static func gait_data() -> Dictionary:
 		if not v.is_empty():
 			view[str(i + 1)] = v
 	d.banks = [_bank("Walk Cycle", cycle, g), _bank("Pelvis & Torso", pelvis, g), _bank("Feet & Arms", feet, g), {"name": "Toggles", "strips": toggles}, {"name": "View & Playback", "strips": view},
-		_bank("Proportions 1", proportions, "rig."), {"name": "Proportions 2", "strips": prop2}, graph_bank()]
+		_bank("Proportions 1", proportions, "rig."), {"name": "Proportions 2", "strips": prop2}, graph_bank(),
+		_bank("Posture & Roll", ["midstance_at", "roll_flow", "spine_curve", "head_level", "torso_lean", "heel_strike_angle", "toe_off_angle", "velocity_match"], g),
+		_bank("Ankle Path", ["edit_path", "swing_forward", "step_height", "swing_peak", "step_length", "midstance_at", "stand_height", "pelvis_bob"], g),
+		{"name": "Running", "strips": run_strips}]
 	return d
 
 
 static func graph_bank() -> Dictionary:
 	return _bank("Animation Graph", ["walk_blend", "body_blend", "playback_speed"], "graph.")
+
+
+static func locomotion_data() -> Dictionary:
+	var data := default_data()
+	data.banks = data.banks.slice(0, 3)
+	data.banks.append(_bank("Authored Animation", ["transition_duration", "cadence_multiplier", "stride_scale", "lean_intensity",
+		"foot_ik", "legacy", "", ""], "locomotion."))
+	return data
 
 
 static func walk_banks() -> Array:

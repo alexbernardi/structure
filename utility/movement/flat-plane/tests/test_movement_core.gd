@@ -15,7 +15,7 @@ func _world() -> World:
 func test_reaches_exactly_the_max_ground_speed(t) -> void:
 	var w := _world()
 	w.run(w.input(FWD), 1.5)
-	t.near(w.core.horizontal_speed(), 4.5, 0.001, "top speed = max_ground_speed")
+	t.near(w.core.horizontal_speed(), 6.0, 0.001, "top speed = max_ground_speed")
 	t.ok(w.core.velocity.z < 0.0 and absf(w.core.velocity.x) < 0.0001, "forward is -Z for yaw 0")
 
 
@@ -24,13 +24,13 @@ func test_acceleration_rate(t) -> void:
 	w.run(w.input(FWD), 0.05)
 	t.near(w.core.horizontal_speed(), 45.0 * 0.05, 0.2, "after 50 ms about ground_accel * t")
 	w.run(w.input(FWD), 0.2)
-	t.ok(w.core.horizontal_speed() > 4.4, "within 0.25 s it is near the cap")
+	t.ok(w.core.horizontal_speed() > 5.9, "within 0.25 s it is near the cap")
 
 
 func test_sprint_and_crouch_speeds(t) -> void:
 	var w := _world()
 	w.run(w.input(FWD, {"sprint": true}), 1.5)
-	t.near(w.core.horizontal_speed(), 4.5 * 1.6, 0.001, "sprint multiplier")
+	t.near(w.core.horizontal_speed(), 6.0 * 2.0, 0.001, "sprint multiplier")
 	var c := _world()
 	c.run(c.input(FWD, {"crouch": true, "sprint": true}), 1.5)
 	t.near(c.core.horizontal_speed(), 2.0, 0.001, "crouch speed wins over sprint")
@@ -40,7 +40,7 @@ func test_sprint_and_crouch_speeds(t) -> void:
 func test_diagonal_input_is_not_faster(t) -> void:
 	var w := _world()
 	w.run(w.input(Vector2(1, 1)), 1.5)
-	t.near(w.core.horizontal_speed(), 4.5, 0.001, "W+D is normalised")
+	t.near(w.core.horizontal_speed(), 6.0, 0.001, "W+D is normalised")
 
 
 func test_stops_and_friction_matters(t) -> void:
@@ -69,7 +69,7 @@ func test_momentum_above_the_cap_is_bled_not_clipped(t) -> void:
 	w.tick(w.input(FWD))
 	t.ok(w.core.horizontal_speed() > 8.0, "one tick later the extra speed is still there: %.2f" % w.core.horizontal_speed())
 	w.run(w.input(FWD), 1.0)
-	t.near(w.core.horizontal_speed(), 4.5, 0.01, "and friction brings it back to the cap")
+	t.near(w.core.horizontal_speed(), 6.0, 0.01, "and friction brings it back to the cap")
 
 
 func test_sideways_sliding_is_cut_quickly(t) -> void:
@@ -248,7 +248,7 @@ func test_bunny_hop_keeps_speed_where_walking_loses_it(t) -> void:
 	var walk := _world()
 	walk.core.velocity = Vector3(0, 0, -7.0)
 	walk.run(walk.input(FWD), 3.0)
-	t.near(walk.core.horizontal_speed(), 4.5, 0.01, "walking bleeds 7 m/s back to the cap")
+	t.near(walk.core.horizontal_speed(), 6.0, 0.01, "ground running bleeds 7 m/s back to the cap")
 	t.ok(hop.core.horizontal_speed() > 6.0, "chained jumps keep the momentum: %.2f" % hop.core.horizontal_speed())
 
 
@@ -276,7 +276,7 @@ func test_uphill_is_slower_than_flat_and_downhill_is_not(t) -> void:
 			w.core.step(w.input(case[1]), {"grounded": true, "normal": n, "can_stand": true}, World.DT)
 		speeds[case[0]] = w.core.velocity.length()
 	t.ok(speeds.uphill < speeds.downhill - 0.3, "uphill %.2f < downhill %.2f" % [speeds.uphill, speeds.downhill])
-	t.near(speeds.downhill, 4.5, 0.02, "downhill reaches the normal cap")
+	t.near(speeds.downhill, 6.0, 0.02, "downhill reaches the normal cap")
 
 
 func test_slope_penalty_can_be_removed(t) -> void:
@@ -287,7 +287,7 @@ func test_slope_penalty_can_be_removed(t) -> void:
 	w.core.grounded = true
 	for i in 240:
 		w.core.step(w.input(Vector2(-1, 0)), {"grounded": true, "normal": n, "can_stand": true}, World.DT)
-	t.near(w.core.velocity.length(), 4.5, 0.02, "no penalty -> full speed uphill")
+	t.near(w.core.velocity.length(), 6.0, 0.02, "no penalty -> full speed uphill")
 
 
 func test_crouch_needs_headroom_to_stand(t) -> void:
@@ -323,6 +323,6 @@ func test_telemetry_fields(t) -> void:
 	var w := _world()
 	w.tick(w.input(FWD))
 	t.ok(w.core.acceleration.length() > 10.0, "acceleration is measured: %.1f" % w.core.acceleration.length())
-	t.near(w.core.wish_speed, 4.5, 0.001, "wish speed reported")
+	t.near(w.core.wish_speed, 6.0, 0.001, "wish speed reported")
 	w.tick(w.input(Vector2.ZERO, {"jump_pressed": true}))
 	t.ok(w.core.just_jumped, "jump event flag")

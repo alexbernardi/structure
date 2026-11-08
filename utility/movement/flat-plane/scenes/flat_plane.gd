@@ -18,6 +18,10 @@ const BodyParams = preload("res://animation/body_params.gd")
 const BodyDynamics = preload("res://animation/body_dynamics.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const GaitModel = preload("res://animation/gait_model.gd")
+const LocomotionParams = preload("res://animation/locomotion_params.gd")
+const AuthoredVisual = preload("res://character/authored_mannequin.gd")
+const AuthoredAnimation = preload("res://animation/authored_animation.gd")
+const Bindings = preload("res://tuning/tuning_bindings.gd")
 
 var params: Params = Params.new()
 var world
@@ -31,6 +35,9 @@ var body_params = BodyParams.create()   ## visual-only parameters, tuned like th
 var dynamics   ## BodyDynamics: the spring model that drives the torso, pelvis, head and arms
 var gait_params = GaitParams.create()
 var gait_model
+var locomotion_params = LocomotionParams.create()
+var authored_visual
+var authored_animation
 ## Procedural presentation on/off. The physical controller never reads it: with animation off the body moves identically.
 var animation_enabled := true
 var options := {}   ## overrides command-line options (used by tests)
@@ -77,6 +84,14 @@ func _ready() -> void:
 	gait_model = GaitModel.new(gait_params)
 	visual.walk_animation.setup(visual, gait_model)
 	dynamics = BodyDynamics.new(body_params)
+	authored_visual = AuthoredVisual.new()
+	authored_visual.name = "AuthoredVisual"
+	authored_visual.top_level = true
+	authored_visual.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	body.add_child(authored_visual)
+	authored_animation = AuthoredAnimation.new()
+	authored_visual.add_child(authored_animation)
+	authored_animation.setup(authored_visual, locomotion_params)
 
 	cam = OrbitCamera.new()
 	cam.name = "OrbitCamera"
@@ -91,6 +106,13 @@ func _ready() -> void:
 
 	_build_readout()
 	_build_tuning()
+	gait_params.set_value("run_mode", 1.0)
+	if _args.has("legacy-animation"):
+		locomotion_params.set_value("legacy", 1.0)
+	locomotion_params.changed.connect(func(id: String, _value: float) -> void:
+		if id == "legacy":
+			_select_animation_system())
+	_select_animation_system()
 	if DisplayServer.get_name() != "headless" and not _args.has("no-window-state"):
 		var ws := WindowState.new()
 		ws.name = "WindowState"
@@ -114,15 +136,27 @@ func _build_tuning() -> void:
 	tuning = Tuning.new()
 	tuning.name = "Tuning"
 	add_child(tuning)
-	var opts := {"no_ui": _args.has("no-tuning-ui") or DisplayServer.get_name() == "headless" and not _args.has("tuning-ui")}
+	var opts := {"no_ui": _args.has("no-tuning-ui") or DisplayServer.get_name() == "headless" and not _args.has("tuning-ui"),
+		"bindings_path": "res://config/locomotion_bindings.json", "state_path": "user://tuning_state_locomotion.json",
+		"default_bindings": Bindings.locomotion_data()}
 	for pair in [["tuning-bindings", "bindings_path"], ["preset-dir", "preset_dir"], ["tuning-state", "state_path"]]:
 		if _args.has(pair[0]):
 			opts[pair[1]] = String(_args[pair[0]])
-	opts["extra_targets"] = [["body", "Body (visual)", body_params], ["gait", "Walk (visual)", gait_params],
-		["graph", "Animation graph", visual.walk_animation.params]]
+	opts["extra_targets"] = [["locomotion", "Authored animation", locomotion_params],
+		["body", "Legacy body", body_params], ["gait", "Legacy gait", gait_params],
+		["graph", "Legacy graph", visual.walk_animation.params]]
 	tuning.setup(params, midi, opts)
 	tuning.scene_action.connect(_on_tuning_action)
 	tuning.editor_toggled.connect(_on_editor_toggled)
+
+
+func _select_animation_system() -> void:
+	var legacy: bool = locomotion_params.is_on("legacy")
+	visual.visible = legacy
+	visual.walk_animation.tree.active = legacy
+	authored_animation.set_enabled(not legacy)
+	dynamics.reset()
+	_teleported = true
 
 
 func _on_editor_toggled(open: bool) -> void:
@@ -182,7 +216,11 @@ func _build_readout() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_B and not (tuning != null and tuning.editor != null and tuning.editor.visible):
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F9 and get_tree().current_scene == self and not (tuning != null and tuning.editor != null and tuning.editor.visible):
+		var error := get_tree().change_scene_to_file("res://scenes/locomotion_comparison.tscn")
+		if error != OK:
+			push_error("Cannot open locomotion comparison: %s" % error_string(error))
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_B and not (tuning != null and tuning.editor != null and tuning.editor.visible):
 		toggle_body_dynamics()
 	elif event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -199,6 +237,10 @@ func _notification(what: int) -> void:
 
 ## B: the spring body model on / off (off = the original simple pose). Physics is unaffected either way.
 func toggle_body_dynamics() -> void:
+	if not locomotion_params.is_on("legacy"):
+		if tuning != null:
+			tuning.toast.emit("B controls legacy body dynamics; select legacy animation to compare", "info")
+		return
 	var on: bool = body_params.is_on("body_dynamics")
 	body_params.set_value("body_dynamics", 0.0 if on else 1.0)
 	if tuning != null:
@@ -217,6 +259,7 @@ func _physics_process(dt: float) -> void:
 
 ## One physics tick of the body, plus the acceleration bookkeeping the (visual-only) body model reads next frame.
 func simulate_tick(frame: Dictionary, dt: float) -> void:
+	gait_params.set_value("run_mode", 1.0)
 	body.simulate(frame, dt)
 	_accel_sum += body.core.acceleration
 	_accel_ticks += 1
@@ -234,7 +277,12 @@ func _process(delta: float) -> void:
 		fwd_accel = Vector3(body.core.acceleration.x, 0, body.core.acceleration.z).dot(Vector3(v.x, 0, v.z).normalized())
 	var visual_offset: float = body.step_offset
 	visual.follow(body, visual_offset)
-	if animation_enabled:
+	if not locomotion_params.is_on("legacy"):
+		authored_animation.follow(body, visual_offset, _teleported, delta)
+	if animation_enabled and not locomotion_params.is_on("legacy"):
+		authored_animation.update(delta, {"speed": authored_animation.measured_speed, "vy": v.y, "grounded": body.core.grounded,
+			"crouching": body.core.crouching, "accel_forward": fwd_accel, "heading": heading, "teleported": _teleported})
+	elif animation_enabled:
 		visual.walk_animation.sync_parameters()
 		var pose: Dictionary = gait_model.update(delta * float(visual.walk_animation.params.get_value("playback_speed")), speed)
 		var state := {"speed": speed, "vy": v.y, "grounded": body.core.grounded, "crouching": body.core.crouching,
@@ -250,8 +298,9 @@ func _process(delta: float) -> void:
 	_teleported = false
 	_accel_sum = Vector3.ZERO
 	_accel_ticks = 0
-	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s\nWASD move   Mouse look   Space jump   Shift sprint   Ctrl/C crouch   R respawn\nEsc frees the mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset all   B body dynamics   F6/F7/F8 window   F11 fullscreen" % [
-		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching else ""]
+	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s   [%s]\nWASD run   Mouse look   Space jump   Hold Shift to sprint (2x by default)   Ctrl/C crouch   R respawn\nEsc frees mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset   F6/F7/F8 window   F9 A/B   F11 fullscreen" % [
+		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching else "",
+		"LEGACY" if locomotion_params.is_on("legacy") else "AUTHORED " + authored_animation.model.state]
 	if _args.has("screenshot") and _frames == int(_args.get("screenshot-frame", 90)):
 		get_viewport().get_texture().get_image().save_png(String(_args.screenshot))
 		get_tree().quit()

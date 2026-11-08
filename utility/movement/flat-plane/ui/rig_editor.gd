@@ -7,6 +7,7 @@
 ## controller (banks Proportions 1 and 2), in presets and in the HUD. Reads the posed skeleton, writes only rig parameters.
 extends Control
 
+const Visual = preload("res://character/character_visual.gd")
 const ORANGE := Color(1.0, 0.62, 0.2)
 const PURPLE := Color(0.75, 0.5, 1.0)
 const GREEN := Color(0.4, 0.95, 0.5)
@@ -94,13 +95,14 @@ func build_handles() -> Array[Dictionary]:
 		var out_dir := Vector3(sx, 0.0, 0.0)
 		out.append(_h("Hip joint offset", "hip_width", _joint("thigh_" + side), out_dir, "width", 1.0 / k, "drag sideways (front, back or 3/4 view)"))
 		out.append(_h("Shoulder joint offset", "shoulder_width", _joint("upper_arm_" + side), out_dir, "width", 1.0 / k, "drag sideways (front, back or 3/4 view)"))
-	var chest_c := chest + Vector3(0.0, d.chest * (0.12 / 0.26), 0.0)
-	var half_w: float = maxf(2.0 * d.shoulder_x - 0.10 * k, 0.1 * k) * 0.5
-	out.append(_h("Torso width", "torso_width", chest_c + Vector3(half_w * d.torso_w, 0.0, 0.0), Vector3(1, 0, 0), "width", 1.0 / half_w, "drag the side of the chest sideways"))
-	out.append(_h("Torso width", "torso_width", chest_c - Vector3(half_w * d.torso_w, 0.0, 0.0), Vector3(-1, 0, 0), "width", 1.0 / half_w, "drag the side of the chest sideways"))
-	var half_d: float = 0.21 * k * 0.5
+	var chest_c := _point("chest", Visual.chest_centre(d))
+	var chest_h: Vector3 = Visual.chest_half_size(d)
+	var half_w: float = chest_h.x / d.torso_w   # the half width at torso_width 1, so a drag of half_w changes it by 1
+	out.append(_h("Torso width", "torso_width", chest_c + Vector3(chest_h.x, 0.0, 0.0), Vector3(1, 0, 0), "width", 1.0 / half_w, "drag the side of the chest sideways"))
+	out.append(_h("Torso width", "torso_width", chest_c - Vector3(chest_h.x, 0.0, 0.0), Vector3(-1, 0, 0), "width", 1.0 / half_w, "drag the side of the chest sideways"))
+	var half_d: float = chest_h.z / d.torso_d
 	var fwd := _axis("chest", Vector3(0, 0, -1))
-	out.append(_h("Torso depth", "torso_depth", chest_c + fwd * half_d * d.torso_d, fwd, "radius", 1.0 / half_d, "drag the front of the chest"))
+	out.append(_h("Torso depth", "torso_depth", chest_c + fwd * chest_h.z, fwd, "radius", 1.0 / half_d, "drag the front of the chest"))
 	# thickness: the edge of each limb, perpendicular to it as seen by the camera
 	var limbs := [["Thigh thickness", "thigh_radius", hip, knee, d.thigh_r], ["Shin thickness", "shin_radius", knee, ankle, d.shin_r],
 		["Upper arm thickness", "upper_arm_radius", shoulder, elbow, d.upper_arm_r], ["Forearm thickness", "forearm_radius", elbow, wrist, d.forearm_r]]
@@ -109,8 +111,8 @@ func build_handles() -> Array[Dictionary]:
 		var b: Vector3 = l[3]
 		var perp := cam_fwd.cross((b - a).normalized()).normalized()
 		out.append(_h(l[0], l[1], (a + b) * 0.5 + perp * float(l[4]), perp, "radius", 1.0 / k, "drag the edge of the limb"))
-	var head_c := head + Vector3(0.0, d.head_r * (6.0 / 7.0), 0.0)
-	out.append(_h("Head size", "head_radius", head_c + cam_right * d.head_r, cam_right, "radius", 1.0 / k, "drag the edge of the head"))
+	var head_c := _point("head", Visual.head_centre(d))
+	out.append(_h("Head size", "head_radius", head_c + cam_right * d.head_r * 0.92, cam_right, "radius", 1.0 / (k * 0.92), "drag the edge of the head"))
 	return out
 
 

@@ -1,7 +1,7 @@
 ## Proportions of the humanoid rig: limb lengths, joint positions (hip and shoulder width, shoulder height) and limb thickness.
 ## VISUAL ONLY: the movement simulation never reads these. Lengths are metres at scale 1 and all of them (and the radii) are
 ## multiplied by the overall scale, so the gait model, which plans in metres on the belt, always sees the real size.
-## The parameter defaults are the proportions tuned in the first treadmill session (2026-11-07); ORIGINAL is the rig the sandbox character was
+## The defaults fit the user's walk-reference landmarks (2026-11-07); ORIGINAL is the rig the sandbox character was
 ## built with, which is what a null rig means (the flat-plane sandbox is not re-proportioned).
 extends RefCounted
 
@@ -28,27 +28,27 @@ static func definitions() -> Array[Dictionary]:
 	var out: Array[Dictionary] = [
 		_d("scale", "Overall size", "size", "x", 0.6, 1.5, 0.91, 0.01, {"curve": "log", "hint": "multiplies every length and thickness"}),
 		# ---- legs
-		_d("thigh_length", "Thigh length", "legs", "m", 0.30, 0.65, 0.495, 0.005, {"hint": "hip to knee"}),
-		_d("shin_length", "Shin length", "legs", "m", 0.30, 0.65, 0.48, 0.005, {"hint": "knee to ankle"}),
-		_d("ankle_height", "Ankle height", "legs", "m", 0.04, 0.12, 0.075, 0.0025, {"hint": "sole to ankle joint"}),
+		_d("thigh_length", "Thigh length", "legs", "m", 0.30, 0.65, 0.46, 0.005, {"hint": "hip to knee"}),
+		_d("shin_length", "Shin length", "legs", "m", 0.30, 0.65, 0.44, 0.005, {"hint": "knee to ankle"}),
+		_d("ankle_height", "Ankle height", "legs", "m", 0.04, 0.12, 0.085, 0.0025, {"hint": "sole to ankle joint"}),
 		_d("foot_length", "Foot length", "legs", "m", 0.15, 0.38, 0.255, 0.005, {"hint": "heel to toe; the ankle sits 26 % of the way along"}),
 		_d("hip_width", "Hip joint offset", "legs", "m", 0.04, 0.22, 0.10, 0.005, {"hint": "each hip joint's distance from the centre line"}),
 		# ---- torso
-		_d("torso_length", "Lower torso length", "torso", "m", 0.14, 0.50, 0.3, 0.005, {"hint": "pelvis to chest joint"}),
-		_d("chest_length", "Chest length", "torso", "m", 0.16, 0.45, 0.255, 0.005, {"hint": "chest joint to the base of the neck; the shoulders sit near the top"}),
-		_d("neck_length", "Neck length", "torso", "m", 0.03, 0.20, 0.035, 0.005),
+		_d("torso_length", "Lower torso length", "torso", "m", 0.14, 0.50, 0.34, 0.005, {"hint": "pelvis to chest joint"}),
+		_d("chest_length", "Chest length", "torso", "m", 0.16, 0.45, 0.295, 0.005, {"hint": "chest joint to the base of the neck; the shoulders sit near the top"}),
+		_d("neck_length", "Neck length", "torso", "m", 0.03, 0.20, 0.065, 0.005),
 		_d("head_radius", "Head radius", "torso", "m", 0.06, 0.18, 0.1225, 0.0025),
-		_d("shoulder_width", "Shoulder joint offset", "torso", "m", 0.10, 0.40, 0.215, 0.005, {"hint": "each shoulder joint's distance from the centre line"}),
+		_d("shoulder_width", "Shoulder joint offset", "torso", "m", 0.10, 0.40, 0.19, 0.005, {"hint": "each shoulder joint's distance from the centre line"}),
 		_d("torso_width", "Torso width", "torso", "x", 0.5, 1.6, 0.96, 0.02, {"hint": "side-to-side size of the pelvis, spine and chest blocks"}),
-		_d("torso_depth", "Torso depth", "torso", "x", 0.5, 1.8, 1.1, 0.02, {"hint": "front-to-back size of the pelvis, spine and chest blocks"}),
+		_d("torso_depth", "Torso depth", "torso", "x", 0.5, 1.8, 0.96, 0.02, {"hint": "front-to-back size of the pelvis, spine and chest blocks"}),
 		# ---- arms
-		_d("upper_arm_length", "Upper arm length", "arms", "m", 0.18, 0.50, 0.295, 0.005, {"hint": "shoulder to elbow"}),
-		_d("forearm_length", "Forearm length", "arms", "m", 0.16, 0.45, 0.29, 0.005, {"hint": "elbow to wrist"}),
+		_d("upper_arm_length", "Upper arm length", "arms", "m", 0.18, 0.50, 0.33, 0.005, {"hint": "shoulder to elbow"}),
+		_d("forearm_length", "Forearm length", "arms", "m", 0.16, 0.45, 0.28, 0.005, {"hint": "elbow to wrist"}),
 		# ---- thickness
-		_d("thigh_radius", "Thigh thickness", "thickness", "m", 0.03, 0.13, 0.075, 0.0005, {"hint": "radius"}),
-		_d("shin_radius", "Shin thickness", "thickness", "m", 0.025, 0.11, 0.0575, 0.0005, {"hint": "radius"}),
-		_d("upper_arm_radius", "Upper arm thickness", "thickness", "m", 0.025, 0.10, 0.05, 0.0005, {"hint": "radius"}),
-		_d("forearm_radius", "Forearm thickness", "thickness", "m", 0.02, 0.09, 0.0425, 0.0005, {"hint": "radius"}),
+		_d("thigh_radius", "Thigh thickness", "thickness", "m", 0.03, 0.13, 0.065, 0.0005, {"hint": "radius"}),
+		_d("shin_radius", "Shin thickness", "thickness", "m", 0.025, 0.11, 0.052, 0.0005, {"hint": "radius"}),
+		_d("upper_arm_radius", "Upper arm thickness", "thickness", "m", 0.025, 0.10, 0.045, 0.0005, {"hint": "radius"}),
+		_d("forearm_radius", "Forearm thickness", "thickness", "m", 0.02, 0.09, 0.0375, 0.0005, {"hint": "radius"}),
 	]
 	return out
 

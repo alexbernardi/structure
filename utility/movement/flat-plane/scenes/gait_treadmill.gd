@@ -1,23 +1,25 @@
-## Treadmill gait lab: the humanoid walks in place on a belt, seen from the side, with every variable of the walk on the
-## MIDI controller (banks Walk Cycle / Pelvis & Torso / Feet & Arms / Toggles / View & Playback) and a measurement overlay.
-## Presentation only: no physics body, no input to a simulation. The belt moves at exactly the walking speed, so a planted
+## Treadmill gait lab: the humanoid walks or runs in place on a belt, with MIDI tuning and a measurement overlay.
+## Presentation only: no physics body, no input to a simulation. The belt moves at exactly the current gait speed, so a planted
 ## foot must stay still on it; the lab measures that on the real skeleton.
 ##
 ## Launch: godot --path utility/movement/flat-plane res://scenes/gait_treadmill.tscn
 ## Options: --no-tuning, --no-hardware, --no-window-state, --midi-config=<path>, --tuning-bindings=<path>,
-##   --preset-dir=<path>, --tuning-state=<path>, --view=side|side-left|front|back|three-quarter,
+##   --preset-dir=<path>, --tuning-state=<path>, --view=side|side-left|front|back|three-quarter, --gait-mode=walk|run,
 ##   --gait.<parameter>=<value> (e.g. --gait.freeze=1 --gait.scrub=0.25), --screenshot=<png> [--screenshot-frame=N],
 ##   --quit-after=<seconds>.
 ## Keys: Space freeze/resume, , and . step the frozen cycle, 1-5 camera views, +/- or wheel zoom, T belt, B body dynamics,
-##   E edit the proportions by dragging handles (Backspace resets them), Ctrl+wheel resizes the character,
+##   E edit proportions, P edit the ankle path (Backspace resets that editor's values), Ctrl+wheel resizes the character,
 ##   F3 HUD, F4 bindings editor, PgUp/PgDn bank, [ ] preset, F5 save preset, Home reset all, F6/F7/F8/F11 window.
 extends Node3D
 
 const Visual = preload("res://character/character_visual.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const GaitModel = preload("res://animation/gait_model.gd")
+const Reference = preload("res://animation/walk_reference.gd")
+const RunReference = preload("res://animation/run_reference.gd")
 const RigParams = preload("res://animation/rig_params.gd")
 const RigEditor = preload("res://ui/rig_editor.gd")
+const PathEditor = preload("res://ui/gait_path_editor.gd")
 const BodyParams = preload("res://animation/body_params.gd")
 const BodyDynamics = preload("res://animation/body_dynamics.gd")
 const Params = preload("res://movement/movement_params.gd")
@@ -38,11 +40,11 @@ const BELT_LENGTH := 4.0
 const STRIPE_SPACING := 0.25
 const SCRUB_STEP := 1.0 / 48.0
 const VIEWS := {
-	"side": Vector3(5.0, 0.95, 0.0), "side-left": Vector3(-5.0, 0.95, 0.0),
+	"side-left": Vector3(-5.0, 0.95, 0.0), "side": Vector3(5.0, 0.95, 0.0),
 	"front": Vector3(0.0, 0.95, -5.0), "back": Vector3(0.0, 0.95, 5.0),
 	"three-quarter": Vector3(3.2, 1.3, -3.6),
 }
-const VIEW_KEYS := {KEY_1: "side", KEY_2: "side-left", KEY_3: "front", KEY_4: "back", KEY_5: "three-quarter"}
+const VIEW_KEYS := {KEY_1: "side-left", KEY_2: "side", KEY_3: "front", KEY_4: "back", KEY_5: "three-quarter"}
 
 var gait_params = GaitParams.create()
 var rig_params = RigParams.create()   ## proportions of the humanoid (limb lengths, widths, thickness)
@@ -55,8 +57,16 @@ var midi
 var tuning
 var overlay
 var rig_editor
+var path_editor
+var view_controls: VBoxContainer
+var view_buttons := {}
+var pose_buttons: Array[Button] = []
+var play_button: Button
+var reference_button: Button
+var walk_button: Button
+var run_button: Button
 var options := {}   ## overrides command-line options (used by tests)
-var view := "side"
+var view := "side-left"
 var speed := 0.0    ## the belt's (smoothed) speed
 var belt_offset := 0.0
 var slip_l := 0.0   ## measured foot slip on the belt, m/s (worst of the last second)
@@ -91,12 +101,15 @@ func _ready() -> void:
 			body_params.set_value(String(k).substr(5), float(_args[k]))
 		elif String(k).begins_with("rig."):
 			rig_params.set_value(String(k).substr(4), float(_args[k]))
-	view = String(_args.get("view", "side"))
+	view = String(_args.get("view", "side-left"))
 	if not VIEWS.has(view):
-		view = "side"
-	speed = float(gait_params.get_value("walk_speed"))
+		view = "side-left"
+	speed = _belt_target()
 	_prev_speed = speed
 	model = GaitModel.new(gait_params, rig_params)
+	gait_params.changed.connect(_on_edit_changed)
+	if gait_params.is_on("edit_path"):
+		_on_edit_changed("edit_path", 1.0)
 	rig_params.changed.connect(func(_id: String, _v: float) -> void: _rig_dirty = true)
 	dynamics = BodyDynamics.new(body_params)
 	_build_world()
@@ -105,11 +118,23 @@ func _ready() -> void:
 	visual.walk_animation.setup(visual, model)
 	cam = Camera3D.new()
 	cam.name = "Camera"
+	cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(cam)
 	cam.current = true
 	_build_overlay()
 	_apply_camera()
 	_build_tuning()
+	_build_view_controls()
+	if _args.has("gait-mode"):
+		if _args["gait-mode"] not in ["walk", "run"]:
+			push_error("Unknown treadmill gait-mode '%s'; use walk or run" % _args["gait-mode"])
+			get_tree().quit(1)
+			return
+		set_running(_args["gait-mode"] == "run")
+		if _args.has("gait.scrub"):
+			gait_params.set_value("scrub", float(_args["gait.scrub"]))
+	speed = _belt_target()
+	_prev_speed = speed
 	if DisplayServer.get_name() != "headless" and not _args.has("no-window-state"):
 		var ws := WindowState.new()
 		ws.name = "WindowState"
@@ -184,6 +209,95 @@ func _build_overlay() -> void:
 	rig_editor = RigEditor.new()
 	rig_editor.scene = self
 	layer.add_child(rig_editor)
+	path_editor = PathEditor.new()
+	path_editor.scene = self
+	layer.add_child(path_editor)
+
+
+func _button(row: HBoxContainer, text: String, hint: String, action: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.tooltip_text = hint
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(action)
+	row.add_child(button)
+	return button
+
+
+func _build_view_controls() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 6
+	add_child(layer)
+	view_controls = VBoxContainer.new()
+	view_controls.position = Vector2(18, 165)
+	layer.add_child(view_controls)
+	var cameras := HBoxContainer.new()
+	view_controls.add_child(cameras)
+	for spec in [["side-left", "Side", "1: reference direction, right to left"], ["front", "Front", "3: face the character"],
+		["side", "Other side", "2: opposite side"], ["three-quarter", "3/4", "5: three-quarter view"]]:
+		view_buttons[spec[0]] = _button(cameras, spec[1], spec[2], set_view.bind(spec[0]))
+	walk_button = _button(cameras, "Walk", "Reference walking; remembers its own speed and cycle settings", set_running.bind(false))
+	run_button = _button(cameras, "Run", "Running with flight; starts at 7 m/s, tuned in the Running bank", set_running.bind(true))
+	var poses := HBoxContainer.new()
+	view_controls.add_child(poses)
+	for i in Reference.PHASES.size():
+		pose_buttons.append(_button(poses, Reference.LABELS[i], "Pause at this reference pose", show_reference_pose.bind(i)))
+	play_button = _button(poses, "Pause", "Space: pause or resume the gait", _toggle.bind("freeze"))
+	reference_button = _button(poses, "Reference default", "Restore the matched walk, proportions, graph and perspective side view",
+		restore_reference)
+	_refresh_gait_controls()
+
+
+func _belt_target() -> float:
+	return gait_params.get_value(GaitParams.profile_id("walk_speed", gait_params.is_on("run_mode")))
+
+
+func set_running(running: bool) -> void:
+	gait_params.set_value("run_mode", 1.0 if running else 0.0)
+	if tuning != null:
+		var bank_name := "Running" if running else "Walk Cycle"
+		for i in tuning.bindings.bank_count():
+			if tuning.bindings.bank_name(i) == bank_name:
+				tuning.engine.switch_bank(i)
+				break
+	_refresh_gait_controls()
+
+
+func _refresh_gait_controls() -> void:
+	if run_button == null:
+		return
+	var running: bool = gait_params.is_on("run_mode")
+	walk_button.disabled = not running
+	run_button.disabled = running
+	var labels: Array = RunReference.LABELS if running else Reference.LABELS
+	for i in pose_buttons.size():
+		pose_buttons[i].text = labels[i]
+		pose_buttons[i].tooltip_text = "Pause at this running pose" if running else "Pause at this reference walk pose"
+	reference_button.text = "Run default" if running else "Reference default"
+	reference_button.tooltip_text = "Restore the current mode's default gait, proportions, graph and perspective side view"
+
+
+func show_reference_pose(index: int) -> void:
+	gait_params.set_value("freeze", 1.0)
+	var phases: Array = Reference.PHASES
+	if gait_params.is_on("run_mode"):
+		var c: Dictionary = model.cycle_for(speed)
+		phases = RunReference.phases(c.d)
+	gait_params.set_value("scrub", phases[index])
+
+
+func restore_reference() -> void:
+	var running: bool = gait_params.is_on("run_mode")
+	if tuning != null:
+		if not tuning.load_preset("run" if running else "default"):
+			return
+	else:
+		gait_params.reset_all()
+		rig_params.reset_all()
+		visual.walk_animation.params.reset_all()
+		gait_params.set_value("run_mode", 1.0 if running else 0.0)
+	set_view("side-left")
+	_refresh_gait_controls()
 
 
 # ------------------------------------------------------------------ camera
@@ -208,7 +322,8 @@ func _apply_camera() -> void:
 	else:
 		cam.projection = Camera3D.PROJECTION_PERSPECTIVE
 		cam.fov = 28.0 / zoom
-		cam.h_offset = 0.0
+		var span := 2.0 * cam.global_position.distance_to(target) * tan(deg_to_rad(cam.fov) * 0.5)
+		cam.h_offset = _hud_width() * 0.5 * span / h_px
 	cam.near = 0.05
 	cam.far = 40.0
 
@@ -271,6 +386,12 @@ func _next_view(step: int) -> String:
 # ------------------------------------------------------------------ input
 
 func _input(event: InputEvent) -> void:
+	if view_controls != null and (event is InputEventMouseButton or event is InputEventMouseMotion):
+		if view_controls.get_global_rect().has_point(event.position) and path_editor.dragging < 0 and rig_editor.dragging < 0:
+			return
+	if path_editor != null and path_editor.handle_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	if rig_editor != null and rig_editor.handle_input(event):
 		get_viewport().set_input_as_handled()
 
@@ -305,6 +426,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle("view_belt")
 		KEY_E:
 			_toggle("edit_rig")
+		KEY_P:
+			_toggle("edit_path")
 		KEY_B:
 			_toggle("body_dynamics", true)
 
@@ -334,6 +457,9 @@ func _process(delta: float) -> void:
 	_frames += 1
 	advance(delta)
 	_apply_camera_if_changed()
+	if play_button != null:
+		play_button.text = "Play" if gait_params.is_on("freeze") else "Pause"
+	_refresh_gait_controls()
 	_measure_slip(delta)
 	if _args.has("screenshot") and _frames == int(_args.get("screenshot-frame", 60)):
 		get_viewport().get_texture().get_image().save_png(String(_args.screenshot))
@@ -346,7 +472,8 @@ var _last_cam_key := ""
 
 
 func _apply_camera_if_changed() -> void:
-	var key := "%s|%s|%s|%s" % [view, gait_params.get_value("view_zoom"), gait_params.is_on("view_ortho"), _hud_width()]
+	var key := "%s|%s|%s|%s|%s|%s" % [view, gait_params.get_value("view_zoom"), gait_params.is_on("view_ortho"),
+		_hud_width(), rig_params.get_value("scale"), get_viewport().get_visible_rect().size]
 	if key != _last_cam_key:
 		_last_cam_key = key
 		_apply_camera()
@@ -359,7 +486,7 @@ func advance(delta: float) -> void:
 	if _rig_dirty:
 		_rig_dirty = false
 		visual.apply_rig(rig_params)
-	var target: float = gait_params.get_value("walk_speed")
+	var target := _belt_target()
 	speed = target if _first else move_toward(speed, target, SPEED_ACCEL * delta)
 	var graph_speed: float = visual.walk_animation.params.get_value("playback_speed")
 	var scaled := delta * float(gait_params.get_value("time_scale")) * graph_speed
@@ -368,7 +495,7 @@ func advance(delta: float) -> void:
 	if not frozen:
 		belt_offset += speed * scaled
 	_move_stripes()
-	var accel := (speed - _prev_speed) / maxf(delta, 1e-4)
+	var accel := 0.0 if _first else (speed - _prev_speed) / maxf(delta, 1e-4)
 	_prev_speed = speed
 	var kin := {"velocity": Vector3(0.0, 0.0, -speed), "accel": Vector3(0.0, 0.0, -accel), "heading": 0.0 if speed > 0.01 else NAN,
 		"grounded": true, "gait_phase": float(pose.get("phase", 0.0)) * TAU, "gait_amount": float(pose.get("gait_amount", 0.0)), "teleported": _first}
@@ -379,9 +506,34 @@ func advance(delta: float) -> void:
 	visual.update_pose(state, delta)
 
 
-## Editing the proportions freezes the walk (a moving target is hard to drag) and resumes it afterwards, unless it was frozen already.
+func _on_edit_changed(id: String, value: float) -> void:
+	if id == "run_mode":
+		if path_editor != null:
+			path_editor.cancel_drag()
+		model.phase = 0.0
+		gait_params.set_value("scrub", 0.0)
+		_first = true
+		_sole_valid.fill(false)
+		_slip_peak.fill(0.0)
+		_slip_clock = 0.0
+		slip_l = 0.0
+		slip_r = 0.0
+		_refresh_gait_controls()
+		return
+	if value < 0.5 or id not in ["edit_rig", "edit_path"]:
+		return
+	gait_params.set_value("edit_rig" if id == "edit_path" else "edit_path", 0.0)
+	if id == "edit_path":
+		gait_params.set_value("view_paths", 1.0)
+		if view not in ["side", "side-left"]:
+			view = "side-left"
+			if cam != null:
+				_apply_camera()
+
+
+## Entering either editor freezes the pose; switching editors keeps the original playback state.
 func _update_edit_mode() -> void:
-	var editing: bool = gait_params.is_on("edit_rig")
+	var editing: bool = gait_params.is_on("edit_rig") or gait_params.is_on("edit_path")
 	if editing and not _was_editing:
 		_froze_for_edit = not gait_params.is_on("freeze")
 		if _froze_for_edit:

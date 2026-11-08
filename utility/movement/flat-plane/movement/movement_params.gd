@@ -9,12 +9,12 @@ const GROUPS := ["ground", "jump", "air", "slope", "body"]
 
 ## type "bool" is stored as 0.0 / 1.0. `fine` is the step used by fine-adjustment controls (knobs).
 const DEFS: Array[Dictionary] = [
-	{"id": "max_ground_speed", "label": "Max ground speed", "group": "ground", "unit": "m/s", "min": 1.0, "max": 15.0, "default": 4.5, "step": 0.1},
+	{"id": "max_ground_speed", "label": "Max ground speed", "group": "ground", "unit": "m/s", "min": 1.0, "max": 15.0, "default": 6.0, "step": 0.1},
 	{"id": "ground_accel", "label": "Ground acceleration", "group": "ground", "unit": "m/s^2", "min": 1.0, "max": 120.0, "default": 45.0, "step": 1.0},
 	{"id": "ground_friction", "label": "Ground friction", "group": "ground", "unit": "1/s", "min": 0.0, "max": 20.0, "default": 7.0, "step": 0.1},
 	{"id": "braking", "label": "Braking (no/opposing input)", "group": "ground", "unit": "m/s^2", "min": 0.0, "max": 100.0, "default": 20.0, "step": 1.0},
 	{"id": "stop_speed", "label": "Friction stop speed", "group": "ground", "unit": "m/s", "min": 0.1, "max": 5.0, "default": 1.0, "step": 0.05},
-	{"id": "sprint_multiplier", "label": "Sprint multiplier", "group": "ground", "unit": "x", "min": 1.0, "max": 3.0, "default": 1.6, "step": 0.05},
+	{"id": "sprint_multiplier", "label": "Sprint multiplier", "group": "ground", "unit": "x", "min": 1.0, "max": 3.0, "default": 2.0, "step": 0.05},
 	{"id": "crouch_speed", "label": "Crouch speed", "group": "ground", "unit": "m/s", "min": 0.5, "max": 6.0, "default": 2.0, "step": 0.1},
 	{"id": "jump_impulse", "label": "Jump impulse", "group": "jump", "unit": "m/s", "min": 1.0, "max": 15.0, "default": 5.5, "step": 0.1},
 	{"id": "gravity", "label": "Gravity", "group": "jump", "unit": "m/s^2", "min": 1.0, "max": 60.0, "default": 19.6, "step": 0.2},

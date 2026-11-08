@@ -12,25 +12,28 @@ const THIGH := 0.45
 const SHIN := 0.44
 const ANKLE_H := 0.065     # foot joint height above the ground when the sole is flat
 const HIP_DROP := 0.05     # thigh joints sit this far below the pelvis joint
+const HAND_LENGTH_RATIO := 0.42
 
-## name, parent, rest origin (relative to the parent joint), mesh kind, mesh size, mesh offset from the joint, colour
+## name, parent, rest origin (relative to the parent joint), colour. The meshes come from mesh_specs().
 const BONES := [
-	["pelvis", "", Vector3(0.0, 1.01, 0.0), "box", Vector3(0.32, 0.18, 0.20), Vector3(0, 0.0, 0), "pants"],
-	["spine", "pelvis", Vector3(0.0, 0.08, 0.0), "box", Vector3(0.30, 0.22, 0.18), Vector3(0, 0.10, 0), "shirt"],
-	["chest", "spine", Vector3(0.0, 0.20, 0.0), "box", Vector3(0.36, 0.28, 0.21), Vector3(0, 0.12, 0), "shirt"],
-	["neck", "chest", Vector3(0.0, 0.26, 0.0), "capsule", Vector3(0.045, 0.14, 0.0), Vector3(0, 0.04, 0), "skin"],
-	["head", "neck", Vector3(0.0, 0.08, 0.0), "sphere", Vector3(0.105, 0.0, 0.0), Vector3(0, 0.09, 0), "skin"],
-	["upper_arm_l", "chest", Vector3(-0.23, 0.22, 0.0), "capsule", Vector3(0.050, 0.30, 0.0), Vector3(0, -0.14, 0), "shirt"],
-	["forearm_l", "upper_arm_l", Vector3(0.0, -0.29, 0.0), "capsule", Vector3(0.042, 0.28, 0.0), Vector3(0, -0.13, 0), "skin"],
-	["upper_arm_r", "chest", Vector3(0.23, 0.22, 0.0), "capsule", Vector3(0.050, 0.30, 0.0), Vector3(0, -0.14, 0), "shirt"],
-	["forearm_r", "upper_arm_r", Vector3(0.0, -0.29, 0.0), "capsule", Vector3(0.042, 0.28, 0.0), Vector3(0, -0.13, 0), "skin"],
-	["thigh_l", "pelvis", Vector3(-0.10, -0.05, 0.0), "capsule", Vector3(0.075, 0.46, 0.0), Vector3(0, -0.22, 0), "pants"],
-	["shin_l", "thigh_l", Vector3(0.0, -THIGH, 0.0), "capsule", Vector3(0.058, 0.44, 0.0), Vector3(0, -0.21, 0), "pants"],
-	["foot_l", "shin_l", Vector3(0.0, -SHIN, 0.0), "box", Vector3(0.10, FOOT_H, 0.25), Vector3(0, -0.03, -0.06), "shoe"],
-	["thigh_r", "pelvis", Vector3(0.10, -0.05, 0.0), "capsule", Vector3(0.075, 0.46, 0.0), Vector3(0, -0.22, 0), "pants"],
-	["shin_r", "thigh_r", Vector3(0.0, -THIGH, 0.0), "capsule", Vector3(0.058, 0.44, 0.0), Vector3(0, -0.21, 0), "pants"],
-	["foot_r", "shin_r", Vector3(0.0, -SHIN, 0.0), "box", Vector3(0.10, FOOT_H, 0.25), Vector3(0, -0.03, -0.06), "shoe"],
+	["pelvis", "", Vector3(0.0, 1.01, 0.0), "pants"],
+	["spine", "pelvis", Vector3(0.0, 0.08, 0.0), "shirt"],
+	["chest", "spine", Vector3(0.0, 0.20, 0.0), "shirt"],
+	["neck", "chest", Vector3(0.0, 0.26, 0.0), "skin"],
+	["head", "neck", Vector3(0.0, 0.08, 0.0), "skin"],
+	["upper_arm_l", "chest", Vector3(-0.23, 0.22, 0.0), "shirt"],
+	["forearm_l", "upper_arm_l", Vector3(0.0, -0.29, 0.0), "skin"],
+	["upper_arm_r", "chest", Vector3(0.23, 0.22, 0.0), "shirt"],
+	["forearm_r", "upper_arm_r", Vector3(0.0, -0.29, 0.0), "skin"],
+	["thigh_l", "pelvis", Vector3(-0.10, -0.05, 0.0), "pants"],
+	["shin_l", "thigh_l", Vector3(0.0, -THIGH, 0.0), "pants"],
+	["foot_l", "shin_l", Vector3(0.0, -SHIN, 0.0), "shoe"],
+	["thigh_r", "pelvis", Vector3(0.10, -0.05, 0.0), "pants"],
+	["shin_r", "thigh_r", Vector3(0.0, -THIGH, 0.0), "pants"],
+	["foot_r", "shin_r", Vector3(0.0, -SHIN, 0.0), "shoe"],
 ]
+## Extra meshes riding a bone next to its main one: key, bone, node name, colour
+const EXTRAS := [["hand_l", "forearm_l", "Hand", "skin"], ["hand_r", "forearm_r", "Hand", "skin"], ["nose", "head", "Nose", "skin"]]
 const COLOURS := {"skin": Color(0.88, 0.70, 0.55), "shirt": Color(0.25, 0.45, 0.80), "pants": Color(0.22, 0.24, 0.30), "shoe": Color(0.12, 0.12, 0.13)}
 
 var skeleton := Skeleton3D.new()
@@ -74,6 +77,12 @@ func build() -> void:
 		for b in BONES:
 			bone_index[b[0]] = skeleton.find_bone(b[0])
 			_meshes[b[0]] = skeleton.get_node("Attach_%s/Mesh" % b[0])
+		for e in EXTRAS:
+			var attach: Node = skeleton.get_node("Attach_%s" % e[1])
+			_meshes[e[0]] = attach.get_node_or_null(NodePath(e[2]))
+			if _meshes[e[0]] == null:   # a scene saved before the mesh existed
+				_meshes[e[0]] = _add_mesh(attach, e[2], e[3])
+		_apply_meshes()
 		_stand_hip = _hip_height(0.0, 0.0)
 	if skeleton.get_bone_count() > 0:
 		return
@@ -91,20 +100,85 @@ func build() -> void:
 		attach.name = "Attach_%s" % b[0]
 		attach.bone_name = b[0]
 		skeleton.add_child(attach)
-		var mi := MeshInstance3D.new()
-		mi.name = "Mesh"
-		mi.mesh = _mesh(b[3], b[4])
-		mi.position = b[5]
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = COLOURS[b[6]]
-		mat.roughness = 0.85
-		mi.material_override = mat
-		attach.add_child(mi)
-		_meshes[b[0]] = mi
+		_meshes[b[0]] = _add_mesh(attach, "Mesh", b[3])
+	for e in EXTRAS:
+		_meshes[e[0]] = _add_mesh(skeleton.get_node("Attach_%s" % e[1]), e[2], e[3])
+	_apply_meshes()
 	_stand_hip = _hip_height(0.0, 0.0)
 
 
-func _mesh(kind: String, size: Vector3) -> Mesh:
+func _add_mesh(parent: Node, mesh_name: String, colour: String) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = mesh_name
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = COLOURS[colour]
+	mat.roughness = 0.85
+	mi.material_override = mat
+	parent.add_child(mi)
+	return mi
+
+
+## The primitive body shapes for a set of rig dimensions (RigParams.dims): mesh key -> [kind, size, offset from the bone's
+## joint, scale]. "box" size = extents; "sphere" size = (radius, height); "capsule" size = (radius, height). The trunk pieces
+## are capsules squashed front-to-back, the pelvis an egg tipped back under the waist, the head an egg a little taller than
+## wide whose centre sits forward of the neck, with a nose to show which way it faces.
+static func mesh_specs(d: Dictionary) -> Dictionary:
+	var k: float = d.scale
+	var seg: float = d.torso * (0.20 / 0.28)
+	var foot_t: float = FOOT_H * k
+	var pelvis_hw: float = (d.hip_x + 0.075 * k) * d.torso_w
+	var pelvis_hd: float = 0.11 * k * d.torso_d
+	var spine_hw: float = 0.14 * k * d.torso_w
+	var spine_hd: float = 0.095 * k * d.torso_d
+	var chest_h := chest_half_size(d)
+	var hr: float = d.head_r
+	var specs := {
+		"pelvis": ["sphere", Vector3(pelvis_hd, 0.22 * k, 0.0), Vector3(0.0, -0.015 * k, 0.012 * k), Vector3(pelvis_hw / pelvis_hd, 1.0, 1.0)],
+		"spine": ["capsule", Vector3(spine_hd, seg * 1.7, 0.0), Vector3(0.0, seg * 0.6, 0.004 * k), Vector3(spine_hw / spine_hd, 1.0, 1.0)],
+		"chest": ["capsule", Vector3(chest_h.z, chest_h.y * 2.0, 0.0), chest_centre(d), Vector3(chest_h.x / chest_h.z, 1.0, 1.0)],
+		"neck": ["capsule", Vector3(0.045 * k, d.neck * 2.2, 0.0), Vector3(0.0, d.neck * 0.3, 0.0), Vector3.ONE],
+		"head": ["sphere", Vector3(hr * 0.92, hr * 2.0, 0.0), head_centre(d), Vector3(0.84, 1.0, 1.0)],
+		"nose": ["sphere", Vector3(hr * 0.16, hr * 0.36, 0.0), head_centre(d) + Vector3(0.0, -hr * 0.12, -hr * 0.86), Vector3.ONE],
+	}
+	for s in ["l", "r"]:
+		specs["upper_arm_" + s] = ["capsule", Vector3(d.upper_arm_r, d.upper_arm * (0.30 / 0.29), 0.0), Vector3(0.0, -d.upper_arm * (0.14 / 0.29), 0.0), Vector3.ONE]
+		specs["forearm_" + s] = ["capsule", Vector3(d.forearm_r, d.forearm * (0.28 / 0.29), 0.0), Vector3(0.0, -d.forearm * (0.13 / 0.29), 0.0), Vector3.ONE]
+		var hand_len: float = d.forearm * HAND_LENGTH_RATIO
+		var hand_r: float = d.forearm_r * 1.1
+		specs["hand_" + s] = ["capsule", Vector3(hand_r, hand_len, 0.0), Vector3(0.0, -d.forearm - hand_len * 0.38, 0.0), Vector3(1.0, 1.0, 0.45)]
+		specs["thigh_" + s] = ["capsule", Vector3(d.thigh_r, d.thigh * (0.46 / 0.45), 0.0), Vector3(0.0, -d.thigh * (0.22 / 0.45), 0.0), Vector3.ONE]
+		specs["shin_" + s] = ["capsule", Vector3(d.shin_r, d.shin, 0.0), Vector3(0.0, -d.shin * (0.21 / 0.44), 0.0), Vector3.ONE]
+		specs["foot_" + s] = ["box", Vector3(0.10 * k, foot_t, d.foot_len), Vector3(0.0, -(d.ankle_h - foot_t * 0.5), -(d.toe.x + d.heel.x) * 0.5), Vector3.ONE]
+	return specs
+
+
+## Centre of the chest shape relative to the chest joint, and its half width / height / depth (used by the rig editor too).
+static func chest_centre(d: Dictionary) -> Vector3:
+	return Vector3(0.0, d.chest * 0.5, 0.0)
+
+
+static func chest_half_size(d: Dictionary) -> Vector3:
+	var k: float = d.scale
+	return Vector3(maxf(d.shoulder_x - 0.025 * k, 0.05 * k) * d.torso_w, d.chest * 0.62, 0.105 * k * d.torso_d)
+
+
+## Centre of the head shape relative to the head joint (the top of the neck): above it and a little forward.
+static func head_centre(d: Dictionary) -> Vector3:
+	return Vector3(0.0, d.head_r * 0.85, -d.head_r * 0.15)
+
+
+func _apply_meshes() -> void:
+	var specs := mesh_specs(dims)
+	for key in specs:
+		var mi: MeshInstance3D = _meshes.get(key)
+		if mi == null:
+			continue
+		mi.mesh = _mesh(specs[key][0], specs[key][1])
+		mi.position = specs[key][2]
+		mi.scale = specs[key][3]
+
+
+static func _mesh(kind: String, size: Vector3) -> Mesh:
 	match kind:
 		"box":
 			var m := BoxMesh.new()
@@ -113,7 +187,7 @@ func _mesh(kind: String, size: Vector3) -> Mesh:
 		"sphere":
 			var s := SphereMesh.new()
 			s.radius = size.x
-			s.height = size.x * 2.0
+			s.height = size.y
 			return s
 	var c := CapsuleMesh.new()
 	c.radius = size.x
@@ -148,25 +222,7 @@ func apply_rig(rig) -> void:
 		skeleton.set_bone_rest(idx, Transform3D(Basis.IDENTITY, origins[bone]))
 		if bone != "pelvis":   # the pelvis' position is posed every frame
 			skeleton.set_bone_pose_position(idx, origins[bone])
-	var seg: float = d.torso * (0.20 / 0.28)
-	var foot_t: float = FOOT_H * k
-	var specs := {
-		"pelvis": ["box", Vector3((2.0 * d.hip_x + 0.12 * k) * d.torso_w, 0.18 * k, 0.20 * k * d.torso_d), Vector3.ZERO],
-		"spine": ["box", Vector3(0.30 * k * d.torso_w, seg * 1.1, 0.18 * k * d.torso_d), Vector3(0.0, seg * 0.5, 0.0)],
-		"chest": ["box", Vector3(maxf(2.0 * d.shoulder_x - 0.10 * k, 0.1 * k) * d.torso_w, d.chest * (0.28 / 0.26), 0.21 * k * d.torso_d), Vector3(0.0, d.chest * (0.12 / 0.26), 0.0)],
-		"neck": ["capsule", Vector3(0.045 * k, d.neck * 1.75, 0.0), Vector3(0.0, d.neck * 0.5, 0.0)],
-		"head": ["sphere", Vector3(d.head_r, 0.0, 0.0), Vector3(0.0, d.head_r * (6.0 / 7.0), 0.0)],
-	}
-	for s in ["l", "r"]:
-		specs["upper_arm_" + s] = ["capsule", Vector3(d.upper_arm_r, d.upper_arm * (0.30 / 0.29), 0.0), Vector3(0.0, -d.upper_arm * (0.14 / 0.29), 0.0)]
-		specs["forearm_" + s] = ["capsule", Vector3(d.forearm_r, d.forearm * (0.28 / 0.29), 0.0), Vector3(0.0, -d.forearm * (0.13 / 0.29), 0.0)]
-		specs["thigh_" + s] = ["capsule", Vector3(d.thigh_r, d.thigh * (0.46 / 0.45), 0.0), Vector3(0.0, -d.thigh * (0.22 / 0.45), 0.0)]
-		specs["shin_" + s] = ["capsule", Vector3(d.shin_r, d.shin, 0.0), Vector3(0.0, -d.shin * (0.21 / 0.44), 0.0)]
-		specs["foot_" + s] = ["box", Vector3(0.10 * k, foot_t, d.foot_len), Vector3(0.0, -(d.ankle_h - foot_t * 0.5), -(d.toe.x + d.heel.x) * 0.5)]
-	for bone in specs:
-		var mi: MeshInstance3D = _meshes[bone]
-		mi.mesh = _mesh(specs[bone][0], specs[bone][1])
-		mi.position = specs[bone][2]
+	_apply_meshes()
 	_stand_hip = _hip_height(0.0, 0.0)
 
 
@@ -352,7 +408,7 @@ func _calculate_pose(state: Dictionary, delta: float) -> void:
 	_set_rotation("upper_arm_r", Quaternion(Vector3.RIGHT, arm_r) * Quaternion(Vector3.FORWARD, -roll_r))
 
 	var breathing := sin(Time.get_ticks_msec() / 650.0) * 0.012 * idle
-	var chest_lean := -(forward_lean + 0.10 * crouch_blend + (float(gait_pose.torso_lean) * gw if use_gait else 0.0)) + breathing
+	var chest_lean := -(forward_lean + 0.10 * crouch_blend) + breathing
 	if use_dyn:
 		# pitch + = forward (a negative rotation about X); roll + = to the right and yaw + = to the right (a negative
 		# rotation about Y). The spine takes 40 % of the torso motion, the chest 60 % plus the shoulder counter-rotation.
@@ -369,9 +425,25 @@ func _calculate_pose(state: Dictionary, delta: float) -> void:
 		_set_rotation("neck", Quaternion(Vector3.RIGHT, lean * 0.6))
 		_set_rotation("head", Quaternion(Vector3.RIGHT, lean * 0.3))
 	if gw > 0.0:
-		# keep the trunk facing forward whatever the hips do, then turn the shoulders against them
-		_set_rotation("spine", leg_frame * _rotations.spine)
-		_set_rotation("chest", Quaternion(Vector3.UP, float(gait_pose.chest_yaw) * gw) * _rotations.chest)
+		# keep the trunk facing forward whatever the hips do, then turn the shoulders against them. The gait's posture:
+		# the lean tilts the whole trunk straight from the waist, the upper back curve bends the chest and neck, and the
+		# head turns back by the sum so the face stays level.
+		var trunk := trunk_posture(gait_pose, gw)
+		_set_rotation("spine", leg_frame * trunk.spine * _rotations.spine)
+		_set_rotation("chest", Quaternion(Vector3.UP, float(gait_pose.chest_yaw) * gw) * trunk.chest * _rotations.chest)
+		_set_rotation("neck", trunk.neck * _rotations.neck)
+		_set_rotation("head", trunk.head * _rotations.head)
+
+
+## The gait's trunk posture as rotations added at the spine, chest, neck and head joints (weight = how much of the gait applies).
+static func trunk_posture(g: Dictionary, weight := 1.0) -> Dictionary:
+	var lean: float = float(g.get("torso_lean", 0.0)) * weight
+	var curve: float = float(g.get("spine_curve", 0.0)) * weight
+	var level: float = float(g.get("head_level", 0.0))
+	return {
+		"spine": Quaternion(Vector3.RIGHT, -lean), "chest": Quaternion(Vector3.RIGHT, -curve * 0.6),
+		"neck": Quaternion(Vector3.RIGHT, -curve * 0.4), "head": Quaternion(Vector3.RIGHT, (lean + curve) * level),
+	}
 
 
 func _rot(bone: String, angle: float) -> void:

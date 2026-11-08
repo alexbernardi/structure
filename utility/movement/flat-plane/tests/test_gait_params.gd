@@ -38,7 +38,7 @@ func test_the_gait_banks_are_valid_and_reach_every_parameter(t) -> void:
 	t.eq(Bindings.validate(data), [], "valid bindings")
 	var b := Bindings.new()
 	b.data = data
-	t.eq(b.bank_count(), 8, "seven original banks plus the animation graph")
+	t.eq(b.bank_count(), 11, "existing ten banks preserved, Running appended")
 	t.eq([b.bank_name(0), b.bank_name(1), b.bank_name(2), b.bank_name(3), b.bank_name(4), b.bank_name(5), b.bank_name(6)], ["Walk Cycle", "Pelvis & Torso", "Feet & Arms", "Toggles", "View & Playback", "Proportions 1", "Proportions 2"], "names")
 	var reg := Registry.new()
 	reg.register("gait", "Gait (visual)", GaitParams.create())

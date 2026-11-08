@@ -87,6 +87,7 @@ func test_first_move_of_a_fader_whose_position_is_unknown_never_jumps(t) -> void
 
 
 func test_changing_bank_arms_pickup_for_every_fader(t) -> void:
+	_p.set_value("max_ground_speed", 4.5)
 	_fader(1, 0.25)
 	_fader(1, 0.27)   # bank 1: max_ground_speed engaged near its value (0.25)
 	t.ok(_e.fader_info(1).engaged, "engaged in bank 1")
@@ -117,6 +118,7 @@ func test_returning_to_a_bank_keeps_what_the_fader_left_behind(t) -> void:
 
 
 func test_knob_change_requires_the_fader_to_pick_up_again(t) -> void:
+	_p.set_value("max_ground_speed", 4.5)
 	_fader(1, 0.0)
 	_fader(1, 0.3)
 	t.ok(_e.fader_info(1).engaged, "engaged")
@@ -140,9 +142,9 @@ func test_fader_moves_its_own_slot_without_losing_engagement(t) -> void:
 
 func test_knob_steps_by_whole_parameter_steps(t) -> void:
 	_knob(1, 1)
-	t.eq(_p.get_value("max_ground_speed"), 4.6, "+1 click = +0.1 m/s")
+	t.eq(_p.get_value("max_ground_speed"), 6.1, "+1 click = +0.1 m/s")
 	_knob(1, -3)
-	t.eq(_p.get_value("max_ground_speed"), 4.3, "-3 clicks")
+	t.eq(_p.get_value("max_ground_speed"), 5.8, "-3 clicks")
 	_knob(2, 5)
 	t.eq(_p.get_value("ground_accel"), 50.0, "ground_accel step is 1.0")
 
@@ -150,10 +152,10 @@ func test_knob_steps_by_whole_parameter_steps(t) -> void:
 func test_knob_scale_changes_the_fineness(t) -> void:
 	_b.data.knob_scale = 5.0
 	_knob(1, 1)
-	t.eq(_p.get_value("max_ground_speed"), 5.0, "5x scale")
+	t.eq(_p.get_value("max_ground_speed"), 6.5, "5x scale")
 	_b.data.knob_scale = 0.1
 	_knob(1, 1)
-	t.eq(_p.get_value("max_ground_speed"), 5.0, "0.1x scale rounds to nothing: the step floor is the parameter step")
+	t.eq(_p.get_value("max_ground_speed"), 6.5, "0.1x scale rounds to nothing: the step floor is the parameter step")
 
 
 func test_knob_is_clamped_at_the_ends(t) -> void:
@@ -186,10 +188,10 @@ func test_unbound_and_unknown_controls_are_ignored(t) -> void:
 func test_strip_buttons_reset_revert_lock_select(t) -> void:
 	_p.set_value("max_ground_speed", 9.0)
 	_press("strip1_mute")
-	t.eq(_p.get_value("max_ground_speed"), 4.5, "mute = reset to default")
-	_e.baseline["movement.max_ground_speed"] = 6.0
+	t.eq(_p.get_value("max_ground_speed"), 6.0, "mute = reset to default")
+	_e.baseline["movement.max_ground_speed"] = 7.0
 	_press("strip1_rec")
-	t.eq(_p.get_value("max_ground_speed"), 6.0, "rec = revert to the preset value")
+	t.eq(_p.get_value("max_ground_speed"), 7.0, "rec = revert to the preset value")
 	_press("strip1_solo")
 	t.ok(_e.locked.has("movement.max_ground_speed"), "solo = lock")
 	_press("strip1_select")
@@ -303,7 +305,7 @@ func test_apply_values_sets_baseline_and_arms_pickup(t) -> void:
 func test_apply_values_skips_locked_and_reports_unknown(t) -> void:
 	_press("strip1_solo")
 	var r: Dictionary = _e.apply_values({"movement": {"max_ground_speed": 12.0, "gravity": 12.0, "warp": 3.0}, "lab": {"x": 1.0}}, "mixed")
-	t.eq(_p.get_value("max_ground_speed"), 4.5, "locked parameter kept")
+	t.eq(_p.get_value("max_ground_speed"), 6.0, "locked parameter kept")
 	t.eq(_p.get_value("gravity"), 12.0, "others applied")
 	t.eq(r.skipped_locked, ["movement.max_ground_speed"], "reported")
 	t.eq(r.unknown.size(), 2, "unknown ids and targets reported: %s" % str(r.unknown))

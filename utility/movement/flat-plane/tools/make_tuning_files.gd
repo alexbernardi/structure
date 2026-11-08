@@ -64,6 +64,16 @@ func _initialize() -> void:
 		var r := b.save_file(Bindings.DEFAULT_PATH)
 		print("bindings: ", "written" if r.ok else r.error)
 		made += 1
+	var locomotion_path := "res://config/locomotion_bindings.json"
+	if force or not FileAccess.file_exists(locomotion_path):
+		var b := Bindings.new()
+		b.data = Bindings.locomotion_data()
+		var result := b.save_file(locomotion_path)
+		if not result.ok:
+			push_error("Cannot save authored-animation bindings: %s" % result.error)
+			quit(1)
+			return
+		print("authored animation bindings: written")
 	var store := Presets.new()
 	var reg := Registry.new()
 	reg.register("movement", "Movement", Params.new())

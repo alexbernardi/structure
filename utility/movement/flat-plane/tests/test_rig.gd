@@ -109,6 +109,7 @@ func test_applying_the_original_proportions_changes_nothing(t) -> void:
 		var mb: Mesh = b._meshes[bone].mesh
 		t.eq(ma.get_class(), mb.get_class(), "%s mesh type" % bone)
 		t.ok(a._meshes[bone].position.is_equal_approx(b._meshes[bone].position), "%s mesh offset unchanged" % bone)
+		t.ok(a._meshes[bone].scale.is_equal_approx(b._meshes[bone].scale), "%s mesh scale unchanged" % bone)
 		if ma is BoxMesh:
 			t.ok((ma as BoxMesh).size.is_equal_approx((mb as BoxMesh).size), "%s box size unchanged: %s vs %s" % [bone, (ma as BoxMesh).size, (mb as BoxMesh).size])
 		elif ma is CapsuleMesh:
@@ -116,6 +117,7 @@ func test_applying_the_original_proportions_changes_nothing(t) -> void:
 			t.near((ma as CapsuleMesh).height, (mb as CapsuleMesh).height, 1e-4, "%s height unchanged: %s vs %s" % [bone, (ma as CapsuleMesh).height, (mb as CapsuleMesh).height])
 		elif ma is SphereMesh:
 			t.near((ma as SphereMesh).radius, (mb as SphereMesh).radius, 1e-6, "%s sphere unchanged" % bone)
+			t.near((ma as SphereMesh).height, (mb as SphereMesh).height, 1e-6, "%s sphere height unchanged" % bone)
 	a.queue_free()
 	b.queue_free()
 	await _tree.process_frame
@@ -150,6 +152,11 @@ func test_each_length_parameter_moves_its_joint_by_exactly_that_much(t) -> void:
 	await _tree.process_frame
 
 
+## Size of a mesh as drawn (its mesh's box times the instance's scale), in the bone's frame.
+func _mesh_extent(mi: MeshInstance3D) -> Vector3:
+	return mi.mesh.get_aabb().size * mi.scale
+
+
 func test_thickness_and_size_rebuild_the_meshes(t) -> void:
 	var v := await _visual()
 	var rig = RigParams.create()
@@ -164,11 +171,19 @@ func test_thickness_and_size_rebuild_the_meshes(t) -> void:
 	v.apply_rig(rig)
 	t.near((v._meshes.thigh_l.mesh as CapsuleMesh).radius, 0.11, 1e-6, "thigh radius")
 	t.near((v._meshes.forearm_r.mesh as CapsuleMesh).radius, 0.03, 1e-6, "forearm radius")
-	t.near((v._meshes.head.mesh as SphereMesh).radius, 0.14, 1e-6, "head radius")
+	t.near((v._meshes.head.mesh as SphereMesh).height, 0.28, 1e-6, "head size: twice its radius tall")
 	t.near((v._meshes.foot_l.mesh as BoxMesh).size.z, 0.32, 1e-6, "foot length")
-	var chest_default := Vector3(0.36, 0.28, 0.21)
-	t.near((v._meshes.chest.mesh as BoxMesh).size.x, chest_default.x * 1.4, 1e-5, "torso width multiplies the chest block")
-	t.near((v._meshes.chest.mesh as BoxMesh).size.z, chest_default.z * 0.6, 1e-5, "and depth")
+	var chest_aabb := _mesh_extent(v._meshes.chest)
+	rig.set_value("torso_width", 1.0)
+	rig.set_value("torso_depth", 1.0)
+	v.apply_rig(rig)
+	var chest_default := _mesh_extent(v._meshes.chest)
+	t.near(chest_aabb.x, chest_default.x * 1.4, 1e-4, "torso width multiplies the chest's width")
+	t.near(chest_aabb.z, chest_default.z * 0.6, 1e-4, "and depth its depth")
+	t.near(chest_aabb.y, chest_default.y, 1e-4, "but not its height")
+	var hand := _mesh_extent(v._meshes.hand_l)
+	t.ok(hand.y > 0.1 and hand.z < hand.x, "a hand is thin in the walking plane, not a long thick extension of the forearm: %s" % hand)
+	t.near(hand.y, rig.get_value("forearm_length") * Visual.HAND_LENGTH_RATIO, 1e-5, "hand length uses the shared mesh/overlay ratio")
 	rig.set_value("scale", 1.2)
 	v.apply_rig(rig)
 	t.near((v._meshes.thigh_l.mesh as CapsuleMesh).radius, 0.11 * 1.2, 1e-6, "overall size scales the radii too")

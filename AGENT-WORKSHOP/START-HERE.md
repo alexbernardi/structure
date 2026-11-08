@@ -27,7 +27,7 @@ Agents on other machines: clone, run `setup`, then pull before starting a task a
 | Systems | room template + `movement` room (tests, benchmarks, golden fixture) integrated through the gateway |
 | Assets | Blender 5.0.1 pipeline example `resource_stone` (spec -> GLB -> validation -> Godot), reproducible bytes |
 | Quality | 8 automated suites, performance baselines, structured logs, static `check` |
-| Movement utility | MIDI treadmill and third-person walk via editable AnimationPlayer/AnimationTree; saved gait/proportions preserved; graph controls also available in MIDI/presets. See [Movement Lab](DOCUMENTATION/MOVEMENT-LAB-2.md) section 5; interactive acceptance pending |
+| Movement utility | [Movement Lab 3.0](DOCUMENTATION/MOVEMENT-LAB-3.md) authored Quaternius CC0 running on a native-retargeted primitive rig. 6 m/s run, 12 m/s Shift; no gameplay walking. Legacy remains selectable; F9 opens recorded-input side-view A/B. Four principal animation controls, original MIDI mapping and physics preserved. 479 utility tests pass; authored presentation CPU p95 ~0.15 ms. Residual sliding/terrain contact and human visual/MIDI approval remain open. The [2.0 treadmill](DOCUMENTATION/MOVEMENT-LAB-2.md), editors, presets and circling benchmark are preserved |
 
 Verified and unverified items, test results and open problems: [TASKS/0001-bootstrap.md](TASKS/0001-bootstrap.md).
 

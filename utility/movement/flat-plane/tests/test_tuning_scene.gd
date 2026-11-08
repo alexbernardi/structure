@@ -125,7 +125,7 @@ func test_scene_wires_midi_and_tuning_together(t) -> void:
 
 
 func test_a_fader_changes_gameplay_through_the_real_mapping(t) -> void:
-	_move_fader(1, 0.9)       # park high, away from the value (4.5 m/s = 0.25)
+	_move_fader(1, 0.9)       # park high, away from the current value
 	_move_fader(1, 0.1)       # cross the value: pickup engages
 	_move_fader(1, 0.5)
 	t.near(_s.params.get_value("max_ground_speed"), 8.0, 0.15, "strip 1 fader = max ground speed: %.2f" % _s.params.get_value("max_ground_speed"))
@@ -141,11 +141,11 @@ func test_a_fader_changes_gameplay_through_the_real_mapping(t) -> void:
 
 func test_a_knob_fine_tunes_and_the_fader_must_pick_up_again(t) -> void:
 	_turn(1, 3)
-	t.eq(_s.params.get_value("max_ground_speed"), 4.8, "three clicks clockwise = +0.3 m/s")
+	t.eq(_s.params.get_value("max_ground_speed"), 6.3, "three clicks clockwise = +0.3 m/s")
 	_turn(1, -1)
-	t.eq(_s.params.get_value("max_ground_speed"), 4.7, "one click back")
+	t.eq(_s.params.get_value("max_ground_speed"), 6.2, "one click back")
 	_move_fader(1, 0.9)
-	t.eq(_s.params.get_value("max_ground_speed"), 4.7, "a fader far from the value does not take over")
+	t.eq(_s.params.get_value("max_ground_speed"), 6.2, "a fader far from the value does not take over")
 
 
 func test_bank_switch_never_jumps_a_parameter(t) -> void:
@@ -166,10 +166,10 @@ func test_buttons_reset_lock_and_select(t) -> void:
 	_turn(1, 20)
 	t.ok(_s.params.get_value("max_ground_speed") > 6.0, "tuned up")
 	_tap("strip1_mute")
-	t.eq(_s.params.get_value("max_ground_speed"), 4.5, "M resets to default")
+	t.eq(_s.params.get_value("max_ground_speed"), 6.0, "M resets to default")
 	_tap("strip1_solo")
 	_turn(1, 20)
-	t.eq(_s.params.get_value("max_ground_speed"), 4.5, "S locked it: the knob does nothing")
+	t.eq(_s.params.get_value("max_ground_speed"), 6.0, "S locked it: the knob does nothing")
 	t.ok(_s.tuning.engine.locked.has("movement.max_ground_speed"), "lock state visible to the HUD")
 	_tap("strip1_select")
 	t.eq(_s.tuning.engine.selected_key, "movement.max_ground_speed", "Select shows details")
@@ -232,7 +232,7 @@ func test_default_preset_is_protected(t) -> void:
 	t.ok(_s.tuning.engine.preset_name != "default" and _s.tuning.engine.preset_name.begins_with("tuned_"), "saved under a new name instead: %s" % _s.tuning.engine.preset_name)
 	t.ok(not _s.tuning.save_preset_as("default").ok, "explicit overwrite refused")
 	t.ok(not _s.tuning.delete_preset("default"), "delete refused")
-	t.eq(_s.tuning.presets.load_preset("default").targets.movement.max_ground_speed, 4.5, "file untouched")
+	t.eq(_s.tuning.presets.load_preset("default").targets.movement.max_ground_speed, 6.0, "file untouched")
 
 
 func test_remembers_preset_and_bank_between_sessions(t) -> void:
@@ -253,7 +253,7 @@ func test_unplugging_is_shown_and_does_not_break_tuning(t) -> void:
 	t.ok(not _s.midi.connected, "disconnected")
 	_s.midi._apply_ports(["SMC-Mixer", "MIDIIN2 (SMC-Mixer)"])
 	_turn(1, 2)
-	t.eq(_s.params.get_value("max_ground_speed"), 4.7, "works again right after reconnecting")
+	t.eq(_s.params.get_value("max_ground_speed"), 6.2, "works again right after reconnecting")
 
 
 func test_hud_modes_and_notifications(t) -> void:
@@ -312,7 +312,7 @@ func test_save_bindings_persists_edits_and_a_bad_file_is_reported(t) -> void:
 	f.close()
 	await _boot()
 	t.ok(not _s.tuning.load_errors.is_empty(), "a rejected file is reported")
-	t.eq(_s.tuning.bindings.bank_count(), Bindings.default_data().banks.size(), "defaults are used meanwhile")
+	t.eq(_s.tuning.bindings.bank_count(), Bindings.locomotion_data().banks.size(), "simplified Playground defaults are used meanwhile")
 	t.eq(FileAccess.get_file_as_string(BIND_COPY), "{\"schema\": 4}", "the bad file is not overwritten on startup")
 
 

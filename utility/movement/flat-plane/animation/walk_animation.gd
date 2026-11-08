@@ -1,7 +1,9 @@
 extends Node
 
 const GraphParams = preload("res://animation/graph_params.gd")
-const SAMPLES := 96
+const Visual = preload("res://character/character_visual.gd")
+const SAMPLES := 128
+const RUN_SAMPLES := 192
 
 var params = GraphParams.create()
 var model
@@ -13,6 +15,7 @@ var bake_usec := 0
 var _key := -1
 var _last_phase := 0.0
 var _seek := true
+var _sample_speeds := PackedFloat64Array()
 
 
 func setup(target: Node3D, gait_model) -> void:
@@ -52,8 +55,9 @@ func regenerate() -> void:
 	for d in model.p.definitions():
 		if d.group not in ["view", "playback"]:
 			pose_values.append(model.p.get_value(d.id))
-	var key := hash([pose_values, model.rig.values.hash() if model.rig != null else 0, model.cycle.v])
+	var key := hash([pose_values, model.rig.values.hash() if model.rig != null else 0])
 	if key == _key:
+		_refresh_speed_samples()
 		return
 	var start := Time.get_ticks_usec()
 	var reset := player.get_animation("RESET")
@@ -68,28 +72,45 @@ func regenerate() -> void:
 		clip.track_set_path(track, NodePath("Skeleton3D:" + bone))
 	var pelvis_track := clip.add_track(Animation.TYPE_POSITION_3D)
 	clip.track_set_path(pelvis_track, ^"Skeleton3D:pelvis")
-	for i in SAMPLES + 1:
-		var q := float(i) / SAMPLES
-		var frame := walk_frame(model.pose_at(fposmod(q, 1.0)))
-		var track := 0
-		for bone in visual.bone_index:
-			clip.rotation_track_insert_key(track, q, frame.rotations[bone])
-			track += 1
-		clip.position_track_insert_key(pelvis_track, q, frame.positions.pelvis)
+	var samples := RUN_SAMPLES if model.cycle.running else SAMPLES
+	_sample_speeds.resize(samples + 1)
+	for i in samples + 1:
+		_write_sample(clip, i, samples)
 	_key = key
 	_seek = true
 	generation += 1
 	bake_usec = Time.get_ticks_usec() - start
 
 
+func _write_sample(clip: Animation, index: int, samples: int) -> void:
+	var q := float(index) / samples
+	var frame := walk_frame(model.pose_at(fposmod(q, 1.0)))
+	var track := 0
+	for bone in visual.bone_index:
+		clip.rotation_track_insert_key(track, q, frame.rotations[bone])
+		track += 1
+	clip.position_track_insert_key(track, q, frame.positions.pelvis)
+	_sample_speeds[index] = model.cycle.v
+
+
+func _refresh_speed_samples() -> void:
+	# Linear track interpolation only reads these two keys. Refresh them at the exact current speed, including scrubs.
+	var samples := _sample_speeds.size() - 1
+	var first := mini(int(fposmod(model.phase, 1.0) * samples), samples - 1)
+	var clip := player.get_animation("walk")
+	for index in [first, first + 1]:
+		if _sample_speeds[index] != model.cycle.v:
+			_write_sample(clip, index, samples)
+
+
 static func walk_frame(g: Dictionary) -> Dictionary:
 	var undo: Quaternion = g.pelvis_q.inverse()
-	var pitch: float = -g.torso_lean
+	var trunk: Dictionary = Visual.trunk_posture(g)
 	var rotations := {
 		"pelvis": g.pelvis_q,
-		"spine": undo * Quaternion(Vector3.RIGHT, pitch * 0.4),
-		"chest": Quaternion(Vector3.UP, g.chest_yaw) * Quaternion(Vector3.RIGHT, pitch * 0.6),
-		"neck": Quaternion.IDENTITY, "head": Quaternion.IDENTITY,
+		"spine": undo * trunk.spine,
+		"chest": Quaternion(Vector3.UP, g.chest_yaw) * trunk.chest,
+		"neck": trunk.neck, "head": trunk.head,
 	}
 	for side in ["l", "r"]:
 		var roll := 0.1 if side == "l" else -0.1
@@ -128,7 +149,7 @@ func apply_pose(full: Dictionary, legacy: Dictionary, weight: float) -> void:
 	body.positions.pelvis = rest + (full.positions.pelvis - base_position) * manual
 	_write_static(player.get_animation("legacy"), legacy)
 	_write_static(player.get_animation("body"), body)
-	# The planner and tree share a normalized stride clock. Only resampling a clip or scrubbing seeks; normal playback
+	# The planner and tree share a normalized stride clock. Rebuilding the loop or scrubbing seeks; normal playback
 	# actually advances through WalkSpeed, rather than overwriting its pose from outside the animation mixer.
 	tree.set("parameters/Locomotion/blend_amount", weight)
 	if _seek or model.p.is_on("freeze") or not model.pose.get("active", false):

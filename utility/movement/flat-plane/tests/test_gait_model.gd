@@ -157,11 +157,49 @@ func test_velocity_match_zero_stops_the_foot_at_both_ends(t) -> void:
 	_p.set_value("velocity_match", 0.0)
 	_p.set_value("step_height", 0.0)
 	_p.set_value("toe_clearance_angle", 0.0)
+	_p.set_value("roll_flow", 0.0)   # a foot still rolling over its toe lifts the ankle, which is not belt travel
 	var c := _prime(1.4)
 	var h := 1e-4
-	var v_start: float = ((_m.ankle_at(c.d + 2.0 * h, c) - _m.ankle_at(c.d + h, c)) / h).length()
-	var v_stance: float = ((_m.ankle_at(c.d - h, c) - _m.ankle_at(c.d - 2.0 * h, c)) / h).length()
-	t.ok(v_start < 0.2 * v_stance, "the swing starts almost at rest (%.3f vs the stance foot's %.3f)" % [v_start, v_stance])
+	var travel := func(q: float) -> Vector2:
+		var a: Vector3 = _m.ankle_at(q, c)
+		return Vector2(a.x, a.y)
+	var v_start: float = ((travel.call(c.d + 2.0 * h) - travel.call(c.d + h)) / h).length()
+	var v_stance: float = ((travel.call(c.d - h) - travel.call(c.d - 2.0 * h)) / h).length()
+	t.ok(v_start < 0.2 * v_stance, "the ankle starts its swing almost at rest (%.3f vs the stance foot's %.3f)" % [v_start, v_stance])
+	_p.set_value("roll_flow", 1.0)
+	c = _prime(1.4)
+	var pitch_rate := func(q: float) -> float: return (_m.ankle_at(q + h, c).z - _m.ankle_at(q, c).z) / h
+	var before: float = pitch_rate.call(c.d - 2.0 * h)
+	t.ok(absf(before) > 0.5, "with the roll flowing the foot is still turning at toe-off (%.2f rad per cycle)" % before)
+	t.near(pitch_rate.call(c.d + h), before, 0.05 * absf(before), "and keeps turning as it was: velocity match only slows the ankle")
+
+
+func test_the_toe_starts_down_the_moment_the_heel_lands(t) -> void:
+	var h := 1e-4
+	for flow in [1.0, 0.0]:
+		_p.set_value("roll_flow", flow)
+		var c := _prime(1.4)
+		var at_strike: float = (_m.ankle_at(h, c).z - _m.ankle_at(0.0, c).z) / h
+		var a_bit_later: float = (_m.ankle_at(0.05 * c.d + h, c).z - _m.ankle_at(0.05 * c.d, c).z) / h
+		if flow > 0.0:
+			t.ok(at_strike < -0.2 * c.th_h / c.q1, "roll flow 1: the foot is already turning toe-down at heel strike (%.2f rad per cycle)" % at_strike)
+		else:
+			t.ok(absf(at_strike) < 0.05 * absf(a_bit_later), "roll flow 0: the foot holds its angle at heel strike (%.3f vs %.3f just after)" % [at_strike, a_bit_later])
+	_p.set_value("roll_flow", 1.0)
+
+
+func test_the_ankle_passes_under_the_hip_at_midstance(t) -> void:
+	for m in [0.35, 0.4, 0.5]:
+		_p.set_value("midstance_at", m)
+		var c := _prime(1.4)
+		var q: float = c.d * m
+		t.near(_m.ankle_at(q, c).x, 0.0, 1e-3, "midstance_at %.2f: the ankle is under the hip %.0f %% into the stance" % [m, m * 100.0])
+	_p.set_value("midstance_at", _p.def("midstance_at").default)
+	var c2 := _prime(1.4)
+	# the widest moment, both feet down: one heel just landed, the other foot half a cycle into its stance
+	var front: float = _m.ankle_at(0.0, c2).x
+	var back: float = -_m.ankle_at(0.5, c2).x
+	t.ok(back > front, "the default stride straddles the hips: at heel strike the front ankle is %.2f m ahead and the rear %.2f m behind" % [front, back])
 
 
 func test_foot_clearance_follows_the_parameter(t) -> void:
@@ -331,20 +369,20 @@ func _ankle_acc(c: Dictionary, q: float, h: float) -> Vector2:
 
 func test_acceleration_is_continuous_where_the_swing_hands_over_to_the_stance(t) -> void:
 	var worst := 0.0
-	var h := 2e-3
+	var h := 1e-3
 	for speed in [0.8, 1.2, 1.6]:
 		var c := _prime(speed)
 		for boundary in [c.d, 1.0]:
 			var b: float = boundary
-			# extrapolate the acceleration to the boundary from each side with a straight line through two samples
-			var b1 := _ankle_acc(c, b - 0.012, h)
-			var b2 := _ankle_acc(c, b - 0.008, h)
-			var a1 := _ankle_acc(c, b + 0.008, h)
-			var a2 := _ankle_acc(c, b + 0.012, h)
-			var from_before := b2 + (b2 - b1) / 0.004 * 0.008
-			var from_after := a1 - (a2 - a1) / 0.004 * 0.008
+			# Short reference segments have more curvature: extrapolate close enough to measure the boundary, not the bend.
+			var b1 := _ankle_acc(c, b - 0.006, h)
+			var b2 := _ankle_acc(c, b - 0.004, h)
+			var a1 := _ankle_acc(c, b + 0.004, h)
+			var a2 := _ankle_acc(c, b + 0.006, h)
+			var from_before := b2 + (b2 - b1) * 2.0
+			var from_after := a1 - (a2 - a1) * 2.0
 			worst = maxf(worst, (from_before - from_after).length() / c.stride)
-	t.ok(worst < 8.0, "the ankle's acceleration, extrapolated to toe-off and heel strike from both sides, differs by at most %.1f stride-lengths per cycle squared (a jolt would be 10s)" % worst)
+	t.ok(worst < 4.0, "the ankle's acceleration, extrapolated to toe-off and heel strike from both sides, differs by at most %.1f stride-lengths per cycle squared (a jolt would be 10s)" % worst)
 
 func test_the_hip_path_has_the_requested_bob(t) -> void:
 	_p.set_value("loading_dip", 0.0)
@@ -403,7 +441,9 @@ func test_arms_swing_against_the_legs(t) -> void:
 	t.near(p0.arm_r, deg_to_rad(_p.get_value("arm_swing")) * cos(deg_to_rad(_p.get_value("arm_phase"))) * p0.gait_amount, 1e-9, "amplitude from the parameter (at the default timing offset)")
 	_p.set_value("arm_phase", -30.0)
 	var late: Dictionary = _m.pose_at(0.0)
-	t.ok(absf(late.arm_r - p0.arm_r) > 0.05, "the timing offset shifts the swing")
+	var expected := preload("res://animation/walk_reference.gd").arm(-30.0 / 360.0).x * deg_to_rad(_p.get_value("arm_swing"))
+	t.near(late.arm_r, expected, 1e-6, "timing offset samples the shifted reference arm")
+	t.ok(absf(late.arm_r - p0.arm_r) > 0.001, "the timing offset shifts the swing")
 
 
 func test_pelvis_and_shoulders_turn_against_each_other(t) -> void:

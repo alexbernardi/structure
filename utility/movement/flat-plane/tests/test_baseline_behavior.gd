@@ -2,14 +2,14 @@ extends RefCounted
 
 const Metrics = preload("res://tests/baseline_metrics.gd")
 
-## Recorded in Phase 0 of Movement Lab 2.0 (task 0004) with the Stage I controller at default parameters.
+## Stage I controller, remeasured for the requested 6 m/s run and 2x sprint defaults in task 0004.
 ## If a later phase changes these on purpose, change them HERE in the same commit and say why in the task note.
 const BASELINE_120 := {
-	"max_speed": 4.5, "sprint_speed": 7.2, "crouch_speed": 2.0,
-	"time_to_95pct_s": 0.1, "speed_at_0_1s": 4.5, "distance_2s_m": 8.7937,
-	"stop_time_s": 0.125, "stop_distance_m": 0.2295,
-	"reverse_zero_cross_s": 0.0583, "reverse_to_95pct_s": 0.15,
-	"turn90_min_speed": 3.8233, "turn90_recover_95pct_s": 0.0833,
+	"max_speed": 6.0, "sprint_speed": 12.0, "crouch_speed": 2.0,
+	"time_to_95pct_s": 0.1333, "speed_at_0_1s": 4.5, "distance_2s_m": 11.6250,
+	"stop_time_s": 0.1583, "stop_distance_m": 0.3578,
+	"reverse_zero_cross_s": 0.075, "reverse_to_95pct_s": 0.2,
+	"turn90_min_speed": 4.7339, "turn90_recover_95pct_s": 0.1167,
 	"jump_apex_m": 0.7489, "jump_air_time_s": 0.5583, "jump_momentum_kept_pct": 100.0,
 }
 

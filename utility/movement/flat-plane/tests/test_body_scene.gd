@@ -38,7 +38,7 @@ func after_each() -> void:
 
 func _boot(extra := {}) -> Node:
 	var s: Node = load(SCENE).instantiate()
-	var opts := {"no-capture": "true", "no-hardware": "true", "no-window-state": "true"}
+	var opts := {"no-capture": "true", "no-hardware": "true", "no-window-state": "true", "legacy-animation": "true"}
 	opts.merge(extra, true)
 	s.options = opts
 	_tree.root.add_child(s)

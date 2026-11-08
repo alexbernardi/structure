@@ -1,0 +1,72 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/locomotion_comparison.gd" id="1"]
+
+[node name="LocomotionComparison" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Views" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 96.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="A" type="SubViewportContainer" parent="Views"]
+layout_mode = 2
+size_flags_horizontal = 3
+stretch = true
+
+[node name="Viewport" type="SubViewport" parent="Views/A"]
+own_world_3d = true
+size = Vector2i(640, 624)
+render_target_update_mode = 4
+physics_object_picking = false
+
+[node name="B" type="SubViewportContainer" parent="Views"]
+layout_mode = 2
+size_flags_horizontal = 3
+stretch = true
+
+[node name="Viewport" type="SubViewport" parent="Views/B"]
+own_world_3d = true
+size = Vector2i(640, 624)
+render_target_update_mode = 4
+physics_object_picking = false
+
+[node name="Controls" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 12.0
+offset_bottom = 82.0
+
+[node name="Toolbar" type="HBoxContainer" parent="Controls"]
+layout_mode = 2
+
+[node name="Replay" type="Button" parent="Controls/Toolbar"]
+layout_mode = 2
+text = "Replay identical inputs"
+
+[node name="Pause" type="CheckButton" parent="Controls/Toolbar"]
+layout_mode = 2
+text = "Pause"
+
+[node name="System" type="CheckButton" parent="Controls/Toolbar"]
+layout_mode = 2
+text = "B uses legacy"
+
+[node name="Playground" type="Button" parent="Controls/Toolbar"]
+layout_mode = 2
+text = "Playground (F9 returns to A/B)"
+
+[node name="Status" type="Label" parent="Controls"]
+layout_mode = 2
+text = "A: LEGACY | B: AUTHORED"

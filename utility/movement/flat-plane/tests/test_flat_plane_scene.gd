@@ -1,6 +1,8 @@
 extends RefCounted
 
 const SCENE := "res://scenes/flat_plane.tscn"
+const InputActions = preload("res://movement/input_actions.gd")
+const InputSource = preload("res://movement/input_source.gd")
 const DT := 1.0 / 120.0
 const FWD := Vector2(0, 1)
 
@@ -11,7 +13,7 @@ var _tree: SceneTree
 func before_each() -> void:
 	_tree = Engine.get_main_loop()
 	_s = load(SCENE).instantiate()
-	_s.options = {"no-capture": "true"}
+	_s.options = {"no-capture": "true", "legacy-animation": "true"}
 	_tree.root.add_child(_s)
 	await _tree.process_frame   # let _ready run first: it re-enables the scene's own processing
 	_s.set_physics_process(false)   # the tests drive the body themselves, one call per physics tick
@@ -35,6 +37,12 @@ func _run(frame: Dictionary, seconds: float) -> void:
 	for i in int(round(seconds / DT)):
 		await _tree.physics_frame
 		_s.body.simulate(frame, DT)
+
+
+func _run_scene(frame: Dictionary, seconds: float) -> void:
+	for i in int(round(seconds / DT)):
+		await _tree.physics_frame
+		_s.simulate_tick(frame, DT)
 
 
 ## Like _run, but returns the highest point the body reached.
@@ -80,8 +88,43 @@ func test_spawns_on_the_floor(t) -> void:
 func test_walks_forward_to_max_speed(t) -> void:
 	await _run(_frame(FWD), 1.5)
 	var v: Vector3 = _s.body.velocity
-	t.near(Vector2(v.x, v.z).length(), 4.5, 0.05, "reaches max ground speed on real collision")
+	t.near(Vector2(v.x, v.z).length(), 6.0, 0.05, "reaches the running speed on real collision")
 	t.ok(_s.body.global_position.z < -3.0, "moved toward -Z: z = %.2f" % _s.body.global_position.z)
+
+
+func test_movement_runs_at_six_and_shift_doubles_speed_without_changing_gait(t) -> void:
+	InputActions.register()
+	var live := InputSource.Live.new()
+	Input.action_press("sprint")
+	t.ok(live.sample(0.0).sprint, "the Shift action reaches the live input frame")
+	Input.action_release("sprint")
+
+	await _place(Vector3(150, 0.05, 150))
+	await _run_scene(_frame(FWD), 1.5)
+	t.ok(_s.gait_params.is_on("run_mode"), "normal movement uses the running profile")
+	var normal_speed: float = _s.body.core.horizontal_speed()
+	t.near(normal_speed, 6.0, 0.05, "normal running speed")
+	_s.gait_model.update(DT, normal_speed)
+	t.ok(_s.gait_model.pose.running, "the running gait is active without Shift")
+
+	await _run_scene(_frame(FWD, {"sprint": true}), 1.5)
+	t.ok(_s.gait_params.is_on("run_mode"), "holding Shift selects the running gait")
+	var run_speed: float = _s.body.core.horizontal_speed()
+	t.near(run_speed, 12.0, 0.05, "Shift doubles the 6 m/s speed")
+	_s.gait_model.update(DT, run_speed)
+	t.ok(_s.gait_model.pose.running, "the running gait is active at sprint speed")
+	t.near(_s.gait_model.cycle.v, run_speed, 1e-6, "animation is not capped at the old 8 m/s limit")
+	t.near(_s.gait_model.cycle.rate * _s.gait_model.cycle.stride, run_speed, 1e-6, "sprint cadence tracks actual travel")
+	t.near(_s.params.get_value("max_ground_speed"), 6.0, 1e-9, "normal run setting")
+	t.near(_s.params.get_value("sprint_multiplier"), 2.0, 1e-9, "sprint multiplier")
+
+	_s.simulate_tick(_frame(FWD), DT)
+	t.ok(_s.gait_params.is_on("run_mode"), "releasing Shift keeps the run form")
+	await _run_scene(_frame(FWD), 0.5)
+	t.near(_s.body.core.horizontal_speed(), 6.0, 0.05, "release decelerates back to normal running")
+	_s.gait_params.set_value("run_mode", 0.0)
+	_s.simulate_tick(_frame(), DT)
+	t.ok(_s.gait_params.is_on("run_mode"), "a restored walk preset cannot select walking in the Playground")
 
 
 func test_jump_apex_matches_the_core(t) -> void:
@@ -99,15 +142,16 @@ func test_jump_apex_matches_the_core(t) -> void:
 
 
 func test_gentle_ramps_are_climbed_and_steep_ones_are_not(t) -> void:
+	# At running speed the character can pass the end of the ramp; measure the climb, not the final landing.
 	await _place(_s.world.landmarks["ramp_20"] + Vector3(0, 0.05, 4.0))
-	await _run(_frame(FWD), 3.0)
-	t.ok(_s.body.global_position.y > 1.0, "20 deg ramp climbed: y = %.2f" % _s.body.global_position.y)
+	var top := await _run_max_height(_frame(FWD), 3.0)
+	t.ok(top > 1.0, "20 deg ramp climbed: y = %.2f" % top)
 	await _place(_s.world.landmarks["ramp_40"] + Vector3(0, 0.05, 4.0))
-	await _run(_frame(FWD), 3.0)
-	t.ok(_s.body.global_position.y > 1.0, "40 deg ramp (under the 46 deg limit) climbed: y = %.2f" % _s.body.global_position.y)
+	top = await _run_max_height(_frame(FWD), 3.0)
+	t.ok(top > 1.0, "40 deg ramp (under the 46 deg limit) climbed: y = %.2f" % top)
 	await _place(_s.world.landmarks["ramp_50"] + Vector3(0, 0.05, 4.0))
-	await _run(_frame(FWD), 3.0)
-	t.ok(_s.body.global_position.y < 0.6, "50 deg ramp is too steep to walk up: y = %.2f" % _s.body.global_position.y)
+	top = await _run_max_height(_frame(FWD), 3.0)
+	t.ok(top < 0.6, "50 deg ramp is too steep to run up: y = %.2f" % top)
 
 
 func test_walkable_slope_limit_is_live_tunable(t) -> void:
@@ -179,7 +223,7 @@ func test_live_parameter_changes_apply_immediately(t) -> void:
 	_s.params.reset_all()
 	await _run(_frame(right), 1.5)
 	v = _s.body.velocity
-	t.near(Vector2(v.x, v.z).length(), 4.5, 0.1, "reset returns to defaults")
+	t.near(Vector2(v.x, v.z).length(), 6.0, 0.1, "reset returns to defaults")
 
 
 func test_falling_off_the_world_respawns(t) -> void:

@@ -58,7 +58,7 @@ func test_characters_do_not_share_mutable_animation_clips(t) -> void:
 
 func test_sandbox_uses_the_tree_without_changing_the_collision_rig(t) -> void:
 	var sandbox: Node = load("res://scenes/flat_plane.tscn").instantiate()
-	sandbox.options = {"no-tuning": "true", "no-capture": "true", "no-window-state": "true"}
+	sandbox.options = {"no-tuning": "true", "no-capture": "true", "no-window-state": "true", "legacy-animation": "true"}
 	_tree.root.add_child(sandbox)
 	await _tree.process_frame
 	sandbox.set_process(false)
@@ -128,6 +128,69 @@ func test_parameters_and_rig_refresh_clips_without_resetting_phase(t) -> void:
 	_scene.advance(0.0)
 	t.eq(a.generation, generation + 1, "camera and scrub edits do not rebake")
 	t.near(_scene.model.phase, 0.4, 1e-9, "scrub still poses the tree")
+
+
+func test_continuously_changing_speed_does_not_rebuild_the_loop_or_lose_pose_accuracy(t) -> void:
+	_scene.set_running(true)
+	var a = _scene.visual.walk_animation
+	var worst := 0.0
+	var generation := -1
+	for body_blend in [0.0, 1.0]:
+		a.params.set_value("body_blend", body_blend)
+		for i in 360:
+			var speed := (6.1 if i < 180 else 12.2) + 0.006 * sin(i * 1.7)
+			var pose: Dictionary = _scene.model.update(DT, speed)
+			_scene.visual.update_pose({"speed": speed, "vy": 0.0, "grounded": true, "crouching": false,
+				"heading": i * 0.025, "accel_forward": 0.0, "gait": pose}, DT)
+			if generation < 0:
+				generation = a.generation
+			t.eq(a.generation, generation, "turning-speed jitter and sprint changes do not rebake the full cycle")
+			t.near(_scene.model.cycle.v, speed, 1e-9, "actual speed is neither quantized nor capped at 8 m/s")
+			t.near(a.tree.get("parameters/Walk/current_position"), _scene.model.phase, 1e-5, "graph clock remains synchronized")
+			worst = maxf(worst, _ankle_error(pose))
+	t.ok(worst < 0.001, "speed-dependent samples retain <1 mm ankle error with BodyAdd off/on: %.6f m" % worst)
+	t.eq(a.player.get_animation("walk").track_get_key_count(0), a.RUN_SAMPLES + 1, "sample updates never append duplicate keys")
+	_scene.gait_params.set_value("run_knee_drive", 0.3)
+	var pose: Dictionary = _scene.model.update(DT, 6.0)
+	_scene.visual.update_pose({"speed": 6.0, "grounded": true, "gait": pose}, DT)
+	t.eq(a.generation, generation + 1, "an actual gait edit still rebuilds all samples")
+
+
+func test_speed_cache_handles_arbitrary_scrubs_idle_and_loop_boundaries_in_both_modes(t) -> void:
+	var a = _scene.visual.walk_animation
+	a.params.set_value("body_blend", 0.0)
+	var worst := 0.0
+	for running in [false, true]:
+		_scene.set_running(running)
+		_scene.gait_params.set_value("freeze", 1.0)
+		var generation := -1
+		for speed in ([0.0, 6.1, 12.2] if running else [0.0, 1.55, 3.5]):
+			for phase in [0.995, 0.005, 0.375, 0.5, 1.0, 0.0, 0.625]:
+				_scene.gait_params.set_value("scrub", phase)
+				var pose: Dictionary = _scene.model.update(0.0, speed)
+				_scene.visual.update_pose({"speed": speed, "grounded": true, "gait": pose}, 0.0)
+				if generation < 0:
+					generation = a.generation
+				t.eq(a.generation, generation, "speed changes and arbitrary seeks do not rebuild the loop")
+				t.near(a.tree.get("parameters/Walk/current_position"), _scene.model.phase, 1e-5, "native graph seeks to the requested phase")
+				if pose.active:
+					worst = maxf(worst, _ankle_error(pose))
+		var clip: Animation = a.player.get_animation("walk")
+		for track in clip.get_track_count():
+			t.eq(clip.track_get_key_count(track), (a.RUN_SAMPLES if running else a.SAMPLES) + 1, "all tracks replace existing keys")
+	t.ok(worst < 0.001, "scrubbed walk/run feet remain within 1 mm without the additive correction: %.6f m" % worst)
+
+
+func _ankle_error(pose: Dictionary) -> float:
+	var worst := 0.0
+	var c: Dictionary = _scene.model.cycle
+	for side in ["l", "r"]:
+		var off: Vector3 = pose.pelvis_q * Vector3(-c.hip_x if side == "l" else c.hip_x, -c.hip_drop, 0.0)
+		var ankle: Vector3 = pose["ankle_" + side]
+		var planned := Vector3(pose.pelvis.x + off.x, ankle.y, -ankle.x)
+		var actual: Vector3 = _scene.visual.skeleton.get_bone_global_pose(_scene.visual.bone_index["foot_" + side]).origin
+		worst = maxf(worst, planned.distance_to(actual))
+	return worst
 
 
 func test_half_speed_stays_synchronized_with_belt_and_freeze(t) -> void:

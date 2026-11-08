@@ -1,9 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://jqex3uj2pmnn"]
 
-[ext_resource type="Script" path="res://scenes/gait_treadmill.gd" id="1"]
+[ext_resource type="Script" uid="uid://dpl6a145ms7id" path="res://scenes/gait_treadmill.gd" id="1"]
 [ext_resource type="PackedScene" path="res://character/walk_visual.tscn" id="2"]
 
-[node name="GaitTreadmill" type="Node3D"]
+[node name="GaitTreadmill" type="Node3D" unique_id=1724454152]
 script = ExtResource("1")
 
-[node name="Visual" parent="." instance=ExtResource("2")]
+[node name="Visual" parent="." unique_id=1409288131 instance=ExtResource("2")]

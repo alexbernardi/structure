@@ -164,6 +164,7 @@
 					"knob": "gait.view_guides"
 				},
 				"4": {
+					"fader": "gait.reference_fit",
 					"knob": "gait.view_ortho"
 				},
 				"5": {
@@ -252,6 +253,117 @@
 				"3": {
 					"fader": "graph.playback_speed",
 					"knob": "graph.playback_speed"
+				}
+			}
+		},
+		{
+			"name": "Posture & Roll",
+			"strips": {
+				"1": {
+					"fader": "gait.midstance_at",
+					"knob": "gait.midstance_at"
+				},
+				"2": {
+					"fader": "gait.roll_flow",
+					"knob": "gait.roll_flow"
+				},
+				"3": {
+					"fader": "gait.spine_curve",
+					"knob": "gait.spine_curve"
+				},
+				"4": {
+					"fader": "gait.head_level",
+					"knob": "gait.head_level"
+				},
+				"5": {
+					"fader": "gait.torso_lean",
+					"knob": "gait.torso_lean"
+				},
+				"6": {
+					"fader": "gait.heel_strike_angle",
+					"knob": "gait.heel_strike_angle"
+				},
+				"7": {
+					"fader": "gait.toe_off_angle",
+					"knob": "gait.toe_off_angle"
+				},
+				"8": {
+					"fader": "gait.velocity_match",
+					"knob": "gait.velocity_match"
+				}
+			}
+		},
+		{
+			"name": "Ankle Path",
+			"strips": {
+				"1": {
+					"fader": "gait.edit_path",
+					"knob": "gait.edit_path"
+				},
+				"2": {
+					"fader": "gait.swing_forward",
+					"knob": "gait.swing_forward"
+				},
+				"3": {
+					"fader": "gait.step_height",
+					"knob": "gait.step_height"
+				},
+				"4": {
+					"fader": "gait.swing_peak",
+					"knob": "gait.swing_peak"
+				},
+				"5": {
+					"fader": "gait.step_length",
+					"knob": "gait.step_length"
+				},
+				"6": {
+					"fader": "gait.midstance_at",
+					"knob": "gait.midstance_at"
+				},
+				"7": {
+					"fader": "gait.stand_height",
+					"knob": "gait.stand_height"
+				},
+				"8": {
+					"fader": "gait.pelvis_bob",
+					"knob": "gait.pelvis_bob"
+				}
+			}
+		},
+		{
+			"name": "Running",
+			"strips": {
+				"1": {
+					"fader": "gait.run_mode",
+					"knob": "gait.run_mode"
+				},
+				"2": {
+					"fader": "gait.run_speed",
+					"knob": "gait.run_knee_drive"
+				},
+				"3": {
+					"fader": "gait.run_step_length",
+					"knob": "gait.run_duty_factor"
+				},
+				"4": {
+					"fader": "gait.run_step_height",
+					"knob": "gait.run_swing_peak"
+				},
+				"5": {
+					"fader": "gait.run_midstance_at",
+					"knob": "gait.run_swing_forward"
+				},
+				"6": {
+					"fader": "gait.run_pelvis_bob",
+					"knob": "gait.run_flight_lift"
+				},
+				"7": {
+					"fader": "gait.run_arm_swing",
+					"knob": "gait.run_elbow_bend"
+				},
+				"8": {
+					"fader": "gait.run_torso_lean",
+					"knob": "gait.stand_height"
 				}
 			}
 		}
