@@ -145,6 +145,8 @@ static func locomotion_data() -> Dictionary:
 	data.banks = data.banks.slice(0, 3)
 	data.banks.append(_bank("Authored Animation", ["transition_duration", "cadence_multiplier", "stride_scale", "lean_intensity",
 		"foot_ik", "legacy", "", ""], "locomotion."))
+	data.banks.append(_bank("Traversal", ["anticipation", "transition_response", "contact_correction", "momentum_continuity",
+		"traversal", "debug_overlay", "", ""], "traversal."))
 	return data
 
 

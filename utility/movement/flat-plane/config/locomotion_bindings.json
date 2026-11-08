@@ -127,6 +127,35 @@
 					"knob": "locomotion.legacy"
 				}
 			}
+		},
+		{
+			"name": "Traversal",
+			"strips": {
+				"1": {
+					"fader": "traversal.anticipation",
+					"knob": "traversal.anticipation"
+				},
+				"2": {
+					"fader": "traversal.transition_response",
+					"knob": "traversal.transition_response"
+				},
+				"3": {
+					"fader": "traversal.contact_correction",
+					"knob": "traversal.contact_correction"
+				},
+				"4": {
+					"fader": "traversal.momentum_continuity",
+					"knob": "traversal.momentum_continuity"
+				},
+				"5": {
+					"fader": "traversal.traversal",
+					"knob": "traversal.traversal"
+				},
+				"6": {
+					"fader": "traversal.debug_overlay",
+					"knob": "traversal.debug_overlay"
+				}
+			}
 		}
 	],
 	"global_actions": {
@@ -143,7 +172,7 @@
 		"global_stop": "reset_all"
 	},
 	"knob_scale": 1.0,
-	"schema": 1,
+	"schema": 1.0,
 	"strip_actions": {
 		"mute": "reset_param",
 		"rec": "revert_param",

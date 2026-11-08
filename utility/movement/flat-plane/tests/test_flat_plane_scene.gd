@@ -368,17 +368,26 @@ func test_step_up_is_eased_for_the_presentation_but_instant_for_the_physics(t) -
 	await _place(_s.world.landmarks["stairs_0.30"] + Vector3(-1.5, 0.05, 0))
 	var lowest := 0.0
 	var visual_pops := 0.0
+	var between_dip := 0.0
+	var prev_body_y: float = _s.body.global_position.y
 	var prev_visual_y: float = _s.body.global_position.y + _s.body.step_offset
 	for i in 360:
 		await _tree.physics_frame
 		_s.body.simulate(_frame(Vector2(1, 0)), DT)
 		lowest = minf(lowest, _s.body.step_offset)
-		var visual_y: float = _s.body.global_position.y + _s.body.step_offset
+		var body_y: float = _s.body.global_position.y
+		var visual_y: float = body_y + _s.body.step_offset
 		if i > 20:
 			visual_pops = maxf(visual_pops, absf(visual_y - prev_visual_y))
+		# Rendered frames between the ticks: the body's transform and the offset are interpolated at the same fraction.
+		for fraction in [0.25, 0.5, 0.75]:
+			var drawn: float = lerpf(prev_body_y, body_y, fraction) + _s.body.step_offset_at(fraction)
+			between_dip = maxf(between_dip, minf(prev_visual_y, visual_y) - drawn)
+		prev_body_y = body_y
 		prev_visual_y = visual_y
 	t.ok(lowest < -0.1, "a step registers an offset (lowest %.3f)" % lowest)
 	t.ok(visual_pops < 0.11, "what the player sees rises gradually: largest per-tick change %.3f m (the body itself climbs 0.30 m at once)" % visual_pops)
+	t.ok(between_dip < 0.001, "between ticks the drawn character never sinks below the tread (largest dip %.4f m)" % between_dip)
 	await _run(_frame(), 1.0)
 	t.near(_s.body.step_offset, 0.0, 0.002, "the offset has decayed once standing still")
 

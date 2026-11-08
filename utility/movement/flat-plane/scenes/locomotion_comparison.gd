@@ -1,14 +1,22 @@
 ## Independent physics worlds receive the same recorded input frame and the same parameter object.
+## --trial=vault (optionally --lane=a|b|c): A is the approved authored baseline with traversal off, B the same with the
+## authored vault, both replaying one recorded run down a vault-course lane in a side view.
 extends Control
 
 const Playground = preload("res://scenes/flat_plane.tscn")
 const TrialPath := "res://config/locomotion_trial.json"
+const VaultTrialPath := "res://config/vault_trial.json"
+const VAULT_VIEWS := {"a": Vector3(0.0, 0.3, 7.5), "b": Vector3(0.0, 3.8, 6.5), "c": Vector3(0.0, 0.3, -7.5)}   ## camera from the focus; b looks over lane A
 
 var left
 var right
 var frames: Array = []
 var cursor := 0
 var paused := false
+var vault_trial := false
+var options := {}               ## set before adding to the tree; command-line options override
+var _start := Vector3(150, 0.05, 150)
+var _view := Vector3(-5.0, 0.0, 0.0)
 var _cameras: Array[Camera3D] = []
 var _ready_for_trial := false
 var _render_frames := 0
@@ -18,12 +26,15 @@ var _options := {}
 func _ready() -> void:
 	if DisplayServer.get_name() != "headless":
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_options = options.duplicate()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--"):
 			var pair := arg.trim_prefix("--").split("=", true, 1)
 			_options[pair[0]] = pair[1] if pair.size() > 1 else "true"
+	vault_trial = _options.get("trial", "") == "vault"
 	var parser := JSON.new()
-	if parser.parse(FileAccess.get_file_as_string(TrialPath)) != OK or not parser.data is Dictionary:
+	var path := VaultTrialPath if vault_trial else TrialPath
+	if parser.parse(FileAccess.get_file_as_string(path)) != OK or not parser.data is Dictionary:
 		push_error("Invalid locomotion recording: %s" % parser.get_error_message())
 		get_tree().quit(1)
 		return
@@ -41,6 +52,8 @@ func _ready() -> void:
 	left = Playground.instantiate()
 	left.params = right.params
 	left.options = {"no-tuning": "true", "no-capture": "true", "no-window-state": "true", "legacy-animation": "true"}
+	if vault_trial:
+		left.options = {"no-tuning": "true", "no-capture": "true", "no-window-state": "true", "no-traversal": "true"}
 	right.options = {"no-capture": "true", "no-window-state": "true", "tuning-state": "user://tuning_state_comparison.json"}
 	if _options.has("no-hardware"):
 		right.options["no-hardware"] = "true"
@@ -58,9 +71,21 @@ func _ready() -> void:
 		camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		scene.add_child(camera)
 		camera.current = true
-		camera.fov = 34.0
+		camera.fov = 40.0 if vault_trial else 34.0
 		_cameras.append(camera)
-	right.tuning.engine.switch_bank(3)
+	if vault_trial:
+		var lane := String(_options.get("lane", data.get("lane", "a")))
+		if not VAULT_VIEWS.has(lane):
+			push_error("Unknown vault lane '%s' (a, b or c)" % lane)
+			get_tree().quit(1)
+			return
+		_start = right.world.landmarks["vault_" + lane] + Vector3(0.0, 0.05, 0.0)
+		_view = VAULT_VIEWS[lane]
+		# The scene's own tuning state may have switched traversal off; the trial compares without and with it.
+		right.traversal_params.set_value("traversal", 1.0)
+		right.locomotion_params.set_value("legacy", 0.0)
+		$Controls/Toolbar/System.text = "B vaults"
+	right.tuning.engine.switch_bank(4 if vault_trial else 3)
 	right.tuning.scene_action.disconnect(right._on_tuning_action)
 	right.tuning.scene_action.connect(func(action: String, context: Dictionary) -> void:
 		if action in ["respawn", "teleport_next", "teleport_prev"]:
@@ -70,7 +95,11 @@ func _ready() -> void:
 		right.tuning.hud.cycle()
 	$Controls/Toolbar/Pause.toggled.connect(func(value: bool) -> void: paused = value)
 	$Controls/Toolbar/Replay.pressed.connect(restart)
-	$Controls/Toolbar/System.toggled.connect(func(value: bool) -> void: right.locomotion_params.set_value("legacy", 1.0 if value else 0.0))
+	$Controls/Toolbar/System.toggled.connect(func(value: bool) -> void:
+		if vault_trial:
+			right.traversal_params.set_value("traversal", 1.0 if value else 0.0)
+		else:
+			right.locomotion_params.set_value("legacy", 1.0 if value else 0.0))
 	$Controls/Toolbar/Playground.pressed.connect(func() -> void:
 		var error := get_tree().change_scene_to_packed(Playground)
 		if error != OK:
@@ -87,13 +116,17 @@ static func input_frame(record: Array) -> Dictionary:
 func restart() -> void:
 	cursor = 0
 	for scene in [left, right]:
-		scene.body.teleport(Vector3(150, 0.05, 150))
+		scene.body.teleport(_start)
 		scene._teleported = true
 		scene.gait_model.phase = 0.0
 		scene.dynamics.reset()
-	right.authored_animation.playback.start("Idle")
-	right.authored_animation.model.run_weight = 0.0
-	right.authored_animation.model.sprint_blend = 0.0
+	for scene in ([left, right] if vault_trial else [right]):
+		scene.authored_animation.playback.start("Idle")
+		scene.authored_animation.model.run_weight = 0.0
+		scene.authored_animation.model.sprint_blend = 0.0
+	if vault_trial:
+		right.vault.vaults = 0
+		right.vault.aborts = 0
 
 
 func _physics_process(dt: float) -> void:
@@ -112,16 +145,30 @@ func _process(dt: float) -> void:
 		return
 	for i in 2:
 		var scene: Node = left if i == 0 else right
+		var teleported: bool = scene._teleported
 		if not paused:
 			scene._process(dt)
 		var body_position: Vector3 = scene.body.get_global_transform_interpolated().origin
-		_cameras[i].position = body_position + Vector3(-5.0, 1.0, 0.0)
-		_cameras[i].look_at(body_position + Vector3.UP)
-	var separation: float = left.body.global_position.distance_to(right.body.global_position)
-	$Controls/Toolbar/System.set_pressed_no_signal(right.locomotion_params.is_on("legacy"))
-	$Controls/Status.text = "A: LEGACY   |   B: %s   |   %.2f m/s   |   frame %d/%d   |   physics difference %.6f m" % [
-		"LEGACY" if right.locomotion_params.is_on("legacy") else "AUTHORED " + right.authored_animation.model.state,
-		right.body.core.horizontal_speed(), cursor, frames.size(), separation]
+		if vault_trial:
+			# Both sides frame where the character is drawn, with the same eased height, so A and B compare like for like.
+			var focus: Vector3 = scene.side_focus(0.0 if teleported else dt)
+			_cameras[i].position = focus + _view
+			_cameras[i].look_at(focus)
+		else:
+			_cameras[i].position = body_position + Vector3(-5.0, 1.0, 0.0)
+			_cameras[i].look_at(body_position + Vector3.UP)
+	if vault_trial:
+		$Controls/Toolbar/System.set_pressed_no_signal(right.traversal_params.is_on("traversal"))
+		$Controls/Status.text = "A: AUTHORED, NO VAULT %s   |   B: %s %s   |   %.2f / %.2f m/s   |   vaults %d  aborted %d   |   frame %d/%d" % [
+			left.authored_animation.model.state, "AUTHORED + VAULT" if right.vault.enabled() else "AUTHORED, NO VAULT",
+			right.authored_animation.model.state, left.body.core.horizontal_speed(), right.body.core.horizontal_speed(),
+			right.vault.vaults, right.vault.aborts, cursor, frames.size()]
+	else:
+		var separation: float = left.body.global_position.distance_to(right.body.global_position)
+		$Controls/Toolbar/System.set_pressed_no_signal(right.locomotion_params.is_on("legacy"))
+		$Controls/Status.text = "A: LEGACY   |   B: %s   |   %.2f m/s   |   frame %d/%d   |   physics difference %.6f m" % [
+			"LEGACY" if right.locomotion_params.is_on("legacy") else "AUTHORED " + right.authored_animation.model.state,
+			right.body.core.horizontal_speed(), cursor, frames.size(), separation]
 	_render_frames += 1
 	if _options.has("screenshot") and _render_frames == int(_options.get("screenshot-frame", 360)):
 		await RenderingServer.frame_post_draw

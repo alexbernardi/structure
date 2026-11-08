@@ -23,6 +23,9 @@ var last_impact := 0.0
 ## Presentation-only vertical offset (<= 0 after a step-up). The body climbs a stair in one tick; the visual and the
 ## camera start that far below and ease back to zero, so the climb reads as a smooth rise instead of a pop.
 var step_offset := 0.0
+## Optional physical traversal action (traversal/vault_action.gd): filters the input, may take over whole ticks, adjusts
+## the core's velocity before the move and observes the world after it. Null = plain movement.
+var action = null
 
 const STEP_EASE_RATE := 14.0   ## 1/s; time constant ~70 ms
 const FLAT_TOLERANCE_DEG := 3.0
@@ -31,6 +34,7 @@ var _shape := CylinderShape3D.new()
 var _collider := CollisionShape3D.new()
 var _was_grounded := false
 var _prev_vy := 0.0
+var _step_offset_prev := 0.0   # step_offset at the previous tick, to interpolate it like the body's transform
 
 
 func setup(p: Params) -> void:
@@ -66,11 +70,18 @@ func _apply_shape(crouched: bool) -> void:
 
 ## One fixed tick. `input` is the movement input frame (see MovementCore.step).
 func simulate(input: Dictionary, dt: float) -> void:
+	_step_offset_prev = step_offset
+	if action != null:
+		input = action.filter_input(input)
+		if action.drive(self, dt):
+			return
 	_sync_slope_settings()
 	var grounded := is_on_floor()
 	var ground := {"grounded": grounded, "normal": get_floor_normal() if grounded else Vector3.UP, "can_stand": _can_stand()}
 	_prev_vy = velocity.y
 	core.step(input, ground, dt)
+	if action != null:
+		action.adjust(self, dt)
 	_apply_shape(core.crouching)
 	velocity = core.velocity
 	stepped = false
@@ -94,6 +105,63 @@ func simulate(input: Dictionary, dt: float) -> void:
 	_was_grounded = now_grounded
 	if global_position.y < KILL_HEIGHT:
 		respawn()
+	elif action != null:
+		action.observe(self, dt)
+
+
+## One kinematic traversal tick: the movement core is bypassed but the collider keeps full collision response, so a
+## blocked path shows up as tracking error instead of tunnelling. The crouch collider stands in for the tucked body,
+## and floor snapping is off because the path leaves the ground on purpose.
+func drive_to(target: Vector3, dt: float) -> void:
+	core.crouching = true
+	_apply_shape(true)
+	floor_snap_length = 0.0
+	stepped = false
+	velocity = (target - global_position) / dt
+	move_and_slide()
+	core.velocity = velocity
+	core.grounded = false
+	step_offset = move_toward(step_offset * exp(-STEP_EASE_RATE * dt), 0.0, 0.05 * dt)
+
+
+## Ends a traversal action and hands `v` to the movement core. A landing re-attaches the floor at once, so the next
+## tick is ground movement rather than a fall followed by a landing.
+func release(v: Vector3, landed: bool) -> void:
+	_sync_slope_settings()
+	velocity = v
+	if landed:
+		apply_floor_snap()
+	core.velocity = v
+	core.grounded = landed and is_on_floor()
+	core.coyote_left = 0.0
+	_was_grounded = core.grounded
+	_prev_vy = 0.0
+
+
+## Where the presentation (visual and camera) sits relative to the body: the eased stair-step offset plus any
+## traversal offset (the authored vault's body path differs from the collider's hump).
+func presentation_offset() -> Vector3:
+	var fraction := Engine.get_physics_interpolation_fraction()
+	var offset := Vector3.UP * step_offset_at(fraction)
+	if action != null:
+		offset += action.offset(fraction)
+	return offset
+
+
+## Where the cameras follow relative to the body: the presentation offset without a traversal action's pose fitting
+## (see VaultAction.follow_offset).
+func follow_offset() -> Vector3:
+	var fraction := Engine.get_physics_interpolation_fraction()
+	var offset := Vector3.UP * step_offset_at(fraction)
+	if action != null:
+		offset += action.follow_offset(fraction)
+	return offset
+
+
+## The step offset between the last two ticks, interpolated like the body's transform: at a step-up the body is drawn
+## part-way up the riser, so the full offset would put the character below the tread for a frame.
+func step_offset_at(fraction: float) -> float:
+	return lerpf(_step_offset_prev, step_offset, fraction)
 
 
 func _can_stand() -> bool:
@@ -151,6 +219,9 @@ func respawn() -> void:
 ## character streaking from the old spot to the new one.
 func teleport(pos: Vector3, basis := Basis.IDENTITY) -> void:
 	step_offset = 0.0
+	_step_offset_prev = 0.0
+	if action != null:
+		action.cancel()
 	global_transform = Transform3D(basis, pos)
 	velocity = Vector3.ZERO
 	core.reset()

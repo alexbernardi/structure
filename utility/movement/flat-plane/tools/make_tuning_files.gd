@@ -11,6 +11,7 @@ const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Presets = preload("res://tuning/preset_store.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
 const Params = preload("res://movement/movement_params.gd")
+const LOCOMOTION_PATH := "res://config/locomotion_bindings.json"
 
 const EXAMPLES := {
 	"floaty": {
@@ -36,27 +37,12 @@ func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	var force := args.has("--force")
 	var made := 0
-	if args.has("--add-missing-banks") and FileAccess.file_exists(Bindings.DEFAULT_PATH):
-		# Appends default banks the shipped file does not have yet, without touching anything already there.
-		var existing := Bindings.new()
-		var loaded := existing.load_file(Bindings.DEFAULT_PATH)
-		if not loaded.ok:
-			print("bindings: not changed, current file is invalid: ", loaded.errors[0])
-			quit(1)
-			return
-		var names: Array = []
-		for bank in existing.data.banks:
-			names.append(bank.name)
-		var added: Array = []
-		for bank in Bindings.default_data().banks:
-			if not names.has(bank.name):
-				existing.data.banks.append(bank)
-				added.append(bank.name)
-		if not added.is_empty():
-			var saved := existing.save_file(Bindings.DEFAULT_PATH)
-			print("bindings: added banks ", added, " -> ", "written" if saved.ok else saved.error)
-		else:
-			print("bindings: no banks missing")
+	if args.has("--add-missing-banks"):
+		# Appends default banks a shipped file does not have yet, without touching anything already there.
+		for pair in [[Bindings.DEFAULT_PATH, Bindings.default_data()], [LOCOMOTION_PATH, Bindings.locomotion_data()]]:
+			if FileAccess.file_exists(pair[0]) and not _add_missing_banks(pair[0], pair[1]):
+				quit(1)
+				return
 		quit(0)
 		return
 	if force or not FileAccess.file_exists(Bindings.DEFAULT_PATH):
@@ -64,7 +50,7 @@ func _initialize() -> void:
 		var r := b.save_file(Bindings.DEFAULT_PATH)
 		print("bindings: ", "written" if r.ok else r.error)
 		made += 1
-	var locomotion_path := "res://config/locomotion_bindings.json"
+	var locomotion_path := LOCOMOTION_PATH
 	if force or not FileAccess.file_exists(locomotion_path):
 		var b := Bindings.new()
 		b.data = Bindings.locomotion_data()
@@ -90,3 +76,25 @@ func _initialize() -> void:
 		print("preset ", name, ": ", "written" if r2.ok else r2.error)
 		made += 1
 	quit(0)
+
+
+func _add_missing_banks(path: String, defaults: Dictionary) -> bool:
+	var existing := Bindings.new()
+	var loaded := existing.load_file(path)
+	if not loaded.ok:
+		print(path, ": not changed, current file is invalid: ", loaded.errors[0])
+		return false
+	var names: Array = []
+	for bank in existing.data.banks:
+		names.append(bank.name)
+	var added: Array = []
+	for bank in defaults.banks:
+		if not names.has(bank.name):
+			existing.data.banks.append(bank)
+			added.append(bank.name)
+	if added.is_empty():
+		print(path, ": no banks missing")
+		return true
+	var saved := existing.save_file(path)
+	print(path, ": added banks ", added, " -> ", "written" if saved.ok else saved.error)
+	return saved.ok

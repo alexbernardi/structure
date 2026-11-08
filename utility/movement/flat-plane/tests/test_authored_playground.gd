@@ -75,7 +75,7 @@ func _fader(strip: int, value: int) -> void:
 func test_simplified_bank_uses_verified_midi_mapping_and_preserves_legacy(t) -> void:
 	_scene.midi.rescan_interval = 0.0
 	_scene.midi._apply_ports(["SMC-Mixer", "MIDIIN2 (SMC-Mixer)"])
-	t.eq(_scene.tuning.bindings.bank_count(), 4, "three physical banks and one animation bank")
+	t.eq(_scene.tuning.bindings.bank_count(), 5, "three physical banks, one animation bank and one traversal bank")
 	t.eq(_scene.tuning.load_errors, [], "new shipped binding file loads")
 	t.eq(_scene.tuning.bindings.unresolved(_scene.tuning.registry), [], "all keys resolve")
 	_scene.tuning.engine.switch_bank(3)
@@ -106,6 +106,47 @@ func test_simplified_bank_uses_verified_midi_mapping_and_preserves_legacy(t) -> 
 	t.eq(_scene.locomotion_params.get_value("transition_duration"), before, "authored value round trips")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://authored_preset_test/authored_test.json"))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://authored_preset_test"))
+
+
+func test_traversal_bank_uses_verified_midi_mapping_and_round_trips_presets(t) -> void:
+	_scene.midi.rescan_interval = 0.0
+	_scene.midi._apply_ports(["SMC-Mixer", "MIDIIN2 (SMC-Mixer)"])
+	_scene.tuning.engine.switch_bank(4)
+	t.eq(_scene.tuning.bindings.bank_name(4), "Traversal", "bank 5 is the traversal bank")
+	for strip in range(1, 5):
+		var key: String = _scene.tuning.bindings.slot_key(4, strip, "fader")
+		t.ok(key.begins_with("traversal."), "strip %d is a traversal control: %s" % [strip, key])
+		_fader(strip, 127)
+		_fader(strip, 0)
+		_fader(strip, 64)
+		var id := key.trim_prefix("traversal.")
+		var definition: Dictionary = _scene.traversal_params.def(id)
+		t.near(_scene.traversal_params.get_value(id), lerpf(definition.min, definition.max, 64.0 / 127.0), definition.step, "real mapped fader changes " + key)
+	t.ok(_scene.vault.enabled(), "traversal starts on")
+	_fader(5, 127)
+	_fader(5, 0)
+	t.ok(not _scene.vault.enabled() and "off" in _scene.traversal_status(), "mapped switch turns traversal off live")
+	_fader(5, 127)
+	t.ok(_scene.vault.enabled(), "and back on without restarting")
+	_fader(6, 0)
+	_fader(6, 127)
+	_scene._process(DT)
+	t.ok(_scene.traversal_params.is_on("debug_overlay") and _scene._vault_debug.visible, "mapped switch shows the debug overlay")
+	_fader(6, 0)
+	_scene._process(DT)
+	t.ok(not _scene._vault_debug.visible, "and hides it")
+	var Store = preload("res://tuning/preset_store.gd")
+	_scene.tuning.presets = Store.new("user://traversal_preset_test")
+	var saved: Dictionary = _scene.tuning.save_preset_as("traversal_test")
+	t.ok(saved.ok, "traversal parameters save with the rest")
+	var before: float = _scene.traversal_params.get_value("anticipation")
+	_scene.traversal_params.set_value("anticipation", 0.6)
+	_scene.traversal_params.set_value("traversal", 0.0)
+	t.ok(_scene.tuning.load_preset("traversal_test"), "preset reloads")
+	t.eq(_scene.traversal_params.get_value("anticipation"), before, "traversal value round trips")
+	t.ok(_scene.vault.enabled(), "traversal switch round trips")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://traversal_preset_test/traversal_test.json"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://traversal_preset_test"))
 
 
 func test_recorded_comparison_has_identical_physics_with_and_without_animation(t) -> void:
@@ -139,3 +180,37 @@ func test_recorded_comparison_has_identical_physics_with_and_without_animation(t
 		t.ok(states.has(state), "recording exercises " + state)
 	_scene.right.tuning.scene_action.emit("record_toggle", {})
 	t.ok(_scene.get_node("Controls/Toolbar/Playground") is Button, "comparison exposes a route back to live movement")
+
+
+func test_vault_comparison_replays_one_run_without_and_with_the_vault(t) -> void:
+	_scene.queue_free()
+	await _tree.process_frame
+	_scene = Comparison.instantiate()
+	_scene.options = {"trial": "vault"}
+	_tree.root.add_child(_scene)
+	await _tree.process_frame
+	_scene.set_physics_process(false)
+	_scene.set_process(false)
+	_scene.restart()
+	t.ok(not _scene.left.vault.enabled() and _scene.right.vault.enabled(), "A is the authored baseline without traversal; B vaults")
+	t.ok(not _scene.left.locomotion_params.is_on("legacy") and not _scene.right.locomotion_params.is_on("legacy"), "both sides are authored")
+	t.eq(_scene.right.tuning.engine.bank, 4, "B starts on the traversal MIDI bank")
+	var start: Vector3 = _scene.right.body.global_position
+	t.near(_scene.left.body.global_position, start, 0.0001, "both start at the same lane landmark")
+	var furthest := [start.x, start.x]
+	var baseline_armed := false
+	for i in _scene.frames.size():
+		await _tree.physics_frame
+		_scene._physics_process(DT)
+		_scene.left._process(DT)
+		_scene.right._process(DT)
+		baseline_armed = baseline_armed or _scene.left.vault.phase != 0
+		furthest[0] = maxf(furthest[0], _scene.left.body.global_position.x)
+		furthest[1] = maxf(furthest[1], _scene.right.body.global_position.x)
+	t.ok(not baseline_armed, "traversal off never arms")
+	t.ok(furthest[0] < -18.0, "without traversal the first wall stops the identical run (x %.2f)" % furthest[0])
+	t.ok(furthest[1] > 9.5, "with traversal the same inputs carry B over the vaultable walls (x %.2f)" % furthest[1])
+	t.eq(_scene.right.vault.vaults, 4, "four vaultable walls, four vaults")
+	t.eq(_scene.right.vault.aborts, 0, "no vault aborted")
+	_scene.get_node("Controls/Toolbar/System").button_pressed = false
+	t.ok(not _scene.right.vault.enabled(), "the toolbar switches B's traversal off without restarting")

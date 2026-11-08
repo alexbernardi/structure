@@ -63,8 +63,14 @@ func _unhandled_input(event: InputEvent) -> void:
 func _target_position() -> Vector3:
 	if target == null:
 		return Vector3.ZERO
-	var offset: float = target.get("step_offset") if target.get("step_offset") != null else 0.0
-	return target.get_global_transform_interpolated().origin + Vector3.UP * (follow_height + offset)
+	var offset := Vector3.ZERO
+	if target.has_method("follow_offset"):
+		offset = target.follow_offset()
+	elif target.has_method("presentation_offset"):
+		offset = target.presentation_offset()
+	elif target.get("step_offset") != null:
+		offset = Vector3.UP * float(target.get("step_offset"))
+	return target.get_global_transform_interpolated().origin + Vector3.UP * follow_height + offset
 
 
 func _process(delta: float) -> void:

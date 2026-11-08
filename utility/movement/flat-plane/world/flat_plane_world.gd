@@ -23,6 +23,7 @@ func build() -> void:
 	_stairs()
 	_obstacles()
 	_tunnel_and_ledge()
+	_vault_course()
 	_spawn_pad()
 	_axis_labels()
 
@@ -181,6 +182,41 @@ func _tunnel_and_ledge() -> void:
 	landmarks["tunnel"] = Vector3(-6.0, 0.0, 22.5)
 	_box(Vector3(16.0, 0.5, -10.0), Vector3(6.0, 1.0, 12.0), Vector3.ZERO, _tint(Color(0.45, 0.65, 0.75)), "Ledge")
 	landmarks["ledge"] = Vector3(16.0, 1.05, -10.0)
+
+
+## Vault course: three 3 m-wide lanes run toward +X, an obstacle every 9 m (landmarks vault_a/b/c face down the lanes).
+##   A (z -25): walls 0.35 m deep at 0.80, 0.95, 1.10, 1.25 m (vaultable) and 1.60 m (rejected: too high)
+##   B (z -30): 1.0 m walls turned 20 deg (vaultable) and 40 deg (rejected), 0.6 m deep (vaultable), 1.4 m deep (rejected)
+##   C (z -35): 1.0 m wall onto a +0.25 m landing, then up a 0.2 m step and over a 1.0 m wall down 0.45 m to the ground
+func _vault_course() -> void:
+	var tint := _tint(Color(0.80, 0.42, 0.36))
+	var heights := [0.80, 0.95, 1.10, 1.25, 1.60]
+	for i in heights.size():
+		var h: float = heights[i]
+		_course_wall(Vector3(-18.0 + i * 9.0, 0.0, -25.0), h, 0.35, 0.0, tint, "VaultA%d" % int(round(h * 100.0)), "%.2f m" % h)
+	_course_wall(Vector3(-18.0, 0.0, -30.0), 1.0, 0.35, 20.0, tint, "VaultB20", "20 deg")
+	_course_wall(Vector3(-9.0, 0.0, -30.0), 1.0, 0.35, 40.0, tint, "VaultB40", "40 deg")
+	_course_wall(Vector3(0.0, 0.0, -30.0), 1.0, 0.6, 0.0, tint, "VaultB60", "0.6 m deep")
+	_course_wall(Vector3(9.0, 0.0, -30.0), 1.0, 1.4, 0.0, tint, "VaultB140", "1.4 m deep")
+	var deck := _tint(Color(0.62, 0.62, 0.58))
+	_course_wall(Vector3(-18.0, 0.0, -35.0), 1.0, 0.35, 0.0, tint, "VaultC1", "+0.25 m landing")
+	_box(Vector3(-14.4125, 0.125, -35.0), Vector3(6.825, 0.25, 3.0), Vector3.ZERO, deck, "VaultDeckLow")
+	_box(Vector3(-6.4125, 0.225, -35.0), Vector3(9.175, 0.45, 3.0), Vector3.ZERO, deck, "VaultDeckHigh")
+	_course_wall(Vector3(-1.65, 0.0, -35.0), 1.45, 0.35, 0.0, tint, "VaultC2", "-0.45 m landing")
+	for lane in [["a", -25.0], ["b", -30.0], ["c", -35.0]]:
+		landmarks["vault_" + String(lane[0])] = Vector3(-27.0, 0.0, lane[1])
+
+
+## A course wall standing on the ground at `base` (its centre), `depth` along +X, turned `yaw_deg` about Y.
+func _course_wall(base: Vector3, height: float, depth: float, yaw_deg: float, mat: Material, node_name: String, caption: String) -> void:
+	_box(base + Vector3(0.0, height / 2.0, 0.0), Vector3(depth, height, 3.0), Vector3(0.0, yaw_deg, 0.0), mat, node_name)
+	var label := Label3D.new()
+	label.text = caption
+	label.pixel_size = 0.006
+	label.font_size = 56
+	label.position = base + Vector3(0.0, height + 0.45, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	add_child(label)
 
 
 func _spawn_pad() -> void:

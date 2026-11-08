@@ -29,7 +29,7 @@ func _initialize() -> void:
 		push_error("Cannot save Quaternius BoneMap: %s" % error_string(error))
 		quit(1)
 		return
-	for file in ["UAL1_Standard.glb", "UAL1_Standard_RM.glb"]:
+	for file in ["UAL1_Standard.glb", "UAL1_Standard_RM.glb", "UAL2_Traversal.glb", "UAL2_Traversal_RM.glb"]:
 		var source: Node = load(DIRECTORY + file).instantiate()
 		var skeleton: Skeleton3D = source.find_children("*", "Skeleton3D", true, false)[0]
 		var path := "PATH:" + String(source.get_path_to(skeleton))
@@ -40,6 +40,11 @@ func _initialize() -> void:
 			source.free()
 			quit(1)
 			return
+		# A mapped import renames the skeleton (GeneralSkeleton); the setting must keep naming the source node.
+		var previous: Dictionary = config.get_value("params", "_subresources", {}).get("nodes", {})
+		for key in previous:
+			if (previous[key] as Dictionary).has("retarget/bone_map"):
+				path = String(key)
 		config.set_value("params", "_subresources", {"nodes": {path: {"retarget/bone_map": map}}})
 		error = config.save(DIRECTORY + file + ".import")
 		print("Native humanoid import mapping: %s -> %s" % [file, path])

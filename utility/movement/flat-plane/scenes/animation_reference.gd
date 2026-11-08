@@ -1,15 +1,18 @@
 ## Unretargeted Quaternius source playback. No controller, generated gait, body dynamics or root-motion consumer.
 extends Node3D
 
-const CLIPS := ["Idle", "Jog_Fwd", "Sprint", "Jump_Start", "Jump", "Jump_Land"]
-const LABELS := ["Idle", "Jog", "Sprint", "Jump start", "Air loop (no separate Fall clip)", "Land"]
+const CLIPS := ["Idle", "Jog_Fwd", "Sprint", "Jump_Start", "Jump", "Jump_Land", "SafetyVault"]
+const LABELS := ["Idle", "Jog", "Sprint", "Jump start", "Air loop (no separate Fall clip)", "Land", "Safety vault (UAL2)"]
+const TRAVERSAL := ["SafetyVault"]
 const Mannequin = preload("res://character/authored_mannequin.gd")
 
 @onready var source: Node3D = $Source
+@onready var traversal_source: Node3D = $TraversalSource
 @onready var selector: OptionButton = $HUD/Panel/Controls/Clip
 @onready var readout: Label = $HUD/Panel/Controls/Readout
 var player: AnimationPlayer
 var skeleton: Skeleton3D
+var mannequin
 var options := {}
 var _frames := 0
 
@@ -20,24 +23,22 @@ func _ready() -> void:
 			var pair := arg.trim_prefix("--").split("=", true, 1)
 			if not options.has(pair[0]):
 				options[pair[0]] = pair[1] if pair.size() > 1 else "true"
-	var players := source.find_children("*", "AnimationPlayer", true, false)
-	var skeletons := source.find_children("*", "Skeleton3D", true, false)
+	traversal_source.hide()
 	if options.has("mannequin"):
 		source.hide()
-		var mannequin := Mannequin.new()
+		mannequin = Mannequin.new()
 		mannequin.rotation.y = PI
 		add_child(mannequin)
-		players = [mannequin.player]
-		skeletons = [mannequin.skeleton]
-	if players.size() != 1 or skeletons.size() != 1:
+	if not _select_source(false):
 		push_error("Quaternius reference requires exactly one AnimationPlayer and Skeleton3D")
 		get_tree().quit(1)
 		return
-	player = players[0]
-	skeleton = skeletons[0]
 	print("Quaternius imported clips: ", player.get_animation_list())
 	for i in CLIPS.size():
-		if not player.has_animation(CLIPS[i]):
+		var clip_player := player
+		if mannequin == null and CLIPS[i] in TRAVERSAL:
+			clip_player = traversal_source.find_children("*", "AnimationPlayer", true, false)[0]
+		if not clip_player.has_animation(CLIPS[i]):
 			push_error("Missing authentic Quaternius clip: %s" % CLIPS[i])
 			get_tree().quit(1)
 			return
@@ -53,17 +54,38 @@ func _ready() -> void:
 	play_clip(CLIPS.find(clip))
 
 
+## The original UAL1 character plays UAL1 clips; the original UAL2 character plays traversal clips (same rig).
+func _select_source(traversal: bool) -> bool:
+	if mannequin != null:
+		player = mannequin.player
+		skeleton = mannequin.skeleton
+		return true
+	var active: Node3D = traversal_source if traversal else source
+	source.visible = not traversal
+	traversal_source.visible = traversal
+	var players := active.find_children("*", "AnimationPlayer", true, false)
+	var skeletons := active.find_children("*", "Skeleton3D", true, false)
+	if players.size() != 1 or skeletons.size() != 1:
+		return false
+	if player != null and player != players[0]:
+		player.stop()
+	player = players[0]
+	skeleton = skeletons[0]
+	return true
+
+
 func play_clip(index: int) -> void:
 	selector.select(index)
+	_select_source(CLIPS[index] in TRAVERSAL)
 	player.stop()
 	player.play(CLIPS[index])
 	player.advance(0.0)
-	readout.text = "%s | 1x authored timing | in place\nNative humanoid import. No procedural corrections. Keys 1-6 select clips." % (
-		"23-bone primitive target" if options.has("mannequin") else "Original 65-bone reference")
+	readout.text = "%s | 1x authored timing | in place\nNative humanoid import. No procedural corrections. Keys 1-%d select clips." % [
+		"23-bone primitive target" if mannequin != null else "Original 65-bone reference", CLIPS.size()]
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode >= KEY_1 and event.keycode <= KEY_6:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode >= KEY_1 and event.keycode < KEY_1 + CLIPS.size():
 		play_clip(event.keycode - KEY_1)
 
 

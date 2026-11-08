@@ -1,6 +1,9 @@
 # --- Local toolchain downloads (pinned in INFRASTRUCTURE/builds/toolchain.json) ---
 /.tools/
 
+# --- User-supplied third-party downloads (large originals; only verified extracts are committed) ---
+/AGENT-WORKSHOP/DOWNLOADS/
+
 # --- Mutable runtime data: dev world data, logs, test runs, pipeline scratch ---
 /.runtime/
 

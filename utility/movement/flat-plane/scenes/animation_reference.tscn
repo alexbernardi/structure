@@ -1,7 +1,8 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scenes/animation_reference.gd" id="1"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/UAL1_Standard.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/UAL2_Traversal.glb" id="3"]
 
 [sub_resource type="Environment" id="Environment"]
 background_mode = 1
@@ -30,6 +31,10 @@ content_margin_bottom = 12.0
 script = ExtResource("1")
 
 [node name="Source" parent="." instance=ExtResource("2")]
+rotation = Vector3(0, 3.1415927, 0)
+
+[node name="TraversalSource" parent="." instance=ExtResource("3")]
+visible = false
 rotation = Vector3(0, 3.1415927, 0)
 
 [node name="Environment" type="WorldEnvironment" parent="."]

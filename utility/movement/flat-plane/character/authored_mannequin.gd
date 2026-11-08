@@ -2,8 +2,10 @@
 extends Node3D
 
 const Source = preload("res://assets/quaternius/UAL1_Standard.glb")
+const TraversalSource = preload("res://assets/quaternius/UAL2_Traversal.glb")
 const LegacyVisual = preload("res://character/character_visual.gd")
 const CLIPS := ["Idle", "Jog_Fwd", "Sprint", "Jump_Start", "Jump", "Jump_Land", "Crouch_Idle", "Crouch_Fwd"]
+const TRAVERSAL_CLIPS := ["SafetyVault"]
 const BONES := ["Root", "Hips", "Spine", "Chest", "UpperChest", "Neck", "Head",
 	"LeftShoulder", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightShoulder", "RightUpperArm", "RightLowerArm", "RightHand",
 	"LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "LeftToes", "RightUpperLeg", "RightLowerLeg", "RightFoot", "RightToes"]
@@ -14,6 +16,8 @@ var source_scale := 1.0
 var proportion_scale := 1.0
 var bone_index := {}
 var sole_points := {}
+var traversal_clips: Array[String] = []   ## authored traversal clips that loaded and retargeted (empty = traversal off)
+var traversal_source := TraversalSource
 
 
 func _ready() -> void:
@@ -55,17 +59,44 @@ func _ready() -> void:
 	add_child(player)
 	var library := AnimationLibrary.new()
 	for name in CLIPS:
-		var clip: Animation = original_player.get_animation(name).duplicate(true)
-		for track in range(clip.get_track_count() - 1, -1, -1):
-			var path := clip.track_get_path(track)
-			if path.get_subname_count() != 1 or not bone_index.has(String(path.get_subname(0))):
-				clip.remove_track(track)
-				continue
-			clip.track_set_path(track, NodePath("Skeleton3D:" + String(path.get_subname(0))))
-		library.add_animation(name, clip)
+		library.add_animation(name, _retarget(original_player.get_animation(name)))
+	_add_traversal(library, original.get_bone_global_rest(hip).origin.y)
 	player.add_animation_library("", library)
 	source.free()
 	_build_meshes()
+
+
+func _retarget(animation: Animation) -> Animation:
+	var clip: Animation = animation.duplicate(true)
+	for track in range(clip.get_track_count() - 1, -1, -1):
+		var path := clip.track_get_path(track)
+		if path.get_subname_count() != 1 or not bone_index.has(String(path.get_subname(0))):
+			clip.remove_track(track)
+			continue
+		clip.track_set_path(track, NodePath("Skeleton3D:" + String(path.get_subname(0))))
+	return clip
+
+
+## UAL2 shares UAL1's rig. A missing or incompatible source disables traversal instead of breaking locomotion.
+func _add_traversal(library: AnimationLibrary, hip_height: float) -> void:
+	if traversal_source == null:
+		push_warning("Authored traversal source missing; traversal disabled")
+		return
+	var source: Node = traversal_source.instantiate()
+	var skeletons := source.find_children("*", "Skeleton3D", true, false)
+	var players := source.find_children("*", "AnimationPlayer", true, false)
+	var hip: int = skeletons[0].find_bone("Hips") if skeletons.size() == 1 else -1
+	if hip < 0 or players.size() != 1 or absf(skeletons[0].get_bone_global_rest(hip).origin.y - hip_height) > 0.0005:
+		push_warning("Authored traversal source is not on the UAL1-compatible humanoid rig; traversal disabled")
+		source.free()
+		return
+	for name in TRAVERSAL_CLIPS:
+		if players[0].has_animation(name):
+			library.add_animation(name, _retarget(players[0].get_animation(name)))
+			traversal_clips.append(name)
+		else:
+			push_warning("Authored traversal clip missing: %s" % name)
+	source.free()
 
 
 func _rest(bone: String) -> Transform3D:

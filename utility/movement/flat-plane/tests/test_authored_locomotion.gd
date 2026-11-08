@@ -71,12 +71,35 @@ func test_physical_state_owns_jump_fall_and_landing(t) -> void:
 	t.eq(_animator.model.state, "Run", "landing does not block movement while a long clip finishes")
 
 
-func test_jog_and_sprint_share_native_cyclic_phase(t) -> void:
+func test_jog_and_sprint_share_one_script_owned_phase(t) -> void:
 	var run: AnimationNodeBlendTree = _animator.machine.get_node("Run")
 	var blend: AnimationNodeBlendSpace1D = run.get_node("Gaits")
-	t.eq(blend.sync_mode, AnimationNodeBlendSpace1D.SYNC_MODE_CYCLIC_MUTABLE, "different-length clips use normalized cyclic sync")
+	t.eq(blend.sync_mode, AnimationNodeBlendSpace1D.SYNC_MODE_NONE, "the shared phase is the script clock, not blend-space sync")
+	var worst := 0.0
+	var advanced := 0.0
+	var previous: float = _animator.gait_phase()
+	var was_running := false
+	var weighted := {}
 	for i in 600:
 		_animator.update(DT, _state(6.0 + 1.5 * sin(i * 0.02)))
+		var running: bool = _animator.playback.get_current_node() == &"Run"
+		var phase: float = _animator.gait_phase()
+		if running:
+			# A gait with no blend weight is not processed (its position is stale until it is weighted, then seeked).
+			var blend_position: float = _animator.tree.get("parameters/Run/Gaits/blend_position")
+			for gait in [["Jog", Model.JOG_LENGTH, 1.0 - blend_position], ["Sprint", Model.SPRINT_LENGTH, blend_position]]:
+				if gait[2] < 0.01:
+					continue
+				var position: float = _animator.tree.get("parameters/Run/Gaits/%s/current_position" % gait[0])
+				worst = maxf(worst, absf(wrapf(position / gait[1] - phase, -0.5, 0.5)))
+				weighted[gait[0]] = true
+			if was_running:
+				advanced += fposmod(phase - previous, 1.0)
+		previous = phase
+		was_running = running
+	t.ok(weighted.has("Jog") and weighted.has("Sprint"), "the speed sweep blends both loops")
+	t.ok(worst < 0.001, "different-length jog and sprint loops both play the shared phase (worst %.5f)" % worst)
+	t.ok(advanced > 4.0, "the shared phase keeps cycling through speed changes (%.2f cycles)" % advanced)
 	t.eq(_animator.playback.get_current_node(), &"Run", "speed changes don't restart the state")
 	t.eq(_animator.tree.root_motion_track, NodePath(""), "no root-motion consumer can move the body")
 
@@ -95,9 +118,10 @@ func test_final_modifier_pose_preserves_feet_and_prevents_flat_ground_penetratio
 			for index in 2:
 				var side := "Left" if index == 0 else "Right"
 				var foot: Transform3D = _animator.final_feet[side]
-				var target: Transform3D = _animator._targets[index].transform
-				worst_target_error = maxf(worst_target_error, foot.origin.distance_to(target.origin))
-				t.ok(foot.basis.get_rotation_quaternion().angle_to(target.basis.get_rotation_quaternion()) < 0.002, "native IK retains authored ankle orientation")
+				var target: Vector3 = _animator._feet[index].target
+				var authored: Basis = _animator._orientation.orientations[_visual.bone_index[side + "Foot"]]
+				worst_target_error = maxf(worst_target_error, foot.origin.distance_to(target))
+				t.ok(foot.basis.get_rotation_quaternion().angle_to(authored.get_rotation_quaternion()) < 0.002, "IK retains authored ankle orientation")
 				for point in _visual.sole_points[side]:
 					worst_sole = minf(worst_sole, (foot * point).y)
 				if previous.has(side) and i > 60:

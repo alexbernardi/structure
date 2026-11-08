@@ -3,10 +3,12 @@ extends RefCounted
 const Scene = preload("res://scenes/animation_reference.tscn")
 const Source = preload("res://assets/quaternius/UAL1_Standard.glb")
 const RootMotion = preload("res://assets/quaternius/UAL1_Standard_RM.glb")
+const TraversalSource = preload("res://assets/quaternius/UAL2_Traversal.glb")
+const TraversalRootMotion = preload("res://assets/quaternius/UAL2_Traversal_RM.glb")
 const Mannequin = preload("res://character/authored_mannequin.gd")
 
 
-func test_authentic_reference_has_valid_tracks_and_plays_all_six_clips(t) -> void:
+func test_authentic_reference_has_valid_tracks_and_plays_all_clips(t) -> void:
 	var tree: SceneTree = Engine.get_main_loop()
 	var scene := Scene.instantiate()
 	tree.root.add_child(scene)
@@ -15,24 +17,47 @@ func test_authentic_reference_has_valid_tracks_and_plays_all_six_clips(t) -> voi
 	scene.player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	t.eq(scene.skeleton.get_bone_count(), 65, "original source skeleton, not the procedural mannequin")
 	t.eq(scene.player.get_animation_list().size(), 43, "inventory of the actual Standard package")
-	var animation_root: Node = scene.player.get_node(scene.player.root_node)
 	for clip in scene.CLIPS:
+		scene.play_clip(scene.CLIPS.find(clip))
+		scene.player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+		t.eq(scene.skeleton.get_bone_count(), 65, "%s plays on an original Quaternius character" % clip)
+		var animation_root: Node = scene.player.get_node(scene.player.root_node)
 		var animation: Animation = scene.player.get_animation(clip)
-		t.ok(animation.length > 0.0, "%s has duration" % clip)
+		t.ok(animation != null and animation.length > 0.0, "%s has duration" % clip)
 		for track in animation.get_track_count():
 			var path := animation.track_get_path(track)
 			var node := animation_root.get_node_or_null(NodePath(path.get_concatenated_names()))
 			t.ok(node != null, "%s resolves %s" % [clip, path])
 			if node is Skeleton3D and path.get_subname_count() > 0:
 				t.ok(node.find_bone(path.get_subname(0)) >= 0, "%s maps an existing bone" % path)
-		scene.play_clip(scene.CLIPS.find(clip))
 		var before: Quaternion = scene.skeleton.get_bone_pose_rotation(scene.skeleton.find_bone("LeftUpperLeg"))
 		scene.player.advance(animation.length * 0.3)
 		var after: Quaternion = scene.skeleton.get_bone_pose_rotation(scene.skeleton.find_bone("LeftUpperLeg"))
 		t.ok(not before.is_equal_approx(after), "%s actually poses the original skeleton" % clip)
 		t.eq(scene.source.position, Vector3.ZERO, "animation never translates a gameplay body")
+		t.eq(scene.traversal_source.position, Vector3.ZERO, "traversal reference stays in place too")
+	t.ok(scene.traversal_source.visible and not scene.source.visible, "vault shows the UAL2 source character")
 	scene.queue_free()
 	await tree.process_frame
+
+
+func test_paid_ual2_safety_vault_source_is_authentic_and_measured(t) -> void:
+	for resource in [TraversalSource, TraversalRootMotion]:
+		var source: Node = resource.instantiate()
+		var player: AnimationPlayer = source.find_children("*", "AnimationPlayer", true, false)[0]
+		var skeleton: Skeleton3D = source.find_children("*", "Skeleton3D", true, false)[0]
+		t.eq(player.get_animation_list().size(), 1, "subset holds only the selected authored clip")
+		var animation := player.get_animation("SafetyVault")
+		t.near(animation.length, 22.0 / 30.0, 0.001, "authored 22-frame vault")
+		t.eq(animation.loop_mode, Animation.LOOP_NONE, "vault is a one-shot")
+		var displacement := Vector3.ZERO
+		for track in animation.get_track_count():
+			var path := animation.track_get_path(track)
+			if animation.track_get_type(track) == Animation.TYPE_POSITION_3D and path.get_subname_count() > 0 and path.get_subname(0) == "Root":
+				displacement = animation.position_track_interpolate(track, animation.length) - animation.position_track_interpolate(track, 0.0)
+		var distance := Vector2(displacement.x, displacement.z).length() * skeleton.motion_scale
+		t.near(distance, 2.901 if resource == TraversalRootMotion else 0.0, 0.005, "authored vault root displacement")
+		source.free()
 
 
 func test_authored_in_place_and_root_motion_reference_displacements(t) -> void:
@@ -60,6 +85,7 @@ func test_native_primitive_target_preserves_authored_joint_motion_and_bone_lengt
 	tree.root.add_child(target)
 	var source: Node = Source.instantiate()
 	tree.root.add_child(source)
+	await tree.process_frame
 	var source_player: AnimationPlayer = source.find_children("*", "AnimationPlayer", true, false)[0]
 	var source_skeleton: Skeleton3D = source.find_children("*", "Skeleton3D", true, false)[0]
 	target.player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
