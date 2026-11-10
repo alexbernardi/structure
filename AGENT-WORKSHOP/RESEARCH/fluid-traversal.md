@@ -40,7 +40,9 @@ claim that the learned controllers run in Godot.
   and can overshoot contacts. Begin with the existing native crossfades; add a bounded,
   isolated inertialization modifier only if measured transition discontinuity warrants it.
   Reviewed [Holden's inertialization discussion](https://theorangeduck.com/page/spring-roll-call#inertialization).
-- **Phase synchronization:** jog/sprint already use Godot's cyclic-mutable synchronization.
+- **Phase synchronization:** the approved 3.0 baseline used Godot's cyclic-mutable synchronization.
+  The 4.0 implementation instead seeks jog/sprint from one script-owned distance-aware clock, with bounded
+  anticipation steering. Initialize that clock on logical Run entry, not on the graph's delayed transition state.
   A nonperiodic vault cannot simply share a normalized loop phase. Inspect source takeoff
   and run-out support legs, select a compatible entry phase, and preserve run phase through
   anticipation. Godot's [state-machine transition](https://docs.godotengine.org/en/stable/classes/class_animationnodestatemachinetransition.html)

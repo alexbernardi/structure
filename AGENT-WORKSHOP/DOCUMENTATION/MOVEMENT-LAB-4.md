@@ -2,7 +2,7 @@
 
 Branch: `task/0006-fluid-traversal-vault`. Task: [0006](../TASKS/0006-fluid-traversal-vault.md).
 Research and design notes: [fluid traversal](../RESEARCH/fluid-traversal.md).
-**Implemented and objectively tested; not yet visually approved.** One traversal move only: Run -> Anticipate ->
+**Implemented and objectively verified; awaiting human visual/MIDI approval.** One traversal move only: Run -> Anticipate ->
 Vault -> Land -> Run. Mantle, slide, climb and roll wait until the user approves this vault.
 The approved [3.0 authored locomotion](MOVEMENT-LAB-3.md) and the movement core, defaults (6 m/s run,
 12 m/s Shift), collision body and learned SMC-MIXER mapping are unchanged.
@@ -26,7 +26,7 @@ disarms it, and the character keeps running.
 |---|---|
 | **T** / **Shift+T** | Next / previous test landmark; `vault_a`, `vault_b`, `vault_c` face down the vault lanes |
 | **F10** or `--traversal-debug` | Traversal debug overlay (legend below) |
-| **V** | Side view; follows the vault travel without the collider hump |
+| **V** | Side view; follows vault travel without the collider hump. Lane C uses a closer, wider outside view, inside the course's back wall |
 | **F9** | The 3.0 locomotion A/B (default recording). For the vault A/B use `--trial=vault` as above |
 | `--landmark=<name>` | Start at a landmark |
 | `--no-traversal` | Start with traversal off (approved 3.0 behaviour; walls simply block) |
@@ -49,7 +49,7 @@ Three 3 m-wide lanes run toward +X with an obstacle every 9 m; walls are 0.35 m 
 | Lane | Obstacles | Expected |
 |---|---|---|
 | A (z -25) | 0.80, 0.95, 1.10, 1.25 m walls; 1.60 m wall | Vault all four; refuse 1.60 m (`too_high`) and stop at it |
-| B (z -30) | 1.0 m walls at 20 and 40 degrees; 0.6 m and 1.4 m deep | Vault 20 degrees; refuse 40 degrees (`too_angled`), which blocks a straight run from the landmark. Steer around it to reach the depth walls: vault 0.6 m deep; refuse 1.4 m (`too_deep`) and stop at it |
+| B (z -30) | 1.0 m walls at 20 and 40 degrees; 0.6 m and 1.4 m deep | Vault 20 degrees; refuse 40 degrees (`too_angled`). Ordinary collision slides the runner sideways around its edge, off the lane centre line. Re-align to reach the depth walls: vault 0.6 m deep; refuse 1.4 m (`too_deep`) and stop at it |
 | C (z -35) | 1.0 m wall onto a +0.25 m deck, a 0.2 m step, a 1.45 m wall down 0.45 m to the ground | Vault both walls (onto the deck, then down to the ground); climb the step with eased presentation |
 
 ## MIDI and presets
@@ -76,6 +76,9 @@ reference skeleton and its mesh from the 134-animation GLBs without changing any
 root-motion extracts (720 KB each) replace committing the 20 MB originals. Hashes, licence and the excluded files
 are in [provenance](../../utility/movement/flat-plane/assets/quaternius/PROVENANCE.md). The original download stays
 in the ignored `AGENT-WORKSHOP/DOWNLOADS/`. No clip is fabricated; with the clip missing, the character keeps running.
+Independent re-verification compared both extracts against the supplied originals: all 195 animation samplers
+per extract, channel targets, accessor types/dimensions, skeleton nodes and licence bytes match.
+The [integrity report](../../.runtime/movement-lab-4-verification/asset-integrity.json) records the source/extract hashes.
 
 The clip retargets through the same native `BoneMap` as 3.0. `tools/audit_vault_clip.gd` measured it on the original
 rig at mannequin scale. `traversal/vault_clip.gd` holds those numbers, and the tests re-measure them from the import.
@@ -106,6 +109,8 @@ presentation moves the body.
      and lean up to 18 degrees onto the support arm while the hand is planted, so the hand reaches the top.
      A top still more than 2 cm out of reach is refused (`out_of_reach`). Plans are memoized per obstacle and speed.
 3. **Physical action** (`traversal/vault_action.gd`), on the fixed physics tick:
+   - A read-only approach preview can start during initial acceleration. Physical arming still requires at least
+     2 m/s; the preview cannot move the body or trigger an action.
    - Arms inside the anticipation window and eases the approach to the vault's ground speed, which it reaches
      exactly at the planned takeoff distance.
    - Then drives the collider kinematically along a smooth hump with full collision response every tick.
@@ -113,6 +118,10 @@ presentation moves the body.
    - On landing, returns to the planned exit speed over 0.12 s.
 4. **Presentation** (`animation/authored_animation.gd`):
    - The vault is a state in the existing AnimationTree, seeked to the action's clip time; it has no clock of its own.
+   - Jog/sprint share a script-owned clock. Initialize it once on logical Run entry, not every frame the
+     AnimationTree still displays the previous state during a crossfade.
+   - On Run entry only, select the left/right support phase using the predicted acceleration and approach easing.
+     This does not jump the phase of an already-running loop.
    - While armed, the run cadence is steered within 0.8-1.25x, so the gait reaches the vault's entry foot at takeoff.
    - After the vault, the run resumes at the phase that continues the vault's last steps.
    - The flat-floor foot IK pauses during the vault. The support hand is pinned to its planned contact point by
@@ -121,75 +130,116 @@ presentation moves the body.
      interpolation.
 5. **Cameras**: the orbit and side cameras follow `follow_offset()`. That is the clip's travel and landing height,
    without the collider hump or the pose-fitting dip, so the view stays level over a wall and rises smoothly
-   onto a deck. The side view eases its height at 5/s. Step-ups are interpolated between ticks, so the visual no
-   longer sinks below a tread for one frame.
+   onto a deck. The side view eases its height at 5/s. Both render-driven cameras disable their own physics
+   interpolation because their targets are already interpolated. Lane C's side and comparison cameras stay
+   4 m outside the lane, inside the back wall, with a wider 60-degree field of view.
+   Step-ups interpolate the visual offset between ticks.
 
 ## Validation
 
-- Full utility regression: **495 passed, 0 failed** (35 files). `tests/test_traversal_vault.gd` holds the 13 vault
-  tests; `tests/test_authored_playground.gd` holds the Traversal bank test.
+- Focused traversal/MIDI: **17 passed, 0 failed** (16 vault tests and the Traversal bank test).
+  Authored Playground/comparison: **6 passed, 0 failed**, including both lane C camera sightlines.
+  Final camera changes were checked with these targeted suites, native rendering and the final full regression.
+- Latest full utility regression: **499 passed, 0 failed**, about 185 seconds, with no other Movement Lab running.
+  Three earlier full runs had 498 passes and one failure in the unchanged legacy update-cost check:
+  83.9, 81.8 and 85.5 us/update against its 80 us limit. A stale session-owned Playground was still running.
+  After closing it, the full suite passed; the isolated check and **37/37** legacy-module run also passed.
+  Neither the legacy implementation nor its threshold was changed. Earlier failures and the final process
+  preflight are retained; close other lab instances before comparing CPU timings.
 - **Clip and plans**
   - Clip numbers re-measured from the import.
   - Bounded timing at 2-14 m/s.
   - Every planner limit and rejection reason.
   - Silhouette zones match dense capsule sampling.
-  - Every planned pose keeps the whole warped body clear with the hand in reach.
+  - Sampled visual-body clearance and hand reach are checked separately from physical-cylinder clearance.
+    The collision cylinder is not a claim that every visual primitive fits inside it.
 - **Lanes** (scripted runs from each landmark):
-  - Lane A vaults all four walls on the authored foot and stops at the 1.60 m wall.
-  - Lane B vaults the 20 degree wall and refuses the 40 degree wall.
-  - Lane C vaults both walls.
-  - A manual scripted check started past lane B's 40 degree wall: the 0.6 m deep wall is vaulted and the 1.4 m
-    deep wall is refused (`too_deep`), stopping the run.
+  - Lane A vaults all four walls at 3, 6 and 12 m/s approaches, including the first sprint takeoff, then stops at
+    the 1.60 m wall (x about 17.47 m, exit speed 0).
+  - Lane B vaults the 20-degree wall and refuses the 40-degree wall. It contacts that wall and slides sideways
+    around its edge under ordinary collision response; straight input does not hold it permanently at the wall.
+  - A separate depth-wall trial starts at x -5: vaults 0.6 m depth, rejects 1.4 m and stops at x about 7.95 m.
+  - Lane C vaults both walls and runs out at 6 m/s.
+  - A blocked-ceiling trial rejects the vault and stops safely.
+  - All recorded trials have **zero aborts and zero overlap ticks** with the actual collision cylinder, inset
+    **2 mm** to exclude contact tolerance. Each tick is checked, not just the planned trajectory.
 
   Measured on lane A:
 
-  | Approach | Takeoff phases | Hand error | Largest collider step per 120 Hz tick |
-  |---|---|---|---|
-  | 3 m/s | 0.036-0.038 | 0.0 mm | 0.073 m |
-  | 6 m/s | 0.041-0.042 | 1.1 mm | 0.112 m |
-  | 12 m/s | 0.785, then 0.046-0.052 | 0.0 mm | 0.138 m |
+  | Approach | Takeoff phases | Largest collider step per 120 Hz tick |
+  |---|---|---|
+  | 3 m/s | 0.036-0.038 | 0.073 m |
+  | 6 m/s | 0.040-0.042 | 0.112 m |
+  | 12 m/s | **first 0.04583**, then 0.046-0.052 | 0.138 m |
+
+  The authored entry phase is 0.025; every takeoff is checked within 0.05 cycles, with no sprint exemption.
+  Sprint approaches ease toward the maximum **8 m/s vault travel**, rather than remaining at 12 m/s over the wall.
+  The largest lane C collider step is 0.206 m at its actual step-up.
+
+  The old first-sprint result (0.785) was also contaminated by the fixture's direct body teleport, which appeared
+  as a >5,000 m/s visual-speed sample. Trials now use the public scene teleport and assert zero measured teleport
+  speed. A separate regression exercises a delayed graph transition and checks that the Run clock keeps advancing.
 
 - **Robustness**
   - Steering away, slowing and stopping disarm the vault; a jump press cannot break it.
   - With the clip missing, or traversal off, the character keeps running.
   - With traversal on but no vault, physics is bit-identical to traversal off.
-- **Live frames** (physics interpolation on): feet and the support hand are on their targets.
+  - Active vault trajectories and action clocks are bit-identical with rendered animation enabled or disabled.
+- **Live frames** (physics interpolation on): tests check foot targets within 5 mm and the fully planted hand
+  within 10 mm. Native Vulkan captures cover all four lane A vaults, the first sprint vault, both lane C vaults
+  and full-3D orbit-camera hand contact. Their telemetry records zero aborts and a maximum **2.19 mm** fully
+  planted hand error, below the 10 mm contact bound. Final native side-camera logs contain no interpolation
+  warnings or engine errors.
 - **Cameras** (live frames):
 
   | Measure | Lane A (hump 0.84 m, dip 0.24 m) | Lane C (+0.25 m deck) |
   |---|---|---|
   | Follow height range | within 1 mm of level | 0 -> +0.250 m |
-  | Orbit / side height range | within 1 mm of level | up to +0.224 / +0.128 m, side step 0.010 m per tick |
-  | Orbit vertical acceleration p95 / max | 22 / 33 m/s² before, 0.04 / 0.08 after | 17.5 p95 after |
-  | Side vertical acceleration p95 / max | 149 / 828 m/s² before, 0.01 / 0.02 after | 7.9 p95 after |
-
-- **Stair steps**: lane C run-phase orbit acceleration max fell from 429 to 38 m/s², and the visual root max from
-  6,532 to 353 m/s².
+  | Orbit / side height range | within 1 mm of level | about +0.22 / +0.13 m, side step under 0.012 m per tick |
 - **MIDI** (`test_traversal_bank_uses_verified_midi_mapping_and_round_trips_presets`): synthetic events through the
   real learned SMC-MIXER mapping drive bank 5's four sliders, switch traversal off and on live, and show and hide
   the overlay. A preset round trip restores anticipation and the traversal switch.
   This does not replace the physical-controller test.
 
-Headless CPU (`benchmarks/bench_traversal_vault.gd`, development machine; compare only on the same machine):
+Headless CPU (`benchmarks/bench_traversal_vault.gd`, development machine, other lab windows closed;
+compare only on the same machine):
 
 | Measure | Result |
 |---|---|
-| Whole tick, lane A with 4 vaults, traversal on | p50 0.213 ms, p95 0.265 ms, max 1.685 ms |
-| Whole tick, open ground, traversal on / off | p50 0.180 / 0.164 ms, p95 0.290 / 0.195 ms |
-| Physics + perception mean, lane A / open on / open off | 0.068 / 0.062 / 0.048 ms |
-| Fresh vault plan, 6 or 12 m/s (memoized afterwards) | 1.30 ms |
-| Vault profile build, once per clip | 8.8 ms |
+| Whole tick, lane A with 4 vaults, traversal on | p50 0.221 ms, p95 0.283 ms, max 1.677 ms |
+| Whole tick, open ground, traversal on / off | p50 0.178 / 0.165 ms, p95 0.204 / 0.188 ms |
+| Physics + perception mean, lane A / open on / open off | 0.070 / 0.059 / 0.049 ms |
+| Fresh vault plan, 6 / 12 m/s (memoized afterwards) | 1.312 / 1.266 ms |
+| Vault profile build, once per clip | 8.631 ms (89 samples) |
+| Silhouette zones | 0.663 ms |
 
-The lane A maximum is consistent with a tick that builds a fresh plan (1.30 ms); this is not separately measured.
+Both benchmark cases passed. These headless CPU timings are not GPU/frame-rate guarantees.
+
+### Retained verification evidence
+
+Local reports live under the ignored `.runtime/movement-lab-4-verification/`; they are not shipped with a clone.
+They retain results rather than relying on an earlier session's unverified test-count claim.
+
+| Evidence | Contents |
+|---|---|
+| [Verification summary](../../.runtime/movement-lab-4-verification/verification-summary.json) | Final report totals and hashes of the tested changed GDScript files |
+| [Focused report](../../.runtime/movement-lab-4-verification/focused.json), [log](../../.runtime/movement-lab-4-verification/focused.log) | Per-test results and machine-readable `VAULT_LANE_RESULT` records |
+| [Playground report](../../.runtime/movement-lab-4-verification/playground.json) | MIDI/presets, authored A/B and final camera visibility checks |
+| [Full report](../../.runtime/movement-lab-4-verification/full-suite.json), [log](../../.runtime/movement-lab-4-verification/full-suite.log) | Final 499/499 regression, including the camera repairs |
+| [Process preflight](../../.runtime/movement-lab-4-verification/full-suite-context.json), [earlier loaded run](../../.runtime/movement-lab-4-verification/full-suite-live-playground.json) | No competing lab in the final run; earlier legacy timing failure preserved |
+| [Legacy module](../../.runtime/movement-lab-4-verification/legacy-module.json), [isolated check](../../.runtime/movement-lab-4-verification/legacy-cost-recheck.json) | Independent passing timing rechecks |
+| [Benchmark](../../.runtime/movement-lab-4-verification/benchmark.json) | Recorded CPU samples |
+| [Native telemetry summary](../../.runtime/movement-lab-4-verification/native-results.json) | Per-capture counts, contact errors and warnings; distinguishes superseded camera captures |
+| [Lane A poses](../../.runtime/movement-lab-4-verification/native-a-final/vault_a_0.png), [sprint poses](../../.runtime/movement-lab-4-verification/native-a-sprint/vault_a_sprint_0.png) | Native side-view samples |
+| [Lane C contact](../../.runtime/movement-lab-4-verification/native-c-final/side_contact.png), [orbit contact](../../.runtime/movement-lab-4-verification/native-orbit/orbit_contact.png) | Native side/full-3D inspection |
+| [Playtest readiness](../../.runtime/movement-lab-4-verification/playtest-readiness.json), [startup log](../../.runtime/movement-lab-4-verification/playtest.log) | Checkpoint relaunched at lane A; responsive native window and clean startup verified |
 
 ## Limitations
 
-See [known issues](../INVENTORY/KNOWN-ISSUES.md) KI-020 to KI-022.
+See [known issues](../INVENTORY/KNOWN-ISSUES.md) KI-020 to KI-023.
 
 - **Pose dip**: the authored hand sits above low tops, so on a 0.80 m wall the drawn root drops up to 0.24 m below
   the takeoff ground while the hand is planted. Cameras ignore it; whether it reads well is part of the visual review.
-- **Short sprint run-up**: at 12 m/s the cadence steer (at most 1.25x) can miss the entry foot from a short
-  run-up (first lane A wall: phase 0.785). The vault still plays, starting on the off foot.
 - **Steep angle at sprint speed**: some steep approaches leave the support hand out of reach. The verified case is
   12 m/s at a 1.0 m high, 0.2 m deep wall angled -34 degrees (just inside the 35 degree limit). It is refused
   (`out_of_reach`) rather than vaulted with a hovering hand; the character stops at the wall.
@@ -199,9 +249,15 @@ See [known issues](../INVENTORY/KNOWN-ISSUES.md) KI-020 to KI-022.
 
 ## Reproduce diagnostics
 
+Close other Movement Lab windows before the full suite or benchmark; their load affects the strict CPU checks.
+
 ```powershell
-& $godot --headless --path utility\movement\flat-plane --script "$PWD\TESTING\harness\run_gd_tests.gd" -- --filter=test_traversal
-& $godot --headless --path utility\movement\flat-plane --script "$PWD\TESTING\harness\run_gd_tests.gd" -- --mode=bench --dir=res://benchmarks --filter=bench_traversal
+$proof = "$PWD\.runtime\movement-lab-4-verification"
+New-Item -ItemType Directory -Force $proof | Out-Null
+& $godot --headless --path utility\movement\flat-plane --log-file "$proof\focused.log" --script "$PWD\TESTING\harness\run_gd_tests.gd" -- --filter=test_traversal --report="$proof\focused.json"
+& $godot --headless --path utility\movement\flat-plane --log-file "$proof\playground.log" --script "$PWD\TESTING\harness\run_gd_tests.gd" -- --filter=test_authored_playground --report="$proof\playground.json"
+& $godot --headless --path utility\movement\flat-plane --log-file "$proof\full-suite.log" --script "$PWD\TESTING\harness\run_gd_tests.gd" -- --filter=test_ --report="$proof\full-suite.json"
+& $godot --headless --path utility\movement\flat-plane --log-file "$proof\benchmark.log" --script "$PWD\TESTING\harness\run_gd_tests.gd" -- --mode=bench --dir=res://benchmarks --filter=bench_traversal --report="$proof\benchmark.json"
 & $godot --headless --path utility\movement\flat-plane --script res://tools/audit_vault_clip.gd
 & $godot --headless --path utility\movement\flat-plane --script res://tools/make_vault_trial.gd
 ```

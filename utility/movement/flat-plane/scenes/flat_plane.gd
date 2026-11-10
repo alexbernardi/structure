@@ -60,7 +60,7 @@ var _readout: Label
 var _landmark_index := 0
 var _vault_debug
 var _side_cam := Camera3D.new()
-var _side_axis := Vector3.RIGHT
+var _side_offset := Vector3.RIGHT * 7.5
 var _side_focus_y := NAN
 const SIDE_FOLLOW_RATE := 5.0   ## 1/s: how quickly a side view's height follows the character
 
@@ -124,6 +124,7 @@ func _ready() -> void:
 		cam.distance = float(_args["cam-distance"])
 	add_child(cam)
 	_side_cam.name = "SideCamera"
+	_side_cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_side_cam.fov = 40.0
 	add_child(_side_cam)
 	_vault_debug = VaultDebug.new()
@@ -301,14 +302,19 @@ func toggle_side_view() -> void:
 	if _side_cam.current:
 		cam.camera.current = true
 		return
-	_side_axis = Basis(Vector3.UP, cam.yaw) * Vector3.RIGHT
 	_side_cam.current = true
 	_update_side_view(0.0)
 
 
 func _update_side_view(delta: float) -> void:
+	if delta <= 0.0:
+		# Lane C needs a closer, wider outside view: the back wall is only 5 m away.
+		var lane_c := _landmark_index == landmark_names().find("vault_c")
+		var side := Vector3.LEFT * 4.0 if lane_c else Vector3.RIGHT * 7.5
+		_side_offset = Basis(Vector3.UP, cam.yaw) * side
+		_side_cam.fov = 60.0 if lane_c else 40.0
 	var focus := side_focus(delta)
-	_side_cam.global_position = focus + _side_axis * 7.5 + Vector3.UP * 0.3
+	_side_cam.global_position = focus + _side_offset + Vector3.UP * 0.3
 	_side_cam.look_at(focus, Vector3.UP)
 
 

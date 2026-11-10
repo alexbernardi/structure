@@ -182,7 +182,17 @@ func update(dt: float, state: Dictionary) -> void:
 		_heading = heading if teleported else lerp_angle(_heading, heading, 1.0 - exp(-turn * dt))
 	visual.rotation.y = _heading + PI
 	model.steer = phase_steer
+	var was_running: bool = model.state == "Run"
 	model.update(dt, speed, state.grounded, state.vy, state.get("accel_forward", 0.0), teleported, state.get("crouching", false), vaulting)
+	var starting_run: bool = model.state == "Run" and not was_running
+	if starting_run and not _was_vaulting:
+		run_phase = 0.0
+		if vault.has("approach") and vault_profile != null and vault_profile.valid:
+			# Choose a support foot during the entry crossfade, not by jumping an already-running loop.
+			var advance := _natural_advance(vault.approach).x
+			run_phase = vault_profile.entry_phase
+			if absf(wrapf(advance + 0.5, -0.5, 0.5)) < absf(wrapf(advance, -0.5, 0.5)):
+				run_phase += 0.5
 	for transition in transitions:
 		transition.xfade_time = params.get_value("transition_duration")
 	for transition in vault_transitions:
@@ -193,7 +203,7 @@ func update(dt: float, state: Dictionary) -> void:
 	tree.set("parameters/Crouch/blend_position", speed)
 	if has_vault and vault.get("vault", false):
 		tree.set("parameters/Vault/Seek/seek_request", clampf(vault.time, 0.0, VaultClip.LENGTH - 0.0005))
-	_advance_run_phase(vault, vaulting, response, dt)
+	_advance_run_phase(vault, vaulting, starting_run, dt)
 	_was_vaulting = vaulting
 	if String(playback.get_current_node()) != model.state:
 		playback.travel(model.state)
@@ -228,16 +238,14 @@ func gait_phase() -> float:
 ## The running loops' clock. It advances at the cadence (times the anticipation steer) over the blended loop length,
 ## restarts with the Run state like a fresh clip, and after a vault resumes at the phase that continues the vault's
 ## last steps, less the part of the vault still to play during the fade back.
-func _advance_run_phase(vault: Dictionary, vaulting: bool, response: float, dt: float) -> void:
+func _advance_run_phase(vault: Dictionary, vaulting: bool, starting_run: bool, dt: float) -> void:
 	var rate: float = model.cadence * phase_steer / _gait_length()
 	if _was_vaulting and not vaulting and model.state == "Run" and vault_profile != null:
 		var remaining := 0.0
 		if vault.get("vault", false):
 			remaining = maxf(0.0, VaultClip.LENGTH - float(vault.time)) / float(vault.get("rate", 1.0))
 		run_phase = vault_profile.exit_phase - remaining * rate
-	elif model.state == "Run" and String(playback.get_current_node()) != "Run":
-		run_phase = 0.0
-	else:
+	elif not starting_run:
 		run_phase += dt * rate
 	run_phase = fposmod(run_phase, 1.0)
 	tree.set("parameters/Run/Gaits/Jog/Seek/seek_request", run_phase * Model.JOG_LENGTH)
@@ -267,9 +275,8 @@ func _steer_phase(vault: Dictionary, dt: float) -> void:
 	phase_steer = lerpf(phase_steer, target, 1.0 - exp(-10.0 * dt))
 
 
-## Gait cycles (x) and seconds (y) the unsteered run takes to cover a vault approach: constant speed until the
-## anticipation easing starts, then speed linear in the remaining distance down to the vault's travel speed (as the
-## traversal action eases it), with the jog/sprint blend lagging the speed as the model's does.
+## Gait cycles (x) and seconds (y) to takeoff. Predict the core's acceleration toward input speed, then the action's
+## distance-based easing; integrate cadence with the same lagging jog/sprint blend as the locomotion model.
 func _natural_advance(approach: Dictionary) -> Vector2:
 	var distance: float = maxf(approach.distance, 0.0)
 	var speed: float = maxf(approach.speed, 0.1)
@@ -279,15 +286,24 @@ func _natural_advance(approach: Dictionary) -> Vector2:
 	var blend_rate: float = 1.0 / params.get_value("transition_duration")
 	var cycles := 0.0
 	var time := 0.0
-	var run_in := (distance - ease) / speed
+	var run_in := distance - ease
 	if run_in > 0.0:
-		var target: float = model.blend_target(speed)
-		for i in 6:
-			var dt := run_in / 6.0
+		var target_speed: float = maxf(speed, approach.get("target_speed", speed))
+		var acceleration: float = maxf(0.0, approach.get("acceleration", 0.0))
+		var step := run_in / 12.0
+		for i in 12:
+			var dt := step / speed
+			if acceleration > 0.0 and speed < target_speed:
+				var accelerated := minf(step, (target_speed * target_speed - speed * speed) / (2.0 * acceleration))
+				var next_speed := sqrt(speed * speed + 2.0 * acceleration * accelerated)
+				dt = (next_speed - speed) / acceleration + (step - accelerated) / next_speed
+				speed = next_speed
+			var average_speed := step / dt
+			var target: float = model.blend_target(average_speed)
 			var mid := move_toward(blend, target, 0.5 * dt * blend_rate)
-			cycles += dt * model.cycle_rate(speed, mid)
+			cycles += dt * model.cycle_rate(average_speed, mid)
 			blend = move_toward(blend, target, dt * blend_rate)
-		time = run_in
+			time += dt
 	if ease > 0.0:
 		var step := ease / 12.0
 		for i in 12:

@@ -6,7 +6,7 @@ extends Control
 const Playground = preload("res://scenes/flat_plane.tscn")
 const TrialPath := "res://config/locomotion_trial.json"
 const VaultTrialPath := "res://config/vault_trial.json"
-const VAULT_VIEWS := {"a": Vector3(0.0, 0.3, 7.5), "b": Vector3(0.0, 3.8, 6.5), "c": Vector3(0.0, 0.3, -7.5)}   ## camera from the focus; b looks over lane A
+const VAULT_VIEWS := {"a": Vector3(0.0, 0.3, 7.5), "b": Vector3(0.0, 3.8, 6.5), "c": Vector3(0.0, 0.3, -4.0)}   ## B looks over lane A; C stays inside the back wall.
 
 var left
 var right
@@ -81,6 +81,9 @@ func _ready() -> void:
 			return
 		_start = right.world.landmarks["vault_" + lane] + Vector3(0.0, 0.05, 0.0)
 		_view = VAULT_VIEWS[lane]
+		if lane == "c":
+			for camera in _cameras:
+				camera.fov = 60.0
 		# The scene's own tuning state may have switched traversal off; the trial compares without and with it.
 		right.traversal_params.set_value("traversal", 1.0)
 		right.locomotion_params.set_value("legacy", 0.0)

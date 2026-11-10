@@ -214,3 +214,20 @@ func test_vault_comparison_replays_one_run_without_and_with_the_vault(t) -> void
 	t.eq(_scene.right.vault.aborts, 0, "no vault aborted")
 	_scene.get_node("Controls/Toolbar/System").button_pressed = false
 	t.ok(not _scene.right.vault.enabled(), "the toolbar switches B's traversal off without restarting")
+	_scene.queue_free()
+	await _tree.process_frame
+	_scene = Comparison.instantiate()
+	_scene.options = {"trial": "vault", "lane": "c", "no-hardware": "true"}
+	_tree.root.add_child(_scene)
+	await _tree.physics_frame
+	_scene.set_physics_process(false)
+	_scene.set_process(false)
+	_scene._process(DT)
+	for i in 2:
+		var scene = _scene.left if i == 0 else _scene.right
+		var camera: Camera3D = _scene._cameras[i]
+		t.near(camera.fov, 60.0, 0.001, "lane C comparison keeps the raised vault arm in frame")
+		var sight := PhysicsRayQueryParameters3D.create(camera.global_position, scene.side_focus(0.0),
+			1, [scene.body.get_rid()])
+		t.ok(scene.body.get_world_3d().direct_space_state.intersect_ray(sight).is_empty(),
+			"lane C comparison camera %d sees the character without the course wall in front" % i)

@@ -1,6 +1,6 @@
 # 0006 - Movement Lab 4.0: authored running vault
 
-Status: implemented and validated; awaiting the user's vault review. Date: 2026-11-08.
+Status: implemented and objectively verified; awaiting human visual/MIDI review. Date: 2026-11-08.
 Branch: `task/0006-fluid-traversal-vault`.
 
 ## Goal
@@ -52,11 +52,28 @@ repository static checks. Human visual acceptance of the vault remains a separat
   profile, kinematic collider drive with an abort on blocked tracking, AnimationTree vault state with entry-foot
   cadence steering, planted-hand IK, cameras that ignore the collider hump, vault lanes A/B/C, F10 overlay,
   V side view, `--trial=vault` A/B and the Traversal MIDI bank.
-- Full utility regression: 495/495 passed (13 vault tests plus the Traversal bank test). With traversal on but no
-  vault, physics is bit-identical to traversal off. On open ground, traversal adds 0.014 ms to the mean
-  physics + perception tick (0.062 vs 0.048 ms).
-- Gate 7: the Playground checkpoint is launched for the user's review.
+- Independent verification replaced the earlier 495/495 claim with retained evidence. Focused vault/MIDI:
+  **17/17**; authored Playground/comparison: **6/6**; benchmark: **2/2**.
+  Final full run: **499 passed, 0 failed**, about 185 seconds. Three earlier full runs failed only the unchanged
+  legacy update-cost check (83.9/81.8/85.5 us against 80 us), while a stale session-owned Playground was running.
+  After closing that instance, the full suite passed; the isolated check and **37/37** legacy-module run also
+  passed. Earlier reports and the final zero-competing-process preflight are retained. No threshold was relaxed.
+- Repaired the logical Run clock and acceleration-aware entry-foot selection. The first sprint takeoff now
+  measures phase **0.04583**, with no assertion exemption. Fixed the test fixture's direct teleport, which had
+  injected a >5,000 m/s visual-speed sample, by using the public scene teleport.
+- Lane runs now reach their rejected walls and test the actual cylinder every tick (2 mm contact tolerance).
+  Zero overlap ticks/aborts in all cases. Lane B's angled rejection produces normal collision sliding around
+  the edge, not a permanent stop; separate depth and blocked-ceiling trials verify stopping.
+- Active vault physics/action clocks are bit-identical with animation on/off. Without a vault, physics remains
+  bit-identical with traversal on/off. Open-ground physics/perception means: 0.059 / 0.049 ms.
+- Native Vulkan side/orbit captures and contact telemetry are retained. The render-driven side camera no longer
+  double-interpolates; lane C side/comparison cameras stay inside the back wall with wider framing.
+  Final camera-focused tests and the subsequent full regression pass.
+- Gate 7: the latest Playground was relaunched at `vault_a` as a persistent detached process. Native window
+  responsiveness and error-free startup are verified in the
+  [readiness record](../../.runtime/movement-lab-4-verification/playtest-readiness.json).
+  Visual naturalness and physical MIDI approval remain the user's checkpoint, not an automated pass.
 
 Diagnosis, measurements, limitations and commands: [Movement Lab 4.0](../DOCUMENTATION/MOVEMENT-LAB-4.md).
-Open review items: KI-020 to KI-022 in [known issues](../INVENTORY/KNOWN-ISSUES.md).
+Open review items: KI-020 to KI-023 in [known issues](../INVENTORY/KNOWN-ISSUES.md).
 No mantle, slide, climb or roll is implemented. They wait for the user to approve this vault.

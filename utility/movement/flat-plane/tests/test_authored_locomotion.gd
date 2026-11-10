@@ -104,6 +104,23 @@ func test_jog_and_sprint_share_one_script_owned_phase(t) -> void:
 	t.eq(_animator.tree.root_motion_track, NodePath(""), "no root-motion consumer can move the body")
 
 
+func test_run_clock_keeps_advancing_while_the_graph_finishes_a_previous_transition(t) -> void:
+	_params.set_value("transition_duration", 0.35)
+	var delayed := 0
+	for i in 120:
+		var was_running: bool = _animator.model.state == "Run"
+		var previous: float = _animator.gait_phase()
+		_animator.update(DT, _state(12.0, {"grounded": i >= 25, "vy": -1.0 if i < 25 else 0.0}))
+		if _animator.model.state != "Run" or not was_running:
+			continue
+		if _animator.playback.get_current_node() != &"Run":
+			delayed += 1
+		var advance: float = DT * _animator.model.cadence * _animator.phase_steer / _animator._gait_length()
+		t.near(wrapf(_animator.gait_phase() - previous, -0.5, 0.5), advance, 1e-6,
+			"the physical-state run clock advances even while AnimationTree is still crossfading")
+	t.ok(delayed > 0, "the trial exercises a delayed graph transition, not just settled running")
+
+
 func test_final_modifier_pose_preserves_feet_and_prevents_flat_ground_penetration(t) -> void:
 	var worst_sole := INF
 	var worst_target_error := 0.0

@@ -153,7 +153,7 @@ func observe(body, dt: float) -> void:
 	var flat := Vector3(body.velocity.x, 0.0, body.velocity.z)
 	var speed := flat.length()
 	approach_speed = speed
-	if not body.core.grounded or body.core.crouching or speed < Planner.MIN_ENTRY_SPEED:
+	if not body.core.grounded or body.core.crouching or speed < 0.15 or (armed() and speed < Planner.MIN_ENTRY_SPEED):
 		_disarm("")
 		return
 	var d := flat / speed
@@ -162,10 +162,13 @@ func observe(body, dt: float) -> void:
 		return
 	var approach := entry_speed if phase == Phase.ARMED else speed
 	var timed := Planner.timing(approach)
+	var preview_speed: float = maxf(speed, body.core.wish_speed)
+	var preview_timing := Planner.timing(preview_speed)
 	var window: float = params.get_value("anticipation")
 	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
 	var feet: Vector3 = body.global_position
-	var hit := probe.face(space, feet, d, timed.takeoff + speed * maxf(window, PREVIEW_TIME) + speed * dt + 0.05)
+	var reach: float = maxf(timed.takeoff + speed * window, preview_timing.takeoff + preview_speed * PREVIEW_TIME)
+	var hit := probe.face(space, feet, d, reach + speed * dt + 0.05)
 	if hit.is_empty():
 		_disarm("")
 		return
@@ -180,12 +183,13 @@ func observe(body, dt: float) -> void:
 	if hit.distance <= timed.takeoff:
 		reason = "too_close"
 		return
-	if (hit.distance - timed.takeoff) / speed > window:
+	if speed < Planner.MIN_ENTRY_SPEED or (hit.distance - timed.takeoff) / speed > window:
 		reason = ""
-		var seen := probe.measure(space, feet, d, hit, timed.takeoff, Clip.travel(Clip.LANDING, timed.stretch))
+		var seen := probe.measure(space, feet, d, hit, preview_timing.takeoff, Clip.travel(Clip.LANDING, preview_timing.stretch))
 		if seen.ok and Planner.screen(seen) == "":
-			_preview = {"distance": hit.distance - timed.takeoff, "speed": speed, "travel_speed": timed.travel_speed,
-				"ease": window * speed}
+			_preview = {"distance": hit.distance - preview_timing.takeoff, "speed": speed,
+				"target_speed": preview_speed, "acceleration": body.params.get_value("ground_accel"),
+				"travel_speed": preview_timing.travel_speed, "ease": window * preview_speed}
 		return
 	var measured := probe.measure(space, feet, d, hit, timed.takeoff, Clip.travel(Clip.LANDING, timed.stretch))
 	if not measured.ok:

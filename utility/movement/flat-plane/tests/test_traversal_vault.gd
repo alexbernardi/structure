@@ -51,8 +51,10 @@ func _scene(extra := {}):
 
 
 func _place(scene, lane: String, x := NAN) -> void:
-	var at: Vector3 = scene.world.landmarks["vault_" + lane]
-	scene.body.teleport(Vector3(at.x if is_nan(x) else x, at.y + 0.05, at.z))
+	scene.teleport_to("vault_" + lane)
+	if not is_nan(x):
+		var at: Vector3 = scene.body.global_position
+		scene.body.teleport(Vector3(x, at.y, at.z))
 	await _tree.physics_frame
 
 
@@ -74,9 +76,17 @@ func _tick(scene, input: Dictionary) -> void:
 	scene.authored_visual.skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)
 
 
-func _trial(scene, lane: String, ticks: int, sprint := false) -> Dictionary:
-	await _place(scene, lane)
-	var stats := {"takeoffs": [], "hand_error": 0.0, "max_step": 0.0, "reasons": {}, "states": {}, "crouch": 0}
+func _trial(scene, lane: String, ticks: int, sprint := false, start_x := NAN) -> Dictionary:
+	await _place(scene, lane, start_x)
+	var stats := {"takeoffs": [], "hand_error": 0.0, "max_step": 0.0, "reasons": {}, "states": {}, "crouch": 0,
+		"lane": lane, "sprint": sprint, "run_speed": scene.params.get_value("max_ground_speed"),
+		"start_x": scene.body.position.x, "ticks": ticks, "overlap_ticks": 0, "contacts": {}}
+	var clearance := PhysicsShapeQueryParameters3D.new()
+	var cylinder := CylinderShape3D.new()
+	clearance.shape = cylinder
+	clearance.exclude = [scene.body.get_rid()]
+	clearance.collision_mask = scene.body.collision_mask
+	var space: PhysicsDirectSpaceState3D = scene.body.get_world_3d().direct_space_state
 	var vaults_before: int = scene.vault.vaults
 	var aborts_before: int = scene.vault.aborts
 	var previous: Vector3 = scene.body.global_position
@@ -86,7 +96,20 @@ func _trial(scene, lane: String, ticks: int, sprint := false) -> Dictionary:
 		if i % 240 == 0:
 			await _tree.physics_frame
 		_tick(scene, _run_input(sprint))
+		if i == 0:
+			stats["teleport_speed"] = animator.measured_speed
 		var position: Vector3 = scene.body.global_position
+		# Ignore contact tolerance, not penetrations: test the actual collider with a 2 mm inset.
+		cylinder.radius = scene.body._shape.radius - 0.002
+		cylinder.height = scene.body._shape.height - 0.004
+		clearance.transform = scene.body._collider.global_transform
+		if not space.intersect_shape(clearance, 1).is_empty():
+			stats.overlap_ticks += 1
+		for contact in scene.body.get_slide_collision_count():
+			var collider: Object = scene.body.get_slide_collision(contact).get_collider()
+			if collider is Node:
+				var name: String = collider.name
+				stats.contacts[name] = stats.contacts.get(name, 0) + 1
 		stats.max_step = maxf(stats.max_step, position.distance_to(previous))
 		previous = position
 		if scene.vault.active() and not was_active:
@@ -100,6 +123,10 @@ func _trial(scene, lane: String, ticks: int, sprint := false) -> Dictionary:
 			stats.hand_error = maxf(stats.hand_error, animator.hand_error)
 	stats["vaults"] = scene.vault.vaults - vaults_before
 	stats["aborts"] = scene.vault.aborts - aborts_before
+	var finish: Vector3 = scene.body.global_position
+	stats["finish"] = [finish.x, finish.y, finish.z]
+	stats["exit_speed"] = scene.body.core.horizontal_speed()
+	print("VAULT_LANE_RESULT ", JSON.stringify(stats))
 	return stats
 
 
@@ -276,20 +303,19 @@ func test_lane_a_vaults_every_vaultable_wall_on_the_authored_foot(t) -> void:
 	t.ok(scene.vault.enabled() and scene.authored_animation.has_vault, "traversal on with the authored vault installed")
 	var entry: float = scene.vault_profile.entry_phase
 	var spine: int = scene.authored_visual.bone_index.Spine
-	for trial in [["6 m/s", 900, false, 0.0], ["sprint 12 m/s", 600, true, 0.0], ["3 m/s", 1900, false, 3.0]]:
+	for trial in [["6 m/s", 1080, false, 0.0], ["sprint 12 m/s", 840, true, 0.0], ["3 m/s", 2160, false, 3.0]]:
 		if trial[3] > 0.0:
 			scene.body.params.set_value("max_ground_speed", trial[3])
 		var stats: Dictionary = await _trial(scene, "a", trial[1], trial[2])
 		t.eq(stats.vaults, 4, trial[0] + ": the 0.80, 0.95, 1.10 and 1.25 m walls are vaulted")
 		t.eq(stats.aborts, 0, trial[0] + ": no vault aborted")
+		t.eq(stats.teleport_speed, 0.0, trial[0] + ": landmark teleport distance never becomes measured running speed")
+		t.eq(stats.overlap_ticks, 0, trial[0] + ": the actual collider never penetrates course geometry by 2 mm")
 		t.ok(stats.reasons.has("too_high"), trial[0] + ": the 1.60 m wall is rejected")
+		t.ok(stats.finish[0] > 17.4 and stats.finish[0] < 17.48, trial[0] + ": stopped against, not through, the tall wall")
+		t.near(stats.exit_speed, 0.0, 0.01, trial[0] + ": the run has actually stopped by the end of the trial")
 		t.eq(stats.takeoffs.size(), 4, trial[0] + ": four takeoffs")
-		# Steering spans x0.8..x1.25 of the cadence, so it can always reach the entry foot after a wall-to-wall run-up;
-		# the first wall from a teleport with an arbitrary run phase is only that close when the approach is long enough
-		# in gait cycles (not at a sprint from 9 m).
 		for k in stats.takeoffs.size():
-			if k == 0 and trial[2]:
-				continue
 			var phase: float = stats.takeoffs[k]
 			t.ok(absf(wrapf(phase - entry, -0.5, 0.5)) < 0.05, trial[0] + ": takeoff %d on the vault's entry foot (run phase %.3f, entry %.3f)" % [k, phase, entry])
 		t.ok(stats.hand_error < 0.01, trial[0] + ": planted hand on its contact point (%.4f m)" % stats.hand_error)
@@ -306,12 +332,40 @@ func test_lanes_b_and_c_vault_the_angled_and_deck_walls_only(t) -> void:
 	t.eq(stats.vaults, 1, "lane B: the 20 degree wall is vaulted")
 	t.ok(stats.reasons.has("too_angled"), "lane B: the 40 degree wall is refused")
 	t.eq(stats.aborts, 0, "lane B: no abort")
+	t.eq(stats.overlap_ticks, 0, "lane B: no collider penetration")
+	t.ok(stats.contacts.has("VaultB40"), "lane B: the rejected angled wall still collides with the body")
+	t.ok(stats.finish[2] > -29.0, "lane B: ordinary collision slides the runner off-line, not through the angled wall")
 	t.ok(stats.hand_error < 0.01, "lane B: planted hand on its contact point (%.4f m)" % stats.hand_error)
 	stats = await _trial(scene, "c", 900)
 	t.eq(stats.vaults, 2, "lane C: both deck walls are vaulted")
 	t.eq(stats.aborts, 0, "lane C: no abort")
+	t.eq(stats.overlap_ticks, 0, "lane C: no collider penetration on the raised/stepped landing")
+	t.near(stats.exit_speed, 6.0, 0.01, "lane C: running continues after landing")
 	t.ok(stats.hand_error < 0.01, "lane C: planted hand on its contact point (%.4f m)" % stats.hand_error)
 	t.ok(stats.max_step < 0.25, "lane C: no collider jump beyond the deck step-up (%.3f m)" % stats.max_step)
+
+
+func test_lane_b_depth_walls_are_measured_and_the_thick_wall_stops_the_runner(t) -> void:
+	var scene = await _scene()
+	var stats := await _trial(scene, "b", 600, false, -5.0)
+	t.eq(stats.vaults, 1, "the 0.6 m depth wall is vaulted")
+	t.eq(stats.aborts, 0, "the accepted vault completes")
+	t.ok(stats.reasons.has("too_deep"), "the 1.4 m depth wall is refused")
+	t.eq(stats.overlap_ticks, 0, "no collider penetration in either wall")
+	t.ok(stats.finish[0] > 7.9 and stats.finish[0] < 7.96, "the thick wall stops the runner on its near side")
+	t.near(stats.exit_speed, 0.0, 0.01, "the refused wall actually stops movement")
+
+
+func test_blocked_vault_clearance_is_refused_before_takeoff(t) -> void:
+	var scene = await _scene()
+	scene.world._box(Vector3(-18, 1.9, -25), Vector3(5, 0.2, 3), Vector3.ZERO, null, "VaultCeiling")
+	await _tree.physics_frame
+	var stats := await _trial(scene, "a", 480)
+	t.eq(stats.vaults, 0, "the low ceiling prevents committing to a blocked vault path")
+	t.ok(stats.reasons.has("blocked"), "clearance rejection is explicit")
+	t.eq(stats.overlap_ticks, 0, "the body stays out of the wall and ceiling")
+	t.ok(stats.finish[0] < -18.5, "the obstacle blocks movement rather than teleporting the body")
+	t.near(stats.exit_speed, 0.0, 0.01, "the runner stops safely")
 
 
 func _arm(scene) -> bool:
@@ -417,6 +471,25 @@ func test_traversal_never_changes_physics_without_a_vault(t) -> void:
 	t.eq(differences, 0, "bit-identical trajectories with traversal on and off when nothing is vaulted")
 
 
+func test_active_vault_physics_does_not_depend_on_rendered_animation(t) -> void:
+	var paths := []
+	for animated in [true, false]:
+		var scene = await _scene()
+		scene.animation_enabled = animated
+		await _place(scene, "a")
+		var path := []
+		for i in 480:
+			if i % 240 == 0:
+				await _tree.physics_frame
+			_tick(scene, _run_input(true))
+			path.append([scene.body.global_position, scene.body.velocity, scene.vault.phase, scene.vault.time])
+		t.ok(scene.vault.vaults >= 3, "the equivalence trial includes multiple active vaults")
+		t.eq(scene.vault.aborts, 0, "the physical vault completes with animation on or off")
+		paths.append(path)
+		await _free(scene)
+	t.eq(paths[0], paths[1], "the full vault trajectory and action clock are bit-identical without rendering")
+
+
 ## The live order: the engine runs the scene's own _process every rendered frame (with physics interpolation, as in the
 ## game), physics ticks arrive from physics_frame, and the final pose is read as the last modifier finishes.
 func test_live_frames_plant_feet_and_hand_on_their_targets(t) -> void:
@@ -454,9 +527,20 @@ func test_cameras_follow_the_vault_travel_without_hump_or_dip(t) -> void:
 	scene.set_process(true)
 	scene.body.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_INHERIT
 	scene.toggle_side_view()
+	t.eq(scene._side_cam.physics_interpolation_mode, Node.PHYSICS_INTERPOLATION_MODE_OFF,
+		"a render-driven side camera does not interpolate an already-interpolated target again")
 	for lane in ["a", "c"]:
 		await _place(scene, lane)
 		scene.cam.snap()
+		scene._update_side_view(0.0)
+		t.near(scene._side_cam.fov, 60.0 if lane == "c" else 40.0, 0.001,
+			"the closer lane C view widens to keep the raised vault arm in frame")
+		t.ok(scene._side_offset.normalized().dot(Vector3.FORWARD if lane == "c" else Vector3.BACK) > 0.99,
+			"the side view uses the outside of lane " + lane + ", without foreground lane walls")
+		var sight := PhysicsRayQueryParameters3D.create(scene._side_cam.global_position, scene.side_focus(0.0),
+			1, [scene.body.get_rid()])
+		t.ok(scene.body.get_world_3d().direct_space_state.intersect_ray(sight).is_empty(),
+			"the side camera can see the character, not the back of the course wall")
 		var before: int = scene.vault.vaults
 		var ground := NAN
 		var orbit_start := NAN
