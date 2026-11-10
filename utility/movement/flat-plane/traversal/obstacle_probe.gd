@@ -51,7 +51,7 @@ func face(space: PhysicsDirectSpaceState3D, feet: Vector3, direction: Vector3, r
 ## takeoff point the landing foot comes down, and `takeoff` the takeoff distance (both from the planner's timing).
 ## Returns {ok, reason} plus, when the geometry was readable: distance, height, depth, slope, angle, landing,
 ## top (world), back (world), landing_point (world), normal.
-func measure(space: PhysicsDirectSpaceState3D, feet: Vector3, direction: Vector3, hit: Dictionary, takeoff: float, landing_travel: float) -> Dictionary:
+func measure(space: PhysicsDirectSpaceState3D, feet: Vector3, direction: Vector3, hit: Dictionary, takeoff: float, landing_travel: float, max_depth := Planner.MAX_DEPTH, drop := 1.0) -> Dictionary:
 	var normal: Vector3 = hit.normal
 	if absf(normal.y) > MAX_FACE_TILT:
 		return {"ok": false, "reason": "not_a_wall"}
@@ -99,7 +99,7 @@ func measure(space: PhysicsDirectSpaceState3D, feet: Vector3, direction: Vector3
 		result.reason = "too_low"
 		return result
 	# Depth along travel on the centre line: a ray back toward the face from beyond the deepest vaultable obstacle.
-	var span := Planner.MAX_DEPTH + 0.6
+	var span := max_depth + 0.6
 	var behind := feet + direction * (distance + span) + Vector3.UP * (height - 0.08)
 	var back := _cast(space, behind, behind - direction * (span + 0.05))
 	if back.is_empty():
@@ -112,7 +112,7 @@ func measure(space: PhysicsDirectSpaceState3D, feet: Vector3, direction: Vector3
 	result["depth"] = (back.position as Vector3 - (feet + Vector3.UP * (height - 0.08))).dot(direction) - distance
 	# Landing ground where the leading foot comes down, relative to the takeoff ground.
 	var landing_point := feet + direction * (distance - takeoff + landing_travel)
-	var ground := _cast(space, landing_point + Vector3.UP * (height + 0.5), landing_point + Vector3.DOWN * 1.0)
+	var ground := _cast(space, landing_point + Vector3.UP * (height + 0.5), landing_point + Vector3.DOWN * maxf(drop, 1.0))
 	if ground.is_empty() or (ground.normal as Vector3).y < WALKABLE:
 		result.reason = "bad_landing"
 		return result

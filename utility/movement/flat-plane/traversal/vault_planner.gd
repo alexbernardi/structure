@@ -51,6 +51,37 @@ static func timing(entry_speed: float) -> Dictionary:
 		"takeoff": Clip.face_distance(stretch), "duration": Clip.LENGTH / rate}
 
 
+## Timing that takes off from `distance` (a late press, inside the nominal takeoff point): the stride is shortened so
+## the authored contact still lands on the obstacle and the playback quickens to keep the ground speed. Empty when no
+## stretch / rate within the authored bounds reaches that distance.
+static func timing_at(entry_speed: float, distance: float) -> Dictionary:
+	var travel_speed := clampf(entry_speed, MIN_TRAVEL, MAX_TRAVEL)
+	var ratio := travel_speed / Clip.ROOT_SPEED
+	var stretch := 1.0 + (distance - Clip.FACE_DISTANCE) / Clip.FACE_PER_STRETCH
+	if stretch < MIN_STRETCH - 1e-6 or stretch > MAX_STRETCH + 1e-6:
+		return {}
+	var rate := ratio / stretch
+	if rate < MIN_RATE - 1e-6 or rate > MAX_RATE + 1e-6:
+		return {}
+	rate = clampf(rate, MIN_RATE, MAX_RATE)
+	return {"travel_speed": Clip.ROOT_SPEED * stretch * rate, "rate": rate, "stretch": stretch,
+		"takeoff": Clip.face_distance(stretch), "duration": Clip.LENGTH / rate}
+
+
+## Closest face distance a late press can still vault from at this approach speed.
+static func latest_takeoff(entry_speed: float) -> float:
+	var ratio := clampf(entry_speed, MIN_TRAVEL, MAX_TRAVEL) / Clip.ROOT_SPEED
+	return Clip.face_distance(clampf(ratio / MAX_RATE, MIN_STRETCH, MAX_STRETCH))
+
+
+## The character's limits (from its effective attributes); missing keys use the baseline-human constants.
+static func limits_from(capabilities) -> Dictionary:
+	if capabilities == null:
+		return {}
+	return {"max_height": capabilities.get_value("vault_max_height"), "max_depth": capabilities.get_value("vault_max_depth"),
+		"max_lift": capabilities.get_value("vault_lift"), "landing_drop": capabilities.get_value("landing_tolerance")}
+
+
 static func reject(reason: String, extra := {}) -> Dictionary:
 	var result := {"ok": false, "reason": reason}
 	result.merge(extra)
@@ -59,17 +90,17 @@ static func reject(reason: String, extra := {}) -> Dictionary:
 
 ## The geometric limits alone (no timing or clearance): the rejection reason, or "" when the obstacle's size, angle and
 ## landing are in range. Cheap enough to screen an obstacle seen far ahead.
-static func screen(obstacle: Dictionary) -> String:
+static func screen(obstacle: Dictionary, limits := {}) -> String:
 	var height: float = obstacle.height
 	if height < MIN_HEIGHT:
 		return "too_low"
-	if height > MAX_HEIGHT:
+	if height > limits.get("max_height", MAX_HEIGHT):
 		return "too_high"
 	if absf(obstacle.angle) > MAX_ANGLE:
 		return "too_angled"
-	if obstacle.depth > MAX_DEPTH:
+	if obstacle.depth > limits.get("max_depth", MAX_DEPTH):
 		return "too_deep"
-	if obstacle.landing < LANDING_RANGE[0] or obstacle.landing > LANDING_RANGE[1]:
+	if obstacle.landing < -limits.get("landing_drop", -LANDING_RANGE[0]) or obstacle.landing > LANDING_RANGE[1]:
 		return "bad_landing"
 	return ""
 
@@ -78,28 +109,30 @@ static func screen(obstacle: Dictionary) -> String:
 ## travel), slope (face offset along travel per metre of clip x), angle (rad), landing (ground beyond, relative)}.
 ## The latest plan is remembered: arming and the takeoff plan the same measured obstacle, and a plan costs about a
 ## millisecond.
-func plan(profile, obstacle: Dictionary, entry_speed: float, momentum: float) -> Dictionary:
+## `limits`: see limits_from(). `timed`: a timing to use instead of timing(entry_speed) (a late press, timing_at()).
+func plan(profile, obstacle: Dictionary, entry_speed: float, momentum: float, limits := {}, timed := {}) -> Dictionary:
 	var key := [profile, snappedf(obstacle.distance, 0.0001), snappedf(obstacle.height, 0.0001), snappedf(obstacle.depth, 0.0001),
-		snappedf(obstacle.slope, 0.0001), snappedf(obstacle.landing, 0.0001), snappedf(entry_speed, 0.0001), snappedf(momentum, 0.0001)]
+		snappedf(obstacle.slope, 0.0001), snappedf(obstacle.landing, 0.0001), snappedf(entry_speed, 0.0001), snappedf(momentum, 0.0001),
+		limits, snappedf(timed.get("stretch", 0.0), 0.0001)]
 	if key != _memo_key:
 		_memo_key = key
-		_memo = _plan(profile, obstacle, entry_speed, momentum)
+		_memo = _plan(profile, obstacle, entry_speed, momentum, limits, timed)
 	return _memo.duplicate()
 
 
-func _plan(profile, obstacle: Dictionary, entry_speed: float, momentum: float) -> Dictionary:
+func _plan(profile, obstacle: Dictionary, entry_speed: float, momentum: float, limits := {}, timed_override := {}) -> Dictionary:
 	if profile == null or not profile.valid:
 		return reject("no_clip")
 	if entry_speed < MIN_ENTRY_SPEED:
 		return reject("too_slow")
-	var screened := screen(obstacle)
+	var screened := screen(obstacle, limits)
 	if screened != "":
 		return reject(screened)
 	var height: float = obstacle.height
 	var depth: float = obstacle.depth
 	var slope: float = obstacle.slope
 	var landing: float = obstacle.landing
-	var timed := timing(entry_speed)
+	var timed := timing(entry_speed) if timed_override.is_empty() else timed_override
 	var stretch: float = timed.stretch
 	var face: float = obstacle.distance
 	if absf(face - timed.takeoff) > TAKEOFF_TOLERANCE:
@@ -134,7 +167,7 @@ func _plan(profile, obstacle: Dictionary, entry_speed: float, momentum: float) -
 			warp = maxf(warp, (need - base) / lift)
 		elif base < need - 0.005:
 			return reject("body_clip", {"time": t})
-	if warp > WARP_RANGE[1]:
+	if warp > limits.get("max_lift", WARP_RANGE[1]):
 		return reject("too_high")
 	var result := {"ok": true, "reason": "ok", "stretch": stretch, "rate": timed.rate, "travel_speed": timed.travel_speed,
 		"duration": timed.duration, "exit_speed": lerpf(timed.travel_speed, maxf(entry_speed, timed.travel_speed), clampf(momentum, 0.0, 1.0)),

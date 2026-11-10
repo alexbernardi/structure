@@ -25,7 +25,7 @@ var last_impact := 0.0
 var step_offset := 0.0
 ## Optional physical traversal action (traversal/vault_action.gd): filters the input, may take over whole ticks, adjusts
 ## the core's velocity before the move and observes the world after it. Null = plain movement.
-var action = null
+var action = null   ## traversal/traversal_controller.gd in the lab scenes
 
 const STEP_EASE_RATE := 14.0   ## 1/s; time constant ~70 ms
 const FLAT_TOLERANCE_DEG := 3.0
@@ -72,8 +72,10 @@ func _apply_shape(crouched: bool) -> void:
 func simulate(input: Dictionary, dt: float) -> void:
 	_step_offset_prev = step_offset
 	if action != null:
-		input = action.filter_input(input)
+		input = action.filter_input(input, self, dt)
 		if action.drive(self, dt):
+			if action.has_method("consumed_tick"):
+				action.consumed_tick(dt)
 			return
 	_sync_slope_settings()
 	var grounded := is_on_floor()

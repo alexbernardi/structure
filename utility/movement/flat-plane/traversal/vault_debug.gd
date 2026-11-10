@@ -8,10 +8,12 @@ extends MeshInstance3D
 
 const Planner = preload("res://traversal/vault_planner.gd")
 const Clip = preload("res://traversal/vault_clip.gd")
+const MantleClip = preload("res://traversal/mantle_clip.gd")
 const PATH_SAMPLES := 24
 
 var action
 var body
+var traversal                    ## traversal_controller.gd: interaction region, mantle and candidates
 var _mesh := ImmediateMesh.new()
 
 
@@ -26,9 +28,10 @@ func _init() -> void:
 	top_level = true
 
 
-func setup(vault_action, character) -> void:
+func setup(vault_action, character, controller = null) -> void:
 	action = vault_action
 	body = character
+	traversal = controller
 
 
 func redraw(fraction: float) -> void:
@@ -67,7 +70,59 @@ func redraw(fraction: float) -> void:
 		var hand: Vector3 = action.to_world(plan.hand_point)
 		var weight: float = Planner.hand_weight(plan, action.time)
 		_cross(hand, 0.07, Color(0.2, 1.0, 0.3).lerp(Color(0.1, 0.3, 0.1), 1.0 - weight))
+	_draw_traversal()
 	_mesh.surface_end()
+
+
+## Movement Lab 5.0 additions:
+##   ground band   the vault interaction region along the approach: green = a press vaults now (bright = early,
+##                 lime = late), grey = the band where a press would vault once the obstacle qualifies; the white
+##                 tick is the nominal takeoff point
+##   yellow/blue   mantle / grab ledge seen ahead (blue = climbable now); the path of an active mantle in cyan
+##   (collider) and magenta (warped authored root)
+func _draw_traversal() -> void:
+	if traversal == null:
+		return
+	var region: Dictionary = action.region
+	if not region.is_empty():
+		var feet: Vector3 = region.feet + Vector3.UP * 0.03
+		var d: Vector3 = region.direction
+		var side := d.cross(Vector3.UP) * 0.35
+		var offer: Dictionary = action.opportunity
+		var colour := Color(0.5, 0.5, 0.5)
+		if not offer.is_empty():
+			colour = Color(0.6, 1.0, 0.2) if offer.late else Color(0.1, 1.0, 0.4)
+		var face: float = region.face
+		var near: Vector3 = feet + d * (face - region.far)
+		var far: Vector3 = feet + d * (face - region.near)
+		for s in [-1.0, 1.0]:
+			_line(near + side * s, far + side * s, colour)
+		_line(near - side, near + side, colour)
+		_line(far - side, far + side, colour)
+		var nominal: Vector3 = feet + d * (face - region.takeoff)
+		_line(nominal - side * 1.3, nominal + side * 1.3, Color.WHITE)
+	var seen: Dictionary = traversal.mantle.last_seen
+	if seen.has("top"):
+		var ok: bool = seen.get("ok", false)
+		_cross(seen.top, 0.1, Color(0.3, 0.6, 1.0) if ok else Color(0.9, 0.8, 0.2))
+		if seen.has("face"):
+			_line(seen.face, seen.top, Color(0.3, 0.6, 1.0) if ok else Color(0.9, 0.8, 0.2))
+	var mantle = traversal.mantle
+	if mantle.presenting:
+		var p: Dictionary = mantle.plan
+		var previous_body := Vector3.ZERO
+		var previous_root := Vector3.ZERO
+		for i in PATH_SAMPLES + 1:
+			var t: float = lerpf(p.start, MantleClip.LENGTH, float(i) / PATH_SAMPLES)
+			var c: Vector2 = mantle.collider_point(p, minf(t, MantleClip.RELEASE))
+			var v: Vector2 = mantle.visual_point(p, t)
+			var collider: Vector3 = p.origin + p.direction * c.x + Vector3.UP * c.y
+			var visual: Vector3 = p.origin + p.direction * v.x + Vector3.UP * v.y
+			if i > 0:
+				_line(previous_body, collider, Color.CYAN)
+				_line(previous_root, visual, Color.MAGENTA)
+			previous_body = collider
+			previous_root = visual
 
 
 func _line(a: Vector3, b: Vector3, color: Color) -> void:

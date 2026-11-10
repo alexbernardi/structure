@@ -1,8 +1,13 @@
-## The vault as a physical action of the character body (Movement Lab 4.0, prototype one). While running it watches
-## the way ahead. When a vaultable obstacle enters the anticipation window it arms, which swallows jump presses and
-## eases the approach to the vault's ground speed. It triggers exactly at the planned takeoff distance, then drives the
-## collider kinematically along the planned hump with full collision response every tick, and hands control back to
-## the movement core on landing. Deterministic and independent of presentation: the animation reads the clip time,
+## The vault as a physical action of the character body (Movement Lab 4.0, made intentional in 5.0). While running it
+## watches the way ahead and keeps an `opportunity`: a planned, collision-checked vault that a press of Space would
+## commit to now. It never commits on its own (traversal_controller.gd decides, on the player's press). The
+## interaction region along the approach runs from `vault_window` seconds before the takeoff point to
+## `vault_late_window` metres inside it:
+##   early (before the takeoff point) - commit arms: jump presses are swallowed and the approach eases to the vault's
+##                                      ground speed, reaching it exactly at the planned takeoff distance;
+##   late  (inside it)                - commit takes off at once with a shorter, faster stride (Planner.timing_at).
+## Then the collider is driven kinematically along the planned hump with full collision response every tick, and
+## control returns to the movement core on landing. Deterministic and independent of presentation: the animation reads the clip time,
 ## body offset and hand contact from here, never the other way round.
 extends RefCounted
 
@@ -41,6 +46,10 @@ var approach_speed := 0.0      ## horizontal speed at the latest observation
 var vaults := 0
 var aborts := 0
 var plan_usec := 0             ## cost of the latest plan
+var capabilities               ## MovementCapabilities: the character's vault limits and timing windows (null = 4.0 constants)
+var opportunity := {}          ## the vault a press would commit to now ({} = none); see evaluate()
+var region := {}               ## interaction region along the current approach (debug overlay): near, far, takeoff, feet, direction
+var late_vaults := 0
 var _wish := Vector3.ZERO
 var _recover_left := 0.0
 var _rejected_key := ""
@@ -72,8 +81,16 @@ func armed() -> bool:
 	return phase == Phase.ARMED
 
 
+func _attribute(id: String, fallback: float) -> float:
+	return capabilities.get_value(id) if capabilities != null else fallback
+
+
+func limits() -> Dictionary:
+	return Planner.limits_from(capabilities)
+
+
 ## Before the movement core: remembers the wished direction and swallows jump presses while the vault is committed.
-func filter_input(input: Dictionary) -> Dictionary:
+func filter_input(input: Dictionary, _body = null, _dt := 0.0) -> Dictionary:
 	var move: Vector2 = input.get("move", Vector2.ZERO)
 	_wish = Basis(Vector3.UP, float(input.get("yaw", 0.0))) * Vector3(move.x, 0.0, -move.y)
 	if phase != Phase.IDLE and (input.get("jump_pressed", false) or input.get("jump_held", false)):
@@ -112,7 +129,7 @@ func drive(body, dt: float) -> bool:
 	_set_offsets(body.global_position)
 	if time >= Clip.LANDING:
 		phase = Phase.IDLE
-		_recover_left = RECOVER_TIME
+		_recover_left = _attribute("recovery_time", RECOVER_TIME)
 		body.release(direction * plan.travel_speed, true)
 	return true
 
@@ -137,7 +154,7 @@ func adjust(body, dt: float) -> void:
 			_recover_left = 0.0
 			return
 		var along := flat.dot(direction)
-		var goal := lerpf(plan.exit_speed, plan.travel_speed, _recover_left / RECOVER_TIME)
+		var goal := lerpf(plan.exit_speed, plan.travel_speed, _recover_left / maxf(_attribute("recovery_time", RECOVER_TIME), 0.001))
 		if along < goal:
 			core.velocity += direction * (goal - along)
 
@@ -160,70 +177,124 @@ func observe(body, dt: float) -> void:
 	if _wish.length_squared() < 0.01 or _wish.normalized().dot(d) < MIN_ALIGNMENT:
 		_disarm("")
 		return
-	var approach := entry_speed if phase == Phase.ARMED else speed
-	var timed := Planner.timing(approach)
-	var preview_speed: float = maxf(speed, body.core.wish_speed)
-	var preview_timing := Planner.timing(preview_speed)
-	var window: float = params.get_value("anticipation")
-	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
-	var feet: Vector3 = body.global_position
-	var reach: float = maxf(timed.takeoff + speed * window, preview_timing.takeoff + preview_speed * PREVIEW_TIME)
-	var hit := probe.face(space, feet, d, reach + speed * dt + 0.05)
-	if hit.is_empty():
-		_disarm("")
-		return
 	if phase == Phase.ARMED:
-		if hit.collider != obstacle.get("collider", 0):
+		var space_armed: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
+		var feet_armed: Vector3 = body.global_position
+		var armed_hit := probe.face(space_armed, feet_armed, d, maxf(face_distance, takeoff) + speed * dt + 0.05)
+		if armed_hit.is_empty() or armed_hit.collider != obstacle.get("collider", 0):
 			_disarm("changed")
 			return
-		face_distance = hit.distance
-		if hit.distance <= takeoff:
-			_trigger(body, space, feet, d, hit)
+		face_distance = armed_hit.distance
+		if armed_hit.distance <= takeoff:
+			_trigger(body, space_armed, feet_armed, d, armed_hit)
 		return
-	if hit.distance <= timed.takeoff:
+	evaluate(body, d, speed)
+
+
+## The vault a press would commit to now, for travel direction `d` at horizontal `speed` (sets `opportunity`,
+## `region` and `reason`). Also keeps the read-only approach preview for the presentation's phase steering.
+func evaluate(body, d: Vector3, speed: float) -> void:
+	opportunity = {}
+	region = {}
+	var timed := Planner.timing(speed)
+	var preview_speed: float = maxf(speed, body.core.wish_speed)
+	var preview_timing := Planner.timing(preview_speed)
+	var window: float = _attribute("vault_window", params.get_value("anticipation"))
+	var latest: float = maxf(Planner.latest_takeoff(speed), timed.takeoff - _attribute("vault_late_window", 0.0))
+	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
+	var feet: Vector3 = body.global_position
+	var far: float = timed.takeoff + speed * window
+	var reach: float = maxf(far, preview_timing.takeoff + preview_speed * PREVIEW_TIME)
+	var hit := probe.face(space, feet, d, reach + 0.05)
+	if hit.is_empty():
+		reason = ""
+		return
+	var lim := limits()
+	if speed >= Planner.MIN_ENTRY_SPEED:
+		region = {"near": latest, "far": far, "takeoff": timed.takeoff, "feet": feet, "direction": d, "face": hit.distance}
+	if hit.distance < latest:
 		reason = "too_close"
 		return
-	if speed < Planner.MIN_ENTRY_SPEED or (hit.distance - timed.takeoff) / speed > window:
+	if speed < Planner.MIN_ENTRY_SPEED or hit.distance > far:
 		reason = ""
-		var seen := probe.measure(space, feet, d, hit, preview_timing.takeoff, Clip.travel(Clip.LANDING, preview_timing.stretch))
-		if seen.ok and Planner.screen(seen) == "":
+		var seen := probe.measure(space, feet, d, hit, preview_timing.takeoff, Clip.travel(Clip.LANDING, preview_timing.stretch), lim.get("max_depth", Planner.MAX_DEPTH), lim.get("landing_drop", 0.6))
+		if seen.ok and Planner.screen(seen, lim) == "":
 			_preview = {"distance": hit.distance - preview_timing.takeoff, "speed": speed,
-				"target_speed": preview_speed, "acceleration": body.params.get_value("ground_accel"),
+				"target_speed": preview_speed, "acceleration": body.core.p.get("ground_accel", body.params.get_value("ground_accel")),
 				"travel_speed": preview_timing.travel_speed, "ease": window * preview_speed}
+			reason = "ahead"
 		return
-	var measured := probe.measure(space, feet, d, hit, timed.takeoff, Clip.travel(Clip.LANDING, timed.stretch))
+	var late: bool = hit.distance < timed.takeoff
+	var fitted: Dictionary = Planner.timing_at(speed, hit.distance) if late else timed
+	if fitted.is_empty():
+		reason = "too_close"
+		return
+	var measured := probe.measure(space, feet, d, hit, fitted.takeoff, Clip.travel(Clip.LANDING, fitted.stretch), lim.get("max_depth", Planner.MAX_DEPTH), lim.get("landing_drop", 0.6))
 	if not measured.ok:
 		reason = measured.reason
 		return
-	var key := "%d|%.2f|%.2f|%.0f|%.2f|%.1f" % [hit.collider, measured.height, measured.depth, rad_to_deg(measured.angle), measured.landing, speed]
+	var key := "%d|%.2f|%.2f|%.0f|%.2f|%.1f|%s|%s|%.2f" % [hit.collider, measured.height, measured.depth, rad_to_deg(measured.angle), measured.landing, speed, late, lim, fitted.stretch]
 	if key == _rejected_key:
 		reason = _rejected_reason
 		return
 	var trial := measured.duplicate()
-	trial.distance = timed.takeoff
-	var result := _plan(trial, speed)
-	if result.ok and not probe.path_clear(space, result, feet + d * (hit.distance - timed.takeoff), d, BODY_RADIUS, body.params.get_value("crouch_height")):
+	trial.distance = fitted.takeoff
+	var result := _plan(trial, speed, {} if not late else fitted)
+	var start: Vector3 = feet + d * (hit.distance - fitted.takeoff)
+	if result.ok and not probe.path_clear(space, result, start, d, BODY_RADIUS, body.params.get_value("crouch_height")):
 		result = Planner.reject("blocked")
+	measured["collider"] = hit.collider
+	measured["face"] = hit.point
 	if not result.ok:
 		_rejected_key = key
 		_rejected_reason = result.reason
 		reason = result.reason
 		return
-	measured["collider"] = hit.collider
-	measured["face"] = hit.point
-	obstacle = measured
-	phase = Phase.ARMED
-	entry_speed = speed
-	takeoff = timed.takeoff
-	travel_speed = timed.travel_speed
-	face_distance = hit.distance
-	_ease_span = hit.distance - timed.takeoff
+	var powered := false
+	if capabilities != null:
+		powered = measured.height > capabilities.base_value("vault_max_height") + 1e-4 or result.warp > capabilities.base_value("vault_lift") + 1e-4 \
+			or measured.depth > capabilities.base_value("vault_max_depth") + 1e-4 or measured.landing < -capabilities.base_value("landing_tolerance") - 1e-4
+	opportunity = {"late": late, "hit": hit, "measured": measured, "timing": fitted, "plan": result, "speed": speed,
+		"feet": feet, "direction": d, "height": measured.height, "powered": powered}
 	reason = "ok"
+
+
+## Commits to the current opportunity (the player pressed Space). Early: arms the eased approach. Late: takes off now.
+## False when there is nothing to commit to.
+func commit(body) -> bool:
+	if opportunity.is_empty() or phase != Phase.IDLE or not enabled():
+		return false
+	var o := opportunity
+	opportunity = {}
+	obstacle = o.measured
+	entry_speed = o.speed
+	if o.late:
+		plan = o.plan
+		origin = o.feet
+		direction = o.direction
+		time = 0.0
+		_time_prev = 0.0
+		presenting = true
+		phase = Phase.ACTIVE
+		vaults += 1
+		late_vaults += 1
+		_set_offsets(o.feet)
+		_offset_prev = _offset
+		_follow_prev = _follow
+		return true
+	phase = Phase.ARMED
+	takeoff = o.timing.takeoff
+	travel_speed = o.timing.travel_speed
+	face_distance = o.hit.distance
+	_ease_span = o.hit.distance - o.timing.takeoff
+	reason = "ok"
+	return true
 
 
 func _trigger(body, space: PhysicsDirectSpaceState3D, feet: Vector3, d: Vector3, hit: Dictionary) -> void:
 	var stretch: float = Planner.timing(entry_speed).stretch
-	var measured := probe.measure(space, feet, d, hit, takeoff, Clip.travel(Clip.LANDING, stretch))
+	var lim := limits()
+	var measured := probe.measure(space, feet, d, hit, takeoff, Clip.travel(Clip.LANDING, stretch), lim.get("max_depth", Planner.MAX_DEPTH), lim.get("landing_drop", 0.6))
 	if not measured.ok:
 		_disarm(measured.reason)
 		return
@@ -252,9 +323,9 @@ func _trigger(body, space: PhysicsDirectSpaceState3D, feet: Vector3, d: Vector3,
 	_follow_prev = _follow
 
 
-func _plan(measured: Dictionary, speed: float) -> Dictionary:
+func _plan(measured: Dictionary, speed: float, timed := {}) -> Dictionary:
 	var started := Time.get_ticks_usec()
-	var result := planner.plan(profile, measured, speed, params.get_value("momentum_continuity"))
+	var result := planner.plan(profile, measured, speed, _attribute("momentum_conservation", params.get_value("momentum_continuity")), limits(), timed)
 	plan_usec = Time.get_ticks_usec() - started
 	return result
 
@@ -262,12 +333,16 @@ func _plan(measured: Dictionary, speed: float) -> Dictionary:
 func _disarm(why: String) -> void:
 	if phase == Phase.ARMED:
 		phase = Phase.IDLE
+	opportunity = {}
+	region = {}
 	reason = why
 
 
 ## Teleport / respawn: drops any vault without a handback (the body is placed elsewhere and its motion cleared).
 func cancel() -> void:
 	phase = Phase.IDLE
+	opportunity = {}
+	region = {}
 	presenting = false
 	reason = ""
 	_recover_left = 0.0

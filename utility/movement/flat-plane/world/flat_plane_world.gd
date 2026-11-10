@@ -24,6 +24,7 @@ func build() -> void:
 	_obstacles()
 	_tunnel_and_ledge()
 	_vault_course()
+	_traversal_course()
 	_spawn_pad()
 	_axis_labels()
 
@@ -205,6 +206,70 @@ func _vault_course() -> void:
 	_course_wall(Vector3(-1.65, 0.0, -35.0), 1.45, 0.35, 0.0, tint, "VaultC2", "-0.45 m landing")
 	for lane in [["a", -25.0], ["b", -30.0], ["c", -35.0]]:
 		landmarks["vault_" + String(lane[0])] = Vector3(-27.0, 0.0, lane[1])
+
+
+## Movement Lab 5.0 traversal course: four more 3 m-wide lanes toward +X, east of the vault course (landmarks lane_d ..
+## lane_g at x 33, facing down the lane). Every obstacle is a plain box: the traversal system reads geometry only.
+##   D (z -25) rhythm   - five 1.0 m walls 6 m apart, then a pair 3.6 m apart (a vault lands inside the next one's
+##                        region: chain with a press during the descent), then a 0.8 m wall
+##   E (z -31) climb    - 1.0 m block 2.5 m deep (too deep to vault: mantle onto it, run off), 1.4 m platform (mantle),
+##                        1.9 m ledge (too high to mantle from the ground: jump and grab), 3.0 m ledge (beyond a
+##                        human's grab: cybernetic jump or zephyr double jump), then 1.6 m wall (cybernetic vault)
+##   F (z -37) invalid  - 1.0 m wall under a low bar (blocked path), a 2 m deck ending in a 1.0 m wall over a 2 m
+##                        drop (lane_f_drop; human landing refused, cybernetic accepts), a 0.4 m-wide post (narrow), a 1.0 m wall at 30 degrees, and a
+##                        1.3 m block under an overhang (no headroom to mantle)
+##   G (z -43) heights  - 1.2 m platform with a 1.0 m vault wall on it, a 5 m gap (sprint to clear it, or air jump)
+##                        to a second 1.2 m platform, and a drop back to the ground over a 1.0 m wall
+func _traversal_course() -> void:
+	var wall := _tint(Color(0.80, 0.42, 0.36))
+	var block := _tint(Color(0.36, 0.55, 0.80))
+	var gate := _tint(Color(0.75, 0.35, 0.80))
+	var bad := _tint(Color(0.35, 0.35, 0.35))
+	var x0 := 40.0
+	# D: rhythm
+	for i in 5:
+		_course_wall(Vector3(x0 + i * 6.0, 0.0, -25.0), 1.0, 0.35, 0.0, wall, "LaneD%d" % i, "1.0 m")
+	_course_wall(Vector3(x0 + 30.0, 0.0, -25.0), 1.0, 0.35, 0.0, wall, "LaneDPairA", "pair")
+	_course_wall(Vector3(x0 + 33.6, 0.0, -25.0), 1.0, 0.35, 0.0, wall, "LaneDPairB", "3.6 m")
+	_course_wall(Vector3(x0 + 40.0, 0.0, -25.0), 0.8, 0.35, 0.0, wall, "LaneD80", "0.8 m")
+	# E: climb
+	_course_wall(Vector3(x0 + 1.25, 0.0, -31.0), 1.0, 2.5, 0.0, block, "LaneEBlock", "1.0 m x 2.5 m deep")
+	_course_wall(Vector3(x0 + 10.0, 0.0, -31.0), 1.4, 3.0, 0.0, block, "LaneEPlatform", "1.4 m platform")
+	_course_wall(Vector3(x0 + 20.0, 0.0, -31.0), 1.9, 3.0, 0.0, block, "LaneELedge19", "1.9 m: jump + grab")
+	_course_wall(Vector3(x0 + 30.0, 0.0, -31.0), 3.0, 3.0, 0.0, gate, "LaneELedge30", "3.0 m: upgrades only")
+	_course_wall(Vector3(x0 + 40.0, 0.0, -31.0), 1.6, 0.35, 0.0, gate, "LaneEWall160", "1.6 m: cybernetic vault")
+	# F: invalid and awkward
+	_course_wall(Vector3(x0, 0.0, -37.0), 1.0, 0.35, 0.0, wall, "LaneFBarred", "low bar")
+	_box(Vector3(x0 + 1.2, 1.75, -37.0), Vector3(0.3, 0.15, 3.0), Vector3.ZERO, bad, "LaneFBar")
+	_box(Vector3(x0 + 6.0, 1.0, -37.0), Vector3(6.0, 2.0, 3.0), Vector3.ZERO, block, "LaneFDeck")
+	_course_wall(Vector3(x0 + 8.825, 2.0, -37.0), 1.0, 0.35, 0.0, wall, "LaneFDropWall", "2 m drop")
+	_course_wall(Vector3(x0 + 18.0, 0.0, -37.0), 1.0, 0.4, 0.0, wall, "LaneFPost", "narrow post")
+	_course_wall(Vector3(x0 + 26.0, 0.0, -37.0), 1.0, 0.35, 30.0, wall, "LaneF30", "30 deg")
+	_course_wall(Vector3(x0 + 34.0, 0.0, -37.0), 1.3, 2.0, 0.0, block, "LaneFCovered", "overhang")
+	_box(Vector3(x0 + 34.0, 2.0, -37.0), Vector3(3.0, 0.2, 3.0), Vector3.ZERO, bad, "LaneFOverhang")
+	# G: mixed elevation
+	_box(Vector3(x0 + 6.0, 0.6, -43.0), Vector3(12.0, 1.2, 3.0), Vector3.ZERO, block, "LaneGPlatformA")
+	_course_wall(Vector3(x0 + 7.0, 1.2, -43.0), 1.0, 0.35, 0.0, wall, "LaneGTopWall", "wall on platform")
+	_box(Vector3(x0 + 23.0, 0.6, -43.0), Vector3(12.0, 1.2, 3.0), Vector3.ZERO, block, "LaneGPlatformB")
+	_course_wall(Vector3(x0 + 31.0, 0.0, -43.0), 1.0, 0.35, 0.0, wall, "LaneGDropWall", "1.0 m after drop")
+	_label(Vector3(x0 + 14.5, 1.8, -43.0), "5 m gap")
+	for lane in [["d", -25.0], ["e", -31.0], ["f", -37.0], ["g", -43.0]]:
+		landmarks["lane_" + String(lane[0])] = Vector3(x0 - 7.0, 0.0, lane[1])
+	landmarks["lane_d_pair"] = Vector3(x0 + 25.0, 0.0, -25.0)
+	landmarks["lane_e_ledge"] = Vector3(x0 + 15.0, 0.0, -31.0)
+	landmarks["lane_e_gate"] = Vector3(x0 + 24.0, 0.0, -31.0)
+	landmarks["lane_g_top"] = Vector3(x0 + 1.0, 1.2, -43.0)
+	landmarks["lane_f_drop"] = Vector3(x0 + 3.3, 2.0, -37.0)
+
+
+func _label(position: Vector3, caption: String) -> void:
+	var label := Label3D.new()
+	label.text = caption
+	label.pixel_size = 0.006
+	label.font_size = 56
+	label.position = position
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	add_child(label)
 
 
 ## A course wall standing on the ground at `base` (its centre), `depth` along +X, turned `yaw_deg` about Y.

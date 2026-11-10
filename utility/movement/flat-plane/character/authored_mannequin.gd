@@ -3,9 +3,11 @@ extends Node3D
 
 const Source = preload("res://assets/quaternius/UAL1_Standard.glb")
 const TraversalSource = preload("res://assets/quaternius/UAL2_Traversal.glb")
+const ClimbSource = preload("res://assets/quaternius/UAL2_Climb.glb")
 const LegacyVisual = preload("res://character/character_visual.gd")
 const CLIPS := ["Idle", "Jog_Fwd", "Sprint", "Jump_Start", "Jump", "Jump_Land", "Crouch_Idle", "Crouch_Fwd"]
 const TRAVERSAL_CLIPS := ["SafetyVault"]
+const CLIMB_CLIPS := ["ClimbUp_1m", "DoubleJump"]   ## Movement Lab 5.0: authored mantle and air jump (same CC0 package)
 const BONES := ["Root", "Hips", "Spine", "Chest", "UpperChest", "Neck", "Head",
 	"LeftShoulder", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightShoulder", "RightUpperArm", "RightLowerArm", "RightHand",
 	"LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "LeftToes", "RightUpperLeg", "RightLowerLeg", "RightFoot", "RightToes"]
@@ -18,6 +20,7 @@ var bone_index := {}
 var sole_points := {}
 var traversal_clips: Array[String] = []   ## authored traversal clips that loaded and retargeted (empty = traversal off)
 var traversal_source := TraversalSource
+var climb_source := ClimbSource
 
 
 func _ready() -> void:
@@ -60,7 +63,8 @@ func _ready() -> void:
 	var library := AnimationLibrary.new()
 	for name in CLIPS:
 		library.add_animation(name, _retarget(original_player.get_animation(name)))
-	_add_traversal(library, original.get_bone_global_rest(hip).origin.y)
+	_add_traversal(library, original.get_bone_global_rest(hip).origin.y, traversal_source, TRAVERSAL_CLIPS)
+	_add_traversal(library, original.get_bone_global_rest(hip).origin.y, climb_source, CLIMB_CLIPS)
 	player.add_animation_library("", library)
 	source.free()
 	_build_meshes()
@@ -78,11 +82,11 @@ func _retarget(animation: Animation) -> Animation:
 
 
 ## UAL2 shares UAL1's rig. A missing or incompatible source disables traversal instead of breaking locomotion.
-func _add_traversal(library: AnimationLibrary, hip_height: float) -> void:
-	if traversal_source == null:
-		push_warning("Authored traversal source missing; traversal disabled")
+func _add_traversal(library: AnimationLibrary, hip_height: float, packed: PackedScene, names: Array) -> void:
+	if packed == null:
+		push_warning("Authored traversal source missing; its moves are disabled")
 		return
-	var source: Node = traversal_source.instantiate()
+	var source: Node = packed.instantiate()
 	var skeletons := source.find_children("*", "Skeleton3D", true, false)
 	var players := source.find_children("*", "AnimationPlayer", true, false)
 	var hip: int = skeletons[0].find_bone("Hips") if skeletons.size() == 1 else -1
@@ -90,7 +94,7 @@ func _add_traversal(library: AnimationLibrary, hip_height: float) -> void:
 		push_warning("Authored traversal source is not on the UAL1-compatible humanoid rig; traversal disabled")
 		source.free()
 		return
-	for name in TRAVERSAL_CLIPS:
+	for name in names:
 		if players[0].has_animation(name):
 			library.add_animation(name, _retarget(players[0].get_animation(name)))
 			traversal_clips.append(name)

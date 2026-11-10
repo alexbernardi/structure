@@ -27,6 +27,8 @@ const VaultProfile = preload("res://traversal/vault_profile.gd")
 const VaultAction = preload("res://traversal/vault_action.gd")
 const VaultDebug = preload("res://traversal/vault_debug.gd")
 const VaultClip = preload("res://traversal/vault_clip.gd")
+const TraversalController = preload("res://traversal/traversal_controller.gd")
+const Profiles = preload("res://capability/movement_profiles.gd")
 
 var params: Params = Params.new()
 var world
@@ -45,7 +47,9 @@ var authored_visual
 var authored_animation
 var traversal_params = TraversalParams.create()   ## the four traversal controls plus the traversal / overlay switches
 var vault_profile = VaultProfile.new()            ## the authored vault measured on the mannequin (invalid: no clip)
-var vault = VaultAction.new()                     ## the body's physical vault action
+var traversal = TraversalController.new()         ## the body's one physical action: jump / vault / mantle / grab / air jump
+var vault = traversal.vault                       ## the vault move (kept as its own reference for tests and tools)
+var capabilities = traversal.capabilities         ## effective movement + traversal attributes, modifiers, capabilities
 ## Procedural presentation on/off. The physical controller never reads it: with animation off the body moves identically.
 var animation_enabled := true
 var options := {}   ## overrides command-line options (used by tests)
@@ -63,6 +67,7 @@ var _side_cam := Camera3D.new()
 var _side_offset := Vector3.RIGHT * 7.5
 var _side_focus_y := NAN
 const SIDE_FOLLOW_RATE := 5.0   ## 1/s: how quickly a side view's height follows the character
+const PROFILE_KEYS := {KEY_1: "human", KEY_2: "cyber", KEY_3: "magic", KEY_4: "injury"}
 
 
 func _ready() -> void:
@@ -103,14 +108,16 @@ func _ready() -> void:
 	authored_visual.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	if _args.has("no-traversal-clip"):   # test aid: behave as if the traversal clips were not installed
 		authored_visual.traversal_source = null
+		authored_visual.climb_source = null
 	body.add_child(authored_visual)
 	authored_animation = AuthoredAnimation.new()
 	authored_visual.add_child(authored_animation)
 	authored_animation.setup(authored_visual, locomotion_params)
 	vault_profile.build(authored_visual)
 	var exclude: Array[RID] = [body.get_rid()]
-	vault.setup(traversal_params, vault_profile, exclude)
-	body.action = vault
+	traversal.setup(traversal_params, vault_profile, params, exclude)
+	body.core.p = capabilities.core   # the movement core reads the effective (upgraded) parameters; baselines stay tuned
+	body.action = traversal
 	authored_animation.setup_traversal(traversal_params, vault_profile)
 
 	cam = OrbitCamera.new()
@@ -130,7 +137,7 @@ func _ready() -> void:
 	_vault_debug = VaultDebug.new()
 	_vault_debug.name = "TraversalDebug"
 	add_child(_vault_debug)
-	_vault_debug.setup(vault, body)
+	_vault_debug.setup(vault, body, traversal)
 	if _args.has("traversal-debug"):
 		traversal_params.set_value("debug_overlay", 1.0)
 	if _args.has("no-traversal"):
@@ -145,6 +152,8 @@ func _ready() -> void:
 		if id == "legacy":
 			_select_animation_system())
 	_select_animation_system()
+	for modifier in String(_args.get("profile", "")).split(",", false):
+		apply_profile(modifier)
 	if _args.has("landmark"):
 		teleport_to(String(_args["landmark"]))
 	if DisplayServer.get_name() != "headless" and not _args.has("no-window-state"):
@@ -199,6 +208,29 @@ func _on_editor_toggled(open: bool) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
 
 
+## Progression demo: "cyber" toggles the cybernetic legs, "magic" (re)casts the timed spell, "injury" toggles the
+## sprain, "human" removes every modifier. Returns the summary shown in the toast.
+func apply_profile(name: String) -> String:
+	match name.strip_edges():
+		"cyber", "cybernetic":
+			if not capabilities.remove(Profiles.CYBERNETIC):
+				capabilities.add(Profiles.cybernetic_legs())
+		"magic":
+			capabilities.add(Profiles.zephyr_step())
+		"injury":
+			if not capabilities.remove(Profiles.INJURY):
+				capabilities.add(Profiles.sprained_ankle())
+		"human", "clear":
+			capabilities.clear()
+		_:
+			push_warning("Unknown profile '%s' (cyber, magic, injury, human)" % name)
+	traversal.resources.refill()
+	var summary: String = capabilities.summary()
+	if tuning != null:
+		tuning.toast.emit("Character: " + summary, "info")
+	return summary
+
+
 ## Things only the scene can do on behalf of controller buttons.
 func _on_tuning_action(action: String, _ctx: Dictionary) -> void:
 	match action:
@@ -235,7 +267,7 @@ func teleport_to(name: String) -> bool:
 		return false
 	_landmark_index = names.find(name)
 	var yaw := 0.0
-	if name.begins_with("stairs") or name.begins_with("vault"):
+	if name.begins_with("stairs") or name.begins_with("vault") or name.begins_with("lane"):
 		yaw = -PI / 2.0
 	elif name == "tunnel":
 		yaw = PI
@@ -272,6 +304,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		toggle_side_view()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_T and not (tuning != null and tuning.editor != null and tuning.editor.visible):
 		teleport_to_landmark(-1 if event.shift_pressed else 1)
+	elif event is InputEventKey and event.pressed and not event.echo and PROFILE_KEYS.has(event.keycode) and not (tuning != null and tuning.editor != null and tuning.editor.visible):
+		apply_profile(PROFILE_KEYS[event.keycode])
 	elif event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not _args.has("no-capture") and not (tuning != null and tuning.editor != null and tuning.editor.visible):
@@ -339,13 +373,27 @@ func traversal_status() -> String:
 		return "VAULT %s  clip %.2f/%.2f s  %.1f -> %.1f m/s  wall %.2f m x %.2f m  stretch %.2f  lean %.0f deg  hand error %.3f m" % [
 			"(landing)" if not vault.active() else "", vault.time, VaultClip.LENGTH, vault.entry_speed, plan.exit_speed,
 			plan.height, plan.depth, plan.stretch, rad_to_deg(plan.lean), authored_animation.hand_error]
-	var counts := "   vaults %d  aborted %d" % [vault.vaults, vault.aborts]
+	if traversal.mantle.presenting:
+		return "MANTLE %s  clip %.2f s  top %.2f m above  inset %.2f m%s" % ["(grab)" if traversal.mantle.plan.airborne else "", traversal.mantle.time,
+			traversal.mantle.plan.height, traversal.mantle.plan.inset, "  POWERED" if traversal.mantle.plan.get("powered", false) else ""]
+	var counts := "   vaults %d (late %d)  mantles %d  aborted %d" % [vault.vaults, vault.late_vaults, traversal.mantle.mantles, vault.aborts + traversal.mantle.aborts]
 	if vault.armed():
 		return "Vault ARMED  takeoff in %.2f m (%.2f s)  %.1f -> %.1f m/s  gait phase %.2f (entry %.2f)  steer x%.2f%s" % [
 			maxf(vault.face_distance - vault.takeoff, 0.0), authored_animation.takeoff_eta, vault.entry_speed, vault.travel_speed,
 			authored_animation.gait_phase(), vault_profile.entry_phase, authored_animation.phase_steer, counts]
 	var ahead: String = vault.reason if vault.reason != "" else "clear"
-	return "Vault ready   ahead: %s%s" % [ahead.replace("_", " "), counts]
+	if not vault.opportunity.is_empty():
+		ahead = "PRESS SPACE TO VAULT%s" % (" (late)" if vault.opportunity.late else "")
+	return "Vault   ahead: %s%s" % [ahead.replace("_", " "), counts]
+
+
+## Second readout line: who the character is and what the latest press did.
+func capability_status() -> String:
+	var last: String = traversal.last_choice if traversal.last_choice != "" else "-"
+	if traversal.last_refusal != "":
+		last += " (%s)" % traversal.last_refusal.replace("_", " ")
+	return "Character: %s   [%s]   %s   last press: %s   1 human  2 cyber legs  3 zephyr spell  4 sprain" % [
+		capabilities.summary(), ", ".join(capabilities.capabilities.keys()), traversal.resources.describe(), last]
 
 
 func _physics_process(dt: float) -> void:
@@ -383,8 +431,8 @@ func _process(delta: float) -> void:
 		authored_animation.follow(body, visual_offset, _teleported, delta)
 	if animation_enabled and not locomotion_params.is_on("legacy"):
 		authored_animation.update(delta, {"speed": authored_animation.measured_speed, "vy": v.y, "grounded": body.core.grounded,
-			"crouching": body.core.crouching and not vault.presenting, "accel_forward": fwd_accel, "heading": heading, "teleported": _teleported,
-			"vault": vault.presentation(Engine.get_physics_interpolation_fraction())})
+			"crouching": body.core.crouching and not vault.presenting and not traversal.mantle.presenting, "accel_forward": fwd_accel, "heading": heading, "teleported": _teleported,
+			"vault": traversal.presentation(Engine.get_physics_interpolation_fraction())})
 	elif animation_enabled:
 		visual.walk_animation.sync_parameters()
 		var pose: Dictionary = gait_model.update(delta * float(visual.walk_animation.params.get_value("playback_speed")), speed)
@@ -406,9 +454,9 @@ func _process(delta: float) -> void:
 		_vault_debug.redraw(Engine.get_physics_interpolation_fraction())
 	if _side_cam.current:
 		_update_side_view(0.0 if teleported else delta)
-	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s   [%s]\n%s\nWASD run   Mouse look   Space jump   Hold Shift to sprint (2x by default)   Ctrl/C crouch   R respawn   T/Shift+T landmarks (vault_a/b/c)   Run at a wall to vault\nEsc frees mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset   F6/F7/F8 window   F9 A/B   F10 traversal debug   V side view   F11 fullscreen" % [
+	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s   [%s]\n%s\n%s\nWASD run   Mouse look   Space jump   Hold Shift to sprint (2x by default)   Ctrl/C crouch   R respawn   T/Shift+T landmarks (vault_a/b/c, lane_d..g)   Space at a wall: vault / mantle\nEsc frees mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset   F6/F7/F8 window   F9 A/B   F10 traversal debug   V side view   F11 fullscreen" % [
 		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching and not vault.active() else "",
-		"LEGACY" if locomotion_params.is_on("legacy") else "AUTHORED " + authored_animation.model.state, traversal_status()]
+		"LEGACY" if locomotion_params.is_on("legacy") else "AUTHORED " + authored_animation.model.state, traversal_status(), capability_status()]
 	if _args.has("screenshot") and _frames == int(_args.get("screenshot-frame", 90)):
 		get_viewport().get_texture().get_image().save_png(String(_args.screenshot))
 		get_tree().quit()

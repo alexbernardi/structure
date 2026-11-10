@@ -5,6 +5,9 @@ const Model = preload("res://animation/locomotion_model.gd")
 const FootOrientation = preload("res://animation/foot_orientation.gd")
 const TwoBoneCorrection = preload("res://animation/two_bone_correction.gd")
 const VaultClip = preload("res://traversal/vault_clip.gd")
+const MantleClip = preload("res://traversal/mantle_clip.gd")
+const AIR_JUMP_CLIP := "DoubleJump"
+const AIR_JUMP_SHOWN := 0.45       ## s of the authored double jump shown before the air loop takes over
 const STATES := ["Idle", "Run", "Jump", "Fall", "Land", "Crouch"]
 const MAX_FOOT_CORRECTION := 0.10
 const LEG_REACH := 0.995           ## share of the leg's length a corrected foot may be from the hip (never locks the knee)
@@ -21,6 +24,8 @@ var vault_transitions: Array[AnimationNodeStateMachineTransition] = []
 var traversal_params
 var vault_profile
 var has_vault := false
+var has_mantle := false
+var has_air_jump := false
 var max_correction := 0.0
 var hand_error := 0.0           ## m between the support hand and its contact point after correction (telemetry)
 var phase_steer := 1.0
@@ -128,6 +133,24 @@ func _build_graph() -> void:
 				transition.xfade_time = 0.12
 				machine.add_transition(pair[0], pair[1], transition)
 				vault_transitions.append(transition)
+	# Movement Lab 5.0 moves: the mantle is seeked to the action's clip time, the air jump to the time since it.
+	has_mantle = visual.traversal_clips.has(MantleClip.CLIP)
+	has_air_jump = visual.traversal_clips.has(AIR_JUMP_CLIP)
+	for pair in [["Mantle", MantleClip.CLIP, has_mantle], ["AirJump", AIR_JUMP_CLIP, has_air_jump]]:
+		if not pair[2]:
+			continue
+		var node := AnimationNodeBlendTree.new()
+		node.add_node("Clip", _clip(pair[1]))
+		node.add_node("Seek", AnimationNodeTimeSeek.new())
+		node.connect_node("Seek", 0, "Clip")
+		node.connect_node("output", 0, "Seek")
+		machine.add_node(pair[0], node)
+		for other in STATES + (["Vault"] if has_vault else []) + (["Mantle"] if pair[0] == "AirJump" and has_mantle else []):
+			for link in [[other, pair[0]], [pair[0], other]]:
+				var transition := AnimationNodeStateMachineTransition.new()
+				transition.xfade_time = 0.12
+				machine.add_transition(link[0], link[1], transition)
+				vault_transitions.append(transition)
 	tree.name = "AuthoredAnimationTree"
 	visual.add_child(tree)
 	tree.anim_player = ^"../AnimationPlayer"
@@ -177,13 +200,22 @@ func update(dt: float, state: Dictionary) -> void:
 	var vaulting := has_vault and _vault_showing(vault, response)
 	if vaulting:
 		heading = vault.heading
+	var climb: Dictionary = vault.get("mantle", {})
+	var mantling: bool = has_mantle and not climb.is_empty() and climb.time < MantleClip.LENGTH - response * float(climb.rate)
+	if mantling:
+		heading = climb.heading
+	var air_jumping: bool = has_air_jump and not mantling and not vaulting and not state.grounded and float(vault.get("air_jump", INF)) < AIR_JUMP_SHOWN
 	if is_finite(heading):
 		var turn := 20.0 if vaulting else 12.0
 		_heading = heading if teleported else lerp_angle(_heading, heading, 1.0 - exp(-turn * dt))
 	visual.rotation.y = _heading + PI
 	model.steer = phase_steer
 	var was_running: bool = model.state == "Run"
-	model.update(dt, speed, state.grounded, state.vy, state.get("accel_forward", 0.0), teleported, state.get("crouching", false), vaulting)
+	model.update(dt, speed, state.grounded, state.vy, state.get("accel_forward", 0.0), teleported, state.get("crouching", false), vaulting or mantling)
+	if mantling:
+		model.state = "Mantle"
+	elif air_jumping:
+		model.state = "AirJump"
 	var starting_run: bool = model.state == "Run" and not was_running
 	if starting_run and not _was_vaulting:
 		run_phase = 0.0
@@ -203,6 +235,10 @@ func update(dt: float, state: Dictionary) -> void:
 	tree.set("parameters/Crouch/blend_position", speed)
 	if has_vault and vault.get("vault", false):
 		tree.set("parameters/Vault/Seek/seek_request", clampf(vault.time, 0.0, VaultClip.LENGTH - 0.0005))
+	if mantling:
+		tree.set("parameters/Mantle/Seek/seek_request", clampf(float(climb.time), 0.0, MantleClip.LENGTH - 0.0005))
+	if air_jumping:
+		tree.set("parameters/AirJump/Seek/seek_request", clampf(float(vault.air_jump), 0.0, AIR_JUMP_SHOWN))
 	_advance_run_phase(vault, vaulting, starting_run, dt)
 	_was_vaulting = vaulting
 	if String(playback.get_current_node()) != model.state:
@@ -214,7 +250,7 @@ func update(dt: float, state: Dictionary) -> void:
 	var chest: int = visual.bone_index.Chest
 	visual.skeleton.set_bone_pose_rotation(chest, Quaternion(Vector3.RIGHT, model.lean) * visual.skeleton.get_bone_pose_rotation(chest))
 	_support(vault)
-	_correct_feet(state.grounded and not vaulting, dt)
+	_correct_feet(state.grounded and not vaulting and not mantling, dt)
 
 
 ## The vault shows until the crossfade back to running would finish with the clip, so the run picks up mid-landing
