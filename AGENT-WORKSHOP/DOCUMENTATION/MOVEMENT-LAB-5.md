@@ -131,14 +131,45 @@ profile-specific.
 
 ## Validation
 
-See the task note for the final numbers: focused traversal suites, capability unit tests, full utility regression,
-benchmark and native captures.
+Run headless from `utility/movement/flat-plane` with the harness (commands as in [4.0](MOVEMENT-LAB-4.md#reproduce-diagnostics),
+filters `test_traversal`, `test_movement_capabilities`, `test_authored_playground`, `test_`).
+
+- `tests/test_traversal_vault.gd` (16, all 4.0 assertions kept): the scripted runner now presses Space on the first
+  tick a vault is offered. Lane A at 3/6/12 m/s still vaults all four walls on the authored entry foot, refuses
+  1.60 m, zero aborts, zero collider overlap ticks, hand error under 10 mm; lanes B/C, depth, blocked ceiling,
+  interruption, animation-independent physics, live frames and cameras all pass unchanged.
+- `tests/test_traversal_intent.gd` (12): no press never vaults or mantles; a far press jumps with the normal impulse;
+  early press arms; late press vaults with a shorter stride at the same ground speed; a too-close press at a thin
+  wall jumps with no snap (largest tick step under 0.1 m), no overlap and no camera rotation; an infeasible wall
+  jumps; a press during a vault's descent chains the 3.6 m pair; a press in the air vaults on landing; the 2.5 m
+  deep block is mantled and the 1.9 m ledge is jump-and-grabbed; the 3.0 m ledge is out of a human's reach but
+  reached with the cybernetic legs or the spell; the cybernetic vault of the 1.6 m wall costs energy and heat and is
+  refused when overheated; the spell's air jump costs mana and a human gets none; the sprain revokes vaulting and
+  caps speed; the cybernetic vault lands into a 2 m drop a human refuses; the barred wall is refused as `blocked`.
+  Every trial overlap-tests the actual collider each tick (2 mm inset); ticks while a move is active: zero.
+- `tests/test_movement_capabilities.gd` (6): definitions; bit-identical baselines with no modifiers; op order is
+  insertion-independent; removal restores every value bit for bit and never writes the tuned parameters; timed
+  expiry on the exact tick; resource gating, regeneration and the heat lockout (5.5 s to cool).
+- Full utility regression: **518 passed, 0 failed** (about 191 s; 4.0 baseline in this worktree: 499/499).
+- Benchmark (`benchmarks/bench_traversal_vault.gd`, headless CPU, same machine as 4.0, other lab windows closed;
+  the lane A run now presses Space):
+
+  | Measure | 4.0 | 5.0 |
+  |---|---|---|
+  | Whole tick, lane A with 4 vaults | p50 0.221 / p95 0.283 ms | p50 0.243 / p95 0.303 ms |
+  | Physics + perception mean, open ground, traversal on / off | 0.059 / 0.049 ms | 0.075 / 0.061 ms |
+  | Fresh vault plan 6 / 12 m/s | 1.312 / 1.266 ms | 1.217 / 1.154 ms |
+
+- Native Vulkan captures (`tools/capture_traversal.gd`, side view, overlay on, the scene's own physics tick with a
+  scripted input source): vault, late vault, cybernetic 1.6 m vault (hand error 0.000 m) and mantle complete with
+  zero aborts; mantle and jump-and-grab frames show the hand and foot on the ledge top. Visual approval remains
+  the user's.
 
 ## Limitations
 
 - Mantle has no hand IK; contacts are aligned by the warp only. Visual approval is the user's.
 - Ledge grabs use the same running-climb clip (no hanging pose or shimmy).
-- Landing from a high fall (about 2 m) can leave the collider a few centimetres in the ground for one tick; this
-  is the unchanged movement core and character body, not a traversal move. Traversal tests count it separately.
+- Landing from a high fall (about 2 m) left the collider up to 4.7 cm in the ground for one tick, after the move had
+  ended (KI-025; assumed to be the unchanged core landing, not yet isolated). Traversal tests count it separately.
 - Only static box-like geometry is sensed; moving platforms and irregular tops are refused.
 - The vault A/B's B side uses a scripted ideal press, not a human performance.
