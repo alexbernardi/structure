@@ -29,6 +29,9 @@ var radii := PackedFloat32Array()
 var arm_length := 0.0
 var entry_phase := 0.0                         ## jog phase (0..1) whose pose matches the vault's first frame
 var exit_phase := 0.0                          ## jog phase matching the vault's last frame
+var mirror_entry_phase := 0.5                  ## the same for the mirrored (left-hand) vault, when installed
+var mirror_exit_phase := 0.5
+var has_mirror := false
 var valid := false
 var _lowest := PackedFloat32Array()            ## per sample: lowest clearance surface (see _summarise)
 var _extent := PackedVector4Array()            ## per sample: z min, z max, x min, x max of the surface centres
@@ -71,6 +74,12 @@ func build(mannequin) -> void:
 	var jog := player.get_animation("Jog_Fwd")
 	entry_phase = match_phase(jog, skeleton, index, ClipPose.sample(clip, skeleton, 0.0, map))
 	exit_phase = match_phase(jog, skeleton, index, ClipPose.sample(clip, skeleton, Clip.LENGTH, map))
+	if player.has_animation("SafetyVault_Mirror"):
+		var mirrored := player.get_animation("SafetyVault_Mirror")
+		var mirror_map := ClipPose.tracks(mirrored)
+		mirror_entry_phase = match_phase(jog, skeleton, index, ClipPose.sample(mirrored, skeleton, 0.0, mirror_map))
+		mirror_exit_phase = match_phase(jog, skeleton, index, ClipPose.sample(mirrored, skeleton, Clip.LENGTH, mirror_map))
+		has_mirror = true
 	_summarise()
 	valid = true
 

@@ -8,6 +8,9 @@ const VaultClip = preload("res://traversal/vault_clip.gd")
 const MantleClip = preload("res://traversal/mantle_clip.gd")
 const AIR_JUMP_CLIP := "DoubleJump"
 const AIR_JUMP_SHOWN := 0.45       ## s of the authored double jump shown before the air loop takes over
+const MIRROR_VAULT := "SafetyVault_Mirror"
+const SPEED_PITCH := 0.14          ## rad of extra forward torso pitch on a vault at 9 m/s and above (none at 4 m/s)
+const TURN_RATE := 20.0            ## 1/s heading response while vaulting
 const STATES := ["Idle", "Run", "Jump", "Fall", "Land", "Crouch"]
 const MAX_FOOT_CORRECTION := 0.10
 const LEG_REACH := 0.995           ## share of the leg's length a corrected foot may be from the hip (never locks the knee)
@@ -33,7 +36,13 @@ var takeoff_eta := INF          ## s until the vault takeoff the steering is aim
 var run_phase := 0.0            ## shared phase (0..1) of the jog and sprint loops; the graph is seeked to it every frame
 var _correction := TwoBoneCorrection.new()
 var _feet: Array = []        ## TwoBoneCorrection.Chain per side (Left, Right)
-var _arm                     ## TwoBoneCorrection.Chain of the vault support hand
+var _arm                     ## TwoBoneCorrection.Chain of the current vault's support hand (right or left)
+var _arm_right
+var _arm_left
+var has_vault_mirror := false
+var vault_mirrored := false     ## the vault showing now is the mirrored (left-hand, right-foot) variant
+var vault_variants := {"right": 0, "left": 0}   ## variants shown (telemetry, tests)
+var vault_pitch := 0.0          ## the speed-linked torso pitch applied this frame (telemetry)
 var _hand_world := Vector3.ZERO
 var _was_vaulting := false
 var _spine_base := Quaternion.IDENTITY   ## Spine pose before this frame's support lean (no clip animates the Spine)
@@ -62,7 +71,7 @@ func _capture_final_feet() -> void:
 		final_feet[side] = visual.skeleton.get_bone_global_pose(visual.bone_index[side + "Foot"])
 	hand_error = 0.0
 	if _arm.active:
-		var wrist: Vector3 = visual.skeleton.get_bone_global_pose(visual.bone_index.RightHand).origin
+		var wrist: Vector3 = visual.skeleton.get_bone_global_pose(visual.bone_index.LeftHand if vault_mirrored else visual.bone_index.RightHand).origin
 		hand_error = (visual.skeleton.global_transform * wrist).distance_to(_hand_world)
 
 
@@ -133,6 +142,21 @@ func _build_graph() -> void:
 				transition.xfade_time = 0.12
 				machine.add_transition(pair[0], pair[1], transition)
 				vault_transitions.append(transition)
+		# Movement Lab 5.1: the exact mirror of the authored vault (left-hand support, right-foot entry).
+		has_vault_mirror = visual.traversal_clips.has(MIRROR_VAULT)
+		if has_vault_mirror:
+			var mirror := AnimationNodeBlendTree.new()
+			mirror.add_node("Clip", _clip(MIRROR_VAULT))
+			mirror.add_node("Seek", AnimationNodeTimeSeek.new())
+			mirror.connect_node("Seek", 0, "Clip")
+			mirror.connect_node("output", 0, "Seek")
+			machine.add_node("VaultMirror", mirror)
+			for other in STATES + ["Vault"]:
+				for pair in [[other, "VaultMirror"], ["VaultMirror", other]]:
+					var transition := AnimationNodeStateMachineTransition.new()
+					transition.xfade_time = 0.12
+					machine.add_transition(pair[0], pair[1], transition)
+					vault_transitions.append(transition)
 	# Movement Lab 5.0 moves: the mantle is seeked to the action's clip time, the air jump to the time since it.
 	has_mantle = visual.traversal_clips.has(MantleClip.CLIP)
 	has_air_jump = visual.traversal_clips.has(AIR_JUMP_CLIP)
@@ -145,7 +169,7 @@ func _build_graph() -> void:
 		node.connect_node("Seek", 0, "Clip")
 		node.connect_node("output", 0, "Seek")
 		machine.add_node(pair[0], node)
-		for other in STATES + (["Vault"] if has_vault else []) + (["Mantle"] if pair[0] == "AirJump" and has_mantle else []):
+		for other in STATES + (["Vault"] if has_vault else []) + (["VaultMirror"] if has_vault_mirror else []) + (["Mantle"] if pair[0] == "AirJump" and has_mantle else []):
 			for link in [[other, pair[0]], [pair[0], other]]:
 				var transition := AnimationNodeStateMachineTransition.new()
 				transition.xfade_time = 0.12
@@ -171,7 +195,9 @@ func _build_ik() -> void:
 	for side in ["Left", "Right"]:
 		_feet.append(_correction.add_chain(skeleton, bones[side + "UpperLeg"], bones[side + "LowerLeg"], bones[side + "Foot"]))
 	# Support hand of the vault: planted on the obstacle top while the clip says the hand bears weight.
-	_arm = _correction.add_chain(skeleton, bones.RightUpperArm, bones.RightLowerArm, bones.RightHand)
+	_arm_right = _correction.add_chain(skeleton, bones.RightUpperArm, bones.RightLowerArm, bones.RightHand)
+	_arm_left = _correction.add_chain(skeleton, bones.LeftUpperArm, bones.LeftLowerArm, bones.LeftHand)
+	_arm = _arm_right
 	skeleton.add_child(_orientation)
 
 
@@ -198,8 +224,16 @@ func update(dt: float, state: Dictionary) -> void:
 	var vault: Dictionary = state.get("vault", {})
 	var response: float = traversal_params.get_value("transition_response") if traversal_params != null else 0.12
 	var vaulting := has_vault and _vault_showing(vault, response)
+	if vaulting and not _was_vaulting:
+		_start_vault_variant(vault)
+	var shape := 0.0                 # 0..1: the body is over the obstacle (hand planted until the legs come through)
 	if vaulting:
-		heading = vault.heading
+		var t: float = vault.time
+		shape = smoothstep(VaultClip.TAKEOFF, VaultClip.HAND_PLANT, t) * (1.0 - smoothstep(0.45, VaultClip.LANDING, t))
+		# An angled face turns the body toward its normal as the hand releases and the legs swing through (not while the
+		# hand bears weight, which would pull the shoulder off the planted hand); travel stays on the planned line.
+		var swing := smoothstep(VaultClip.HAND_PLANT, VaultClip.HAND_RELEASE + 0.05, t) * (1.0 - smoothstep(0.5, VaultClip.LANDING, t))
+		heading = vault.heading + float(vault.get("turn", 0.0)) * swing
 	var climb: Dictionary = vault.get("mantle", {})
 	var mantling: bool = has_mantle and not climb.is_empty() and climb.time < MantleClip.LENGTH - response * float(climb.rate)
 	if mantling:
@@ -216,6 +250,8 @@ func update(dt: float, state: Dictionary) -> void:
 		model.state = "Mantle"
 	elif air_jumping:
 		model.state = "AirJump"
+	elif vaulting and vault_mirrored:
+		model.state = "VaultMirror"
 	var starting_run: bool = model.state == "Run" and not was_running
 	if starting_run and not _was_vaulting:
 		run_phase = 0.0
@@ -234,7 +270,8 @@ func update(dt: float, state: Dictionary) -> void:
 	tree.set("parameters/Run/StartStop/blend_amount", model.run_weight)
 	tree.set("parameters/Crouch/blend_position", speed)
 	if has_vault and vault.get("vault", false):
-		tree.set("parameters/Vault/Seek/seek_request", clampf(vault.time, 0.0, VaultClip.LENGTH - 0.0005))
+		var node := "VaultMirror" if vault_mirrored else "Vault"
+		tree.set("parameters/%s/Seek/seek_request" % node, clampf(vault.time, 0.0, VaultClip.LENGTH - 0.0005))
 	if mantling:
 		tree.set("parameters/Mantle/Seek/seek_request", clampf(float(climb.time), 0.0, MantleClip.LENGTH - 0.0005))
 	if air_jumping:
@@ -248,7 +285,9 @@ func update(dt: float, state: Dictionary) -> void:
 	tree.advance(dt)
 	_spine_base = visual.skeleton.get_bone_pose_rotation(spine)
 	var chest: int = visual.bone_index.Chest
-	visual.skeleton.set_bone_pose_rotation(chest, Quaternion(Vector3.RIGHT, model.lean) * visual.skeleton.get_bone_pose_rotation(chest))
+	# A fast vault is taken leaning into it, a slow one upright (speed-linked pitch while over the obstacle).
+	vault_pitch = clampf((float(vault.get("speed", 0.0)) - 4.0) / 5.0, 0.0, 1.0) * SPEED_PITCH * shape if vaulting else 0.0
+	visual.skeleton.set_bone_pose_rotation(chest, Quaternion(Vector3.RIGHT, model.lean + vault_pitch) * visual.skeleton.get_bone_pose_rotation(chest))
 	_support(vault)
 	_correct_feet(state.grounded and not vaulting and not mantling, dt)
 
@@ -280,7 +319,7 @@ func _advance_run_phase(vault: Dictionary, vaulting: bool, starting_run: bool, d
 		var remaining := 0.0
 		if vault.get("vault", false):
 			remaining = maxf(0.0, VaultClip.LENGTH - float(vault.time)) / float(vault.get("rate", 1.0))
-		run_phase = vault_profile.exit_phase - remaining * rate
+		run_phase = (vault_profile.mirror_exit_phase if vault_mirrored else vault_profile.exit_phase) - remaining * rate
 	elif not starting_run:
 		run_phase += dt * rate
 	run_phase = fposmod(run_phase, 1.0)
@@ -299,15 +338,15 @@ func _steer_phase(vault: Dictionary, dt: float) -> void:
 		takeoff_eta = natural.y
 		var advance := maxf(natural.x, 0.001)
 		var phase := gait_phase()
-		var aim: float = vault.entry_phase
-		var below := aim + floorf(phase + advance - aim)
 		var best_miss := INF
-		for goal in [below, below + 1.0]:
-			var steer := clampf((goal - phase) / advance, PHASE_STEER[0], PHASE_STEER[1])
-			var miss := absf(phase + advance * steer - goal)
-			if miss < best_miss - 0.002 or (miss <= best_miss + 0.002 and absf(log(steer)) < absf(log(target))):
-				best_miss = minf(best_miss, miss)
-				target = steer
+		for aim in _entry_aims(vault):
+			var below: float = aim + floorf(phase + advance - aim)
+			for goal in [below, below + 1.0]:
+				var steer := clampf((goal - phase) / advance, PHASE_STEER[0], PHASE_STEER[1])
+				var miss := absf(phase + advance * steer - goal)
+				if miss < best_miss - 0.002 or (miss <= best_miss + 0.002 and absf(log(steer)) < absf(log(target))):
+					best_miss = minf(best_miss, miss)
+					target = steer
 	phase_steer = lerpf(phase_steer, target, 1.0 - exp(-10.0 * dt))
 
 
@@ -355,27 +394,62 @@ func _natural_advance(approach: Dictionary) -> Vector2:
 	return Vector2(cycles, time)
 
 
+## Entry phases the approach may steer toward: the planned support side's, or both variants' when the face is square
+## (the stride then decides which foot - and so which hand - leads).
+func _entry_aims(vault: Dictionary) -> Array:
+	var side: int = int(vault.get("side", 0))
+	var authored: float = vault.get("entry_phase", vault_profile.entry_phase)
+	var mirrored: float = vault.get("mirror_entry_phase", vault_profile.mirror_entry_phase)
+	if not has_vault_mirror or side > 0:
+		return [authored]
+	if side < 0:
+		return [mirrored]
+	return [authored, mirrored]
+
+
+## Picks the variant at takeoff: an angled face fixed the support side in the plan; a square face takes the variant
+## whose entry foot is nearest the stride the runner is actually on (so consecutive vaults follow the gait instead of
+## resetting to one pose). Locked until the vault has finished showing.
+func _start_vault_variant(vault: Dictionary) -> void:
+	var side: int = int(vault.get("side", 0))
+	vault_mirrored = false
+	if has_vault_mirror and side < 0:
+		vault_mirrored = true
+	elif has_vault_mirror and side == 0:
+		var phase := gait_phase()
+		var to_authored := absf(wrapf(phase - vault_profile.entry_phase, -0.5, 0.5))
+		var to_mirrored := absf(wrapf(phase - vault_profile.mirror_entry_phase, -0.5, 0.5))
+		vault_mirrored = to_mirrored < to_authored
+	_arm_right.active = false
+	_arm_left.active = false
+	_orientation.orientations.erase(visual.bone_index.RightHand)
+	_orientation.orientations.erase(visual.bone_index.LeftHand)
+	_arm = _arm_left if vault_mirrored else _arm_right
+	vault_variants["left" if vault_mirrored else "right"] += 1
+
+
 ## Support hand and torso: the planned lean toward the support arm, and the hand pinned to its contact point while it
 ## bears weight (both scaled by contact correction). Applied to the authored pose before the correction modifiers.
 func _support(vault: Dictionary) -> void:
 	var skeleton: Skeleton3D = visual.skeleton
-	var hand_bone: int = visual.bone_index.RightHand
+	var side_name := "Left" if vault_mirrored else "Right"
+	var hand_bone: int = visual.bone_index[side_name + "Hand"]
 	var correction: float = traversal_params.get_value("contact_correction") if traversal_params != null else 1.0
 	var weight: float = float(vault.get("hand_weight", 0.0)) * correction
-	var lean: float = float(vault.get("lean", 0.0)) * correction
+	var lean: float = float(vault.get("lean", 0.0)) * correction * (-1.0 if vault_mirrored else 1.0)
 	if absf(lean) > 0.0001:
 		var spine: int = visual.bone_index.Spine
 		var parent_basis := skeleton.get_bone_global_pose(skeleton.get_bone_parent(spine)).basis
 		var leaned := Basis(Vector3.BACK, lean) * skeleton.get_bone_global_pose(spine).basis
 		skeleton.set_bone_pose_rotation(spine, (parent_basis.inverse() * leaned).get_rotation_quaternion())
 	_arm.active = weight > 0.001
-	_hand_world = vault.get("hand", Vector3.ZERO)
+	_hand_world = vault.get("hand_left" if vault_mirrored else "hand", Vector3.ZERO)
 	if not _arm.active:
 		_orientation.orientations.erase(hand_bone)
 		return
 	var hand := skeleton.get_bone_global_pose(hand_bone)
-	var elbow := skeleton.get_bone_global_pose(visual.bone_index.RightLowerArm).origin
-	var shoulder := skeleton.get_bone_global_pose(visual.bone_index.RightUpperArm).origin
+	var elbow := skeleton.get_bone_global_pose(visual.bone_index[side_name + "LowerArm"]).origin
+	var shoulder := skeleton.get_bone_global_pose(visual.bone_index[side_name + "UpperArm"]).origin
 	_arm.influence = minf(weight, 1.0)
 	_arm.target = skeleton.global_transform.affine_inverse() * _hand_world
 	_arm.pole = elbow + (elbow - (shoulder + hand.origin) * 0.5).normalized() * 0.5

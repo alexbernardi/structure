@@ -370,8 +370,8 @@ func traversal_status() -> String:
 		return "Traversal %s" % ("off" if vault_profile.valid else "unavailable (vault clip not installed)")
 	var plan: Dictionary = vault.plan
 	if vault.presenting:
-		return "VAULT %s  clip %.2f/%.2f s  %.1f -> %.1f m/s  wall %.2f m x %.2f m  stretch %.2f  lean %.0f deg  hand error %.3f m" % [
-			"(landing)" if not vault.active() else "", vault.time, VaultClip.LENGTH, vault.entry_speed, plan.exit_speed,
+		return "VAULT %s %s hand  clip %.2f/%.2f s  %.1f -> %.1f m/s  wall %.2f m x %.2f m  stretch %.2f  lean %.0f deg  hand error %.3f m" % [
+			"(landing)" if not vault.active() else "", "left" if authored_animation.vault_mirrored else "right", vault.time, VaultClip.LENGTH, vault.entry_speed, plan.exit_speed,
 			plan.height, plan.depth, plan.stretch, rad_to_deg(plan.lean), authored_animation.hand_error]
 	if traversal.mantle.presenting:
 		return "MANTLE %s  clip %.2f s  top %.2f m above  inset %.2f m%s" % ["(grab)" if traversal.mantle.plan.airborne else "", traversal.mantle.time,
@@ -454,7 +454,7 @@ func _process(delta: float) -> void:
 		_vault_debug.redraw(Engine.get_physics_interpolation_fraction())
 	if _side_cam.current:
 		_update_side_view(0.0 if teleported else delta)
-	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s   [%s]\n%s\n%s\nWASD run   Mouse look   Space jump   Hold Shift to sprint (2x by default)   Ctrl/C crouch   R respawn   T/Shift+T landmarks (vault_a/b/c, lane_d..g)   Space at a wall: vault / mantle\nEsc frees mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset   F6/F7/F8 window   F9 A/B   F10 traversal debug   V side view   F11 fullscreen" % [
+	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s   [%s]\n%s\n%s\nWASD run   Mouse look   Space jump   Hold Shift to sprint (2x by default)   Ctrl/C crouch   R respawn   T/Shift+T landmarks (vault_a/b/c, lane_d..g)   Space: vault in the window / climb; in the air: catch\nEsc frees mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset   F6/F7/F8 window   F9 A/B   F10 traversal debug   V side view   F11 fullscreen" % [
 		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching and not vault.active() else "",
 		"LEGACY" if locomotion_params.is_on("legacy") else "AUTHORED " + authored_animation.model.state, traversal_status(), capability_status()]
 	if _args.has("screenshot") and _frames == int(_args.get("screenshot-frame", 90)):

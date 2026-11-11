@@ -23,6 +23,8 @@ const ABORT_VERTICAL := 0.25
 const RECOVER_TIME := 0.12       ## s over which the landing speed returns to the planned exit speed
 const OFFSET_EASE := 14.0        ## 1/s decay of a presentation offset left over after an abort
 const BODY_RADIUS := 0.35        ## the character collider (character_body.gd RADIUS)
+const SIDE_SLOPE := 0.14         ## tan 8 degrees: a more angled face fixes the support hand to its near side
+const TURN_SHARE := 0.6          ## share of the angle between travel and the face normal the body turns while on the hand
 const PREVIEW_TIME := 2.5        ## s of look-ahead reported to the presentation for phase steering: enough running for a
                                  ## bounded cadence change to bring the gait to any phase by the takeoff
 
@@ -50,6 +52,8 @@ var capabilities               ## MovementCapabilities: the character's vault li
 var opportunity := {}          ## the vault a press would commit to now ({} = none); see evaluate()
 var region := {}               ## interaction region along the current approach (debug overlay): near, far, takeoff, feet, direction
 var late_vaults := 0
+var opportunity_side := 0      ## armed: the support side the armed plan chose (presentation steers toward its entry foot)
+var sides := {-1: 0, 0: 0, 1: 0}   ## vaults per planned support side (telemetry, tests)
 var _wish := Vector3.ZERO
 var _recover_left := 0.0
 var _rejected_key := ""
@@ -230,6 +234,7 @@ func evaluate(body, d: Vector3, speed: float) -> void:
 		reason = "too_close"
 		return
 	var measured := probe.measure(space, feet, d, hit, fitted.takeoff, Clip.travel(Clip.LANDING, fitted.stretch), lim.get("max_depth", Planner.MAX_DEPTH), lim.get("landing_drop", 0.6))
+	measured["travel"] = d
 	if not measured.ok:
 		reason = measured.reason
 		return
@@ -299,12 +304,14 @@ func commit(body, grant := {}) -> bool:
 		presenting = true
 		phase = Phase.ACTIVE
 		vaults += 1
+		sides[int(plan.get("side", 0))] += 1
 		late_vaults += 1
 		_set_offsets(o.feet)
 		_offset_prev = _offset
 		_follow_prev = _follow
 		return true
 	phase = Phase.ARMED
+	opportunity_side = int(o.plan.get("side", 0))
 	takeoff = o.timing.takeoff
 	travel_speed = o.timing.travel_speed
 	face_distance = o.hit.distance
@@ -317,6 +324,7 @@ func _trigger(body, space: PhysicsDirectSpaceState3D, feet: Vector3, d: Vector3,
 	var stretch: float = Planner.timing(entry_speed).stretch
 	var lim := limits()
 	var measured := probe.measure(space, feet, d, hit, takeoff, Clip.travel(Clip.LANDING, stretch), lim.get("max_depth", Planner.MAX_DEPTH), lim.get("landing_drop", 0.6))
+	measured["travel"] = d
 	if not measured.ok:
 		_disarm(measured.reason)
 		return
@@ -340,15 +348,41 @@ func _trigger(body, space: PhysicsDirectSpaceState3D, feet: Vector3, d: Vector3,
 	presenting = true
 	phase = Phase.ACTIVE
 	vaults += 1
+	sides[int(plan.get("side", 0))] += 1
 	_set_offsets(feet)
 	_offset_prev = _offset
 	_follow_prev = _follow
 
 
+## Plans the vault with a support side. An angled face (|slope| > SIDE_SLOPE) fixes the hand to the side where the face
+## comes first (+1 right hand, the authored clip; -1 left hand, its mirror); a square face leaves it to the stride
+## (0, chosen by the presentation at takeoff; the collider path is the same either way). A left-hand plan is the
+## authored plan for the mirrored obstacle: the planner and its clearance maths are unchanged. If the preferred hand
+## cannot reach, the other is tried.
 func _plan(measured: Dictionary, speed: float, timed := {}) -> Dictionary:
 	var started := Time.get_ticks_usec()
-	var result := planner.plan(profile, measured, speed, _attribute("momentum_conservation", params.get_value("momentum_continuity")), limits(), timed)
+	var slope: float = measured.get("slope", 0.0)
+	var mirrored_ok: bool = profile != null and profile.has_mirror
+	var preferred := 0 if absf(slope) < SIDE_SLOPE or not mirrored_ok else (1 if slope > 0.0 else -1)
+	var result := _plan_side(measured, speed, timed, preferred)
+	if not result.ok and preferred != 0 and result.reason in ["out_of_reach", "no_hand_contact"]:
+		var other := _plan_side(measured, speed, timed, -preferred)
+		if other.ok:
+			result = other
 	plan_usec = Time.get_ticks_usec() - started
+	return result
+
+
+func _plan_side(measured: Dictionary, speed: float, timed: Dictionary, side: int) -> Dictionary:
+	var obstacle := measured
+	if side < 0:
+		obstacle = measured.duplicate()
+		obstacle.slope = -float(measured.slope)
+		obstacle.angle = -float(measured.angle)
+	var result := planner.plan(profile, obstacle, speed, _attribute("momentum_conservation", params.get_value("momentum_continuity")), limits(), timed)
+	result["side"] = side
+	if measured.has("normal") and measured.has("travel"):
+		result["turn"] = clampf((measured.travel as Vector3).signed_angle_to(-(measured.normal as Vector3), Vector3.UP), -0.6, 0.6) * TURN_SHARE
 	return result
 
 
@@ -417,13 +451,26 @@ func presentation(fraction: float) -> Dictionary:
 		result["rate"] = plan.rate
 		result["heading"] = atan2(-direction.x, -direction.z)
 		result["hand_weight"] = Planner.hand_weight(plan, t)
-		result["hand"] = to_world(plan.hand_point)
+		# The plan's hand point is the authored right hand in the planned frame; its mirror is the left hand.
+		var point: Vector3 = plan.hand_point
+		result["hand"] = to_world(point)
+		result["hand_left"] = to_world(Vector3(-point.x, point.y, point.z))
 		result["lean"] = plan.lean * Planner.support_weight(plan, t)
+		result["side"] = plan.get("side", 0)
+		result["turn"] = plan.get("turn", 0.0)
+		result["speed"] = entry_speed
+		result["support"] = Planner.support_weight(plan, t)
+		result["entry_phase"] = profile.entry_phase
+		result["mirror_entry_phase"] = profile.mirror_entry_phase
 	elif phase == Phase.ARMED and entry_speed > 0.0:
 		var remaining := maxf(face_distance - takeoff, 0.0)
 		result["approach"] = {"distance": remaining, "speed": approach_speed, "travel_speed": travel_speed, "ease": remaining}
 		result["entry_phase"] = profile.entry_phase
+		result["mirror_entry_phase"] = profile.mirror_entry_phase
+		result["side"] = opportunity_side
 	elif not _preview.is_empty():
 		result["approach"] = _preview
 		result["entry_phase"] = profile.entry_phase
+		result["mirror_entry_phase"] = profile.mirror_entry_phase
+		result["side"] = 0
 	return result

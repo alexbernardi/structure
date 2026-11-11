@@ -5,6 +5,8 @@ const Source = preload("res://assets/quaternius/UAL1_Standard.glb")
 const TraversalSource = preload("res://assets/quaternius/UAL2_Traversal.glb")
 const ClimbSource = preload("res://assets/quaternius/UAL2_Climb.glb")
 const LegacyVisual = preload("res://character/character_visual.gd")
+const ClipMirror = preload("res://traversal/clip_mirror.gd")
+const MIRROR_VAULT := "SafetyVault_Mirror"   ## left-hand support, right-foot entry: the exact mirror of the authored vault
 const CLIPS := ["Idle", "Jog_Fwd", "Sprint", "Jump_Start", "Jump", "Jump_Land", "Crouch_Idle", "Crouch_Fwd"]
 const TRAVERSAL_CLIPS := ["SafetyVault"]
 const CLIMB_CLIPS := ["ClimbUp_1m", "DoubleJump"]   ## Movement Lab 5.0: authored mantle and air jump (same CC0 package)
@@ -65,6 +67,9 @@ func _ready() -> void:
 		library.add_animation(name, _retarget(original_player.get_animation(name)))
 	_add_traversal(library, original.get_bone_global_rest(hip).origin.y, traversal_source, TRAVERSAL_CLIPS)
 	_add_traversal(library, original.get_bone_global_rest(hip).origin.y, climb_source, CLIMB_CLIPS)
+	if traversal_clips.has("SafetyVault"):
+		library.add_animation(MIRROR_VAULT, ClipMirror.mirror_animation(library.get_animation("SafetyVault")))
+		traversal_clips.append(MIRROR_VAULT)
 	player.add_animation_library("", library)
 	source.free()
 	_build_meshes()

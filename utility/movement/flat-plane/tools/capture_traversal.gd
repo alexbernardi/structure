@@ -17,6 +17,7 @@ var holding := false
 var shots := 0
 var last_shot := -1.0
 var done_at := -1
+var shot_vault := -1
 
 
 func _initialize() -> void:
@@ -28,7 +29,8 @@ func _initialize() -> void:
 			out_dir = a.substr(6)
 	scene = Scene.instantiate()
 	scene.options = {"no-capture": "true", "no-hardware": "true", "no-window-state": "true", "tuning-state": "", "traversal-debug": "true", "no-tuning": "true",
-		"landmark": {"mantle": "lane_e", "grab": "lane_e_ledge", "vault": "vault_a", "late": "vault_a", "cyber": "vault_a"}.get(case_name, "lane_e")}
+		"landmark": {"mantle": "lane_e", "grab": "lane_e_ledge", "vault": "vault_a", "late": "vault_a", "cyber": "vault_a",
+			"rhythm": "lane_d", "angled": "lane_h_walls", "bar": "lane_f_bar", "catch": "lane_e_ledge"}.get(case_name, "lane_e")}
 	if case_name == "cyber":
 		scene.options["profile"] = "cyber"
 	root.add_child(scene)
@@ -64,8 +66,34 @@ func _next_input() -> Dictionary:
 			press = x > 39.0
 		"grab":
 			press = x > 57.6
-		"vault", "cyber":
-			press = not scene.vault.opportunity.is_empty()
+		"vault", "cyber", "rhythm", "angled":
+			press = not scene.vault.opportunity.is_empty() and scene.vault.phase == scene.vault.Phase.IDLE
+			if press:
+				input.jump_pressed = true
+				input.jump_held = true
+				pressed = true
+				return input
+		"bar":
+			# jump at the wall (missed window), then catch its top in the air
+			if not pressed and x > 38.9:
+				pressed = true
+				input.jump_pressed = true
+				return input
+			if pressed and not holding and not scene.body.core.grounded:
+				holding = true
+				input.jump_pressed = true
+				return input
+			return input
+		"catch":
+			if not pressed and x > 57.6:
+				pressed = true
+				input.jump_pressed = true
+				return input
+			if pressed and not holding and scene.body.velocity.y < -1.0:
+				holding = true
+				input.jump_pressed = true
+				return input
+			return input
 		"late":
 			press = not scene.vault.opportunity.is_empty() and scene.vault.opportunity.late
 	if press and not pressed:
@@ -82,6 +110,16 @@ func _frame() -> void:
 		t = scene.traversal.mantle.time
 	elif scene.vault.presenting:
 		t = scene.vault.time
+	if case_name in ["rhythm", "angled"]:
+		# One frame per vault, at the hand plant, to compare consecutive vaults side by side.
+		if scene.vault.presenting and scene.vault.time >= 0.2 and shot_vault != scene.vault.vaults and out_dir != "":
+			shot_vault = scene.vault.vaults
+			root.get_texture().get_image().save_png("%s/%s_vault%d_%s.png" % [out_dir, case_name, shots, "left" if scene.authored_animation.vault_mirrored else "right"])
+			shots += 1
+		if ticks > (900 if case_name == "rhythm" else 700):
+			print("CAPTURE %s: %d frames, vaults %d, variants %s, sides %s" % [case_name, shots, scene.vault.vaults, scene.authored_animation.vault_variants, scene.vault.sides])
+			quit(0)
+		return
 	if t >= 0.0 and t - last_shot >= 0.08 and shots < 10 and out_dir != "":
 		last_shot = t
 		var path := "%s/%s_%02d_t%.2f.png" % [out_dir, case_name, shots, t]

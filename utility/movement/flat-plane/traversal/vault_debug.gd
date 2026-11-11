@@ -9,11 +9,13 @@ extends MeshInstance3D
 const Planner = preload("res://traversal/vault_planner.gd")
 const Clip = preload("res://traversal/vault_clip.gd")
 const MantleClip = preload("res://traversal/mantle_clip.gd")
+const MantleAction = preload("res://traversal/mantle_action.gd")
 const PATH_SAMPLES := 24
 
 var action
 var body
 var traversal                    ## traversal_controller.gd: interaction region, mantle and candidates
+var _label := Label3D.new()      ## above the character: what Space does now, and what the last press did
 var _mesh := ImmediateMesh.new()
 
 
@@ -26,6 +28,13 @@ func _init() -> void:
 	material.no_depth_test = true
 	material_override = material
 	top_level = true
+	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_label.pixel_size = 0.004
+	_label.font_size = 40
+	_label.outline_size = 10
+	_label.no_depth_test = true
+	_label.top_level = true
+	add_child(_label)
 
 
 func setup(vault_action, character, controller = null) -> void:
@@ -36,6 +45,7 @@ func setup(vault_action, character, controller = null) -> void:
 
 func redraw(fraction: float) -> void:
 	_mesh.clear_surfaces()
+	_label.visible = visible
 	if action == null or body == null:
 		return
 	_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
@@ -71,7 +81,60 @@ func redraw(fraction: float) -> void:
 		var weight: float = Planner.hand_weight(plan, action.time)
 		_cross(hand, 0.07, Color(0.2, 1.0, 0.3).lerp(Color(0.1, 0.3, 0.1), 1.0 - weight))
 	_draw_traversal()
+	_draw_reach_and_contacts(feet)
 	_mesh.surface_end()
+	_label.global_position = feet + Vector3.UP * 2.35
+	_label.text = space_hint()
+
+
+## One line on what a press of Space would do now, and one on the latest press (and why the preferred move was refused).
+func space_hint() -> String:
+	if traversal == null:
+		return ""
+	var now := "Space: jump"
+	if traversal.busy() or action.armed():
+		now = "committed (%s)" % ("vault" if action.active() or action.armed() else "climb")
+	elif not action.opportunity.is_empty():
+		now = "Space: VAULT%s" % (" (late)" if action.opportunity.late else "")
+	elif not body.core.grounded:
+		var c: Dictionary = traversal.catch_preview
+		if c.get("ok", false):
+			now = "Space: CATCH -> %s" % ("climb over" if c.kind == "over" else "mantle")
+		elif c.has("reason"):
+			now = "no catch: %s" % String(c.reason).replace("_", " ")
+		else:
+			now = "airborne"
+	elif action.reason == "too_close":
+		now = "vault window missed: Space jumps"
+	var last: String = traversal.last_choice if traversal.last_choice != "" else "-"
+	if traversal.last_refusal != "":
+		last += "  (%s)" % traversal.last_refusal.replace("_", " ")
+	return "%s\nlast: %s" % [now, last]
+
+
+## Catch reach (airborne: the band in front of the body where a ledge top can be caught, blue when a catch is
+## available) and the body's current contact points (red).
+func _draw_reach_and_contacts(feet: Vector3) -> void:
+	if traversal == null:
+		return
+	var caps = traversal.capabilities
+	var v: Vector3 = body.velocity
+	var forward := Vector3(v.x, 0.0, v.z)
+	var wish: Vector3 = traversal.wish_direction()
+	if wish.length_squared() > 0.01:
+		forward = wish
+	if forward.length_squared() > 0.0001 and not body.core.grounded:
+		forward = forward.normalized()
+		var edge: Vector3 = feet + forward * (MantleAction.RADIUS + caps.get_value("catch_distance"))
+		var colour := Color(0.3, 0.6, 1.0) if traversal.catch_preview.get("ok", false) else Color(0.6, 0.6, 0.6)
+		var low: Vector3 = edge + Vector3.UP * MantleAction.AIR_MIN
+		var high: Vector3 = edge + Vector3.UP * caps.get_value("grip_reach")
+		_line(low, high, colour)
+		_line(low, low - forward * 0.15, colour)
+		_line(high, high - forward * 0.15, colour)
+	for i in body.get_slide_collision_count():
+		var contact: KinematicCollision3D = body.get_slide_collision(i)
+		_cross(contact.get_position(), 0.05, Color.RED)
 
 
 ## Movement Lab 5.0 additions:

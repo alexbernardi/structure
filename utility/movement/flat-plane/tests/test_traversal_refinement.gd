@@ -258,3 +258,72 @@ func test_irregular_tops_are_climbable(t) -> void:
 		return _input())
 	t.eq(stats.mantles, 3, "crates, sloped block and diagonal ledge are mantled (%s, %s)" % [stats.choices, stats.refusal])
 	t.eq(stats.overlap_ticks, 0, "no penetration while climbing")
+
+
+## One unpaced tick including the skeleton modifiers (hand IK), as the 4.0 lane trials do.
+func _full_tick(scene, input: Dictionary) -> void:
+	scene.simulate_tick(input, DT)
+	scene._process(DT)
+	scene.authored_visual.skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)
+
+
+## Runs a lane pressing Space on the first tick each vault is offered; returns one record per vault shown.
+func _vault_sequence(scene, landmark: String, ticks: int, sprint := false) -> Array:
+	await _place(scene, landmark)
+	var records := []
+	var animator = scene.authored_animation
+	var current := {}
+	for i in ticks:
+		if i % 240 == 0:
+			await _tree.physics_frame
+		var offered: bool = not scene.vault.opportunity.is_empty() and scene.vault.phase == scene.vault.Phase.IDLE
+		var phase_before: float = animator.gait_phase()
+		_full_tick(scene, _input(offered, false, sprint))
+		if scene.vault.presenting and current.is_empty():
+			var mirrored: bool = animator.vault_mirrored
+			var entry: float = scene.vault_profile.mirror_entry_phase if mirrored else scene.vault_profile.entry_phase
+			current = {"side": scene.vault.plan.get("side", 0), "mirrored": mirrored, "turn": scene.vault.plan.get("turn", 0.0),
+				"speed": scene.vault.entry_speed, "height": scene.vault.plan.height, "phase_error": absf(wrapf(phase_before - entry, -0.5, 0.5)),
+				"hand_error": 0.0, "pitch": 0.0, "x": scene.body.global_position.x}
+		if not current.is_empty():
+			current.pitch = maxf(current.pitch, animator.vault_pitch)
+			if animator._arm.active and animator._arm.influence > 0.99:
+				current.hand_error = maxf(current.hand_error, animator.hand_error)
+			if not scene.vault.presenting:
+				records.append(current)
+				current = {}
+	print("VARIANTS %s %s: %s" % [landmark, "sprint" if sprint else "run", JSON.stringify(records)])
+	return records
+
+
+## Vaults respond to each encounter: the support hand follows the face angle (left hand for a face that comes first on
+## the left, the exact mirror of the authored vault), the body turns toward the face normal, a sprint vault leans into
+## it, and on square faces the stride decides the lead foot, so consecutive vaults follow the gait.
+func test_vaults_respond_to_angle_speed_and_stride(t) -> void:
+	var scene = await _scene()
+	t.ok(scene.vault_profile.has_mirror and scene.authored_animation.has_vault_mirror, "the mirrored vault is installed")
+	t.ok(absf(wrapf(scene.vault_profile.mirror_entry_phase - scene.vault_profile.entry_phase - 0.5, -0.5, 0.5)) < 0.06,
+		"the mirror enters on the other foot (entry %.3f, mirror %.3f)" % [scene.vault_profile.entry_phase, scene.vault_profile.mirror_entry_phase])
+	var angled: Array = await _vault_sequence(scene, "lane_h_walls", 900)
+	t.ok(angled.size() >= 2, "the angled walls are vaulted (%d)" % angled.size())
+	if angled.size() >= 2:
+		t.eq(int(angled[0].side) * int(angled[1].side), -1, "+25 and -25 degree faces are taken on opposite hands")
+		t.ok(angled[0].mirrored != angled[1].mirrored, "and shown with opposite variants")
+		t.ok(signf(angled[0].turn) == -signf(angled[1].turn) and absf(angled[0].turn) > 0.1, "the body turns toward each face (%.2f, %.2f rad)" % [angled[0].turn, angled[1].turn])
+	for record in angled:
+		t.ok(record.hand_error < 0.01, "planted %s hand on its contact point (%.4f m)" % ["left" if record.mirrored else "right", record.hand_error])
+	for sprint in [false, true]:
+		var rhythm: Array = await _vault_sequence(scene, "lane_d", 900 if not sprint else 600, sprint)
+		t.ok(rhythm.size() >= 5, "lane D: the rhythm walls are vaulted (%d)" % rhythm.size())
+		var lefts := 0
+		for record in rhythm:
+			# 6 m spacing leaves a sprint little room to steer the cadence (4.0 measured 0.05 on 9 m spacing).
+			var bound := 0.12 if sprint else 0.06
+			t.ok(record.phase_error < bound, "%s: takeoff on the chosen variant's entry foot (error %.3f)" % ["sprint" if sprint else "run", record.phase_error])
+			t.ok(record.hand_error < 0.01, "planted hand on its contact point (%.4f m)" % record.hand_error)
+			lefts += 1 if record.mirrored else 0
+		t.ok(lefts > 0 and lefts < rhythm.size(), "%s: consecutive square walls are not all the same variant (%d of %d left-hand)" % ["sprint" if sprint else "run", lefts, rhythm.size()])
+		if sprint:
+			t.ok(rhythm[0].pitch > 0.05, "a sprint vault leans into the obstacle (%.3f rad)" % rhythm[0].pitch)
+		else:
+			t.ok(rhythm[0].pitch < 0.06, "a 6 m/s vault stays more upright (%.3f rad)" % rhythm[0].pitch)
