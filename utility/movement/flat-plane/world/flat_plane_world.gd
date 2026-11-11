@@ -215,7 +215,10 @@ func _vault_course() -> void:
 ##   E (z -31) climb    - 1.0 m block 2.5 m deep (too deep to vault: mantle onto it, run off), 1.4 m platform (mantle),
 ##                        1.9 m ledge (too high to mantle from the ground: jump and grab), 3.0 m ledge (beyond a
 ##                        human's grab: cybernetic jump or zephyr double jump), then 1.6 m wall (cybernetic vault)
-##   F (z -37) invalid  - 1.0 m wall under a low bar (blocked path), a 2 m deck ending in a 1.0 m wall over a 2 m
+##   F (z -37) invalid  - the test bar: a 1.0 m wall with a bar 1.2 m beyond it at 1.68-1.83 m. The bar blocks every
+##                        vault arc (refused: blocked). Human solution: jump at the wall, press again to catch its top and
+##                        climb over into the gap, then crouch under the bar or jump and catch the bar to climb over it.
+##                        A 2 m deck ending in a 1.0 m wall over a 2 m
 ##                        drop (lane_f_drop; human landing refused, cybernetic accepts), a 0.4 m-wide post (narrow), a 1.0 m wall at 30 degrees, and a
 ##                        1.3 m block under an overhang (no headroom to mantle)
 ##   G (z -43) heights  - 1.2 m platform with a 1.0 m vault wall on it, a 5 m gap (sprint to clear it, or air jump)
@@ -239,7 +242,7 @@ func _traversal_course() -> void:
 	_course_wall(Vector3(x0 + 30.0, 0.0, -31.0), 3.0, 3.0, 0.0, gate, "LaneELedge30", "3.0 m: upgrades only")
 	_course_wall(Vector3(x0 + 40.0, 0.0, -31.0), 1.6, 0.35, 0.0, gate, "LaneEWall160", "1.6 m: cybernetic vault")
 	# F: invalid and awkward
-	_course_wall(Vector3(x0, 0.0, -37.0), 1.0, 0.35, 0.0, wall, "LaneFBarred", "low bar")
+	_course_wall(Vector3(x0, 0.0, -37.0), 1.0, 0.35, 0.0, wall, "LaneFBarred", "test bar: catch + climb")
 	_box(Vector3(x0 + 1.2, 1.75, -37.0), Vector3(0.3, 0.15, 3.0), Vector3.ZERO, bad, "LaneFBar")
 	_box(Vector3(x0 + 6.0, 1.0, -37.0), Vector3(6.0, 2.0, 3.0), Vector3.ZERO, block, "LaneFDeck")
 	_course_wall(Vector3(x0 + 8.825, 2.0, -37.0), 1.0, 0.35, 0.0, wall, "LaneFDropWall", "2 m drop")
@@ -260,6 +263,33 @@ func _traversal_course() -> void:
 	landmarks["lane_e_gate"] = Vector3(x0 + 24.0, 0.0, -31.0)
 	landmarks["lane_g_top"] = Vector3(x0 + 1.0, 1.2, -43.0)
 	landmarks["lane_f_drop"] = Vector3(x0 + 3.3, 2.0, -37.0)
+	landmarks["lane_f_bar"] = Vector3(x0 - 4.0, 0.0, -37.0)
+	_irregular_lane(x0)
+
+
+## Movement Lab 5.1 lane H (z -49, landmark lane_h): irregular tops and the vault-variation sequence.
+##   seven 0.4 m crates 1.18-1.32 m across the lane (uneven top: mantle), a block whose top slopes up 10 degrees,
+##   a 1.3 m ledge turned 30 degrees (diagonal mantle), then vault walls turned +25 and -25 degrees, a 1.1 m and a
+##   0.7 m wall (one vault each: hand side, body turn, lift and lean follow the angle, height, speed and stride)
+func _irregular_lane(x0: float) -> void:
+	var block := _tint(Color(0.36, 0.55, 0.80))
+	var crate := _tint(Color(0.62, 0.50, 0.34))
+	var wall := _tint(Color(0.80, 0.42, 0.36))
+	var z := -49.0
+	var crates := [1.18, 1.26, 1.20, 1.32, 1.26, 1.20, 1.24]
+	for i in crates.size():
+		var h: float = crates[i]
+		_box(Vector3(x0 + 0.8, h / 2.0, z + (i - 3) * 0.4), Vector3(1.6, h, 0.4), Vector3.ZERO, crate, "LaneHCrate%d" % i)
+	_label(Vector3(x0 + 0.8, 1.8, z), "uneven crates")
+	_box(Vector3(x0 + 10.0, 0.5, z), Vector3(2.0, 1.2, 3.0), Vector3(0.0, 0.0, 10.0), block, "LaneHSlope")
+	_label(Vector3(x0 + 10.0, 1.8, z), "sloped top")
+	_course_wall(Vector3(x0 + 18.0, 0.0, z), 1.3, 2.0, 30.0, block, "LaneHDiagonal", "1.3 m at 30 deg")
+	_course_wall(Vector3(x0 + 27.0, 0.0, z), 1.0, 0.35, 25.0, wall, "LaneHWallP25", "+25 deg")
+	_course_wall(Vector3(x0 + 33.0, 0.0, z), 1.0, 0.35, -25.0, wall, "LaneHWallM25", "-25 deg")
+	_course_wall(Vector3(x0 + 39.0, 0.0, z), 1.1, 0.35, 0.0, wall, "LaneHWall110", "1.1 m")
+	_course_wall(Vector3(x0 + 45.0, 0.0, z), 0.7, 0.35, 0.0, wall, "LaneHWall70", "0.7 m")
+	landmarks["lane_h"] = Vector3(x0 - 7.0, 0.0, z)
+	landmarks["lane_h_walls"] = Vector3(x0 + 21.5, 0.0, z)
 
 
 func _label(position: Vector3, caption: String) -> void:

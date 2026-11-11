@@ -233,12 +233,16 @@ func test_deep_blocks_are_mantled_and_tall_ledges_need_a_jump_and_grab(t) -> voi
 	t.eq(stats.overlap_ticks, 0, "without penetrating the block")
 	t.ok(stats.max_step < 0.12, "no snap (%.3f m)" % stats.max_step)
 	t.ok(stats.max_y > 0.99, "standing on its top (%.2f m)" % stats.max_y)
-	# 1.9 m ledge: a grounded press jumps; holding Space grabs the ledge at the top of the jump.
+	# 1.9 m ledge: a grounded press jumps (too high to mantle); a second press in the air catches the ledge (5.1: held
+	# Space no longer grabs).
 	await _place(scene, "lane_e_ledge")
-	var hold := {"on": false}
+	var hold := {"on": false, "caught": false}
 	stats = await _run(scene, 360, func(s, _i):
 		if not hold.on and s.body.global_position.x > 57.6:
 			hold.on = true
+			return _input(true)
+		if hold.on and not hold.caught and not s.body.core.grounded and s.body.velocity.y < 1.0:
+			hold.caught = true
 			return _input(true)
 		return _input(false, false, hold.on))
 	t.eq(stats.mantles, 1, "the 1.9 m ledge is grabbed and climbed (%s)" % [stats.choices])

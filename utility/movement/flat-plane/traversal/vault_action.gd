@@ -259,10 +259,32 @@ func evaluate(body, d: Vector3, speed: float) -> void:
 	reason = "ok"
 
 
+## True when an obstacle ahead along `d`, within `within` metres, has vaultable geometry for this character (its
+## size, angle and landing pass the planner's screen), whatever the timing. The controller uses it to tell a missed
+## vault window (press too close: an ordinary jump) from an obstacle that is not a vault at all (mantle / climb).
+func vaultable_ahead(body, d: Vector3, within: float) -> bool:
+	if not enabled() or d == Vector3.ZERO:
+		return false
+	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
+	var feet: Vector3 = body.global_position
+	var hit := probe.face(space, feet, d, within)
+	if hit.is_empty():
+		return false
+	var timed := Planner.timing(Planner.MIN_TRAVEL)
+	var lim := limits()
+	var seen := probe.measure(space, feet, d, hit, minf(timed.takeoff, hit.distance), Clip.travel(Clip.LANDING, timed.stretch),
+		lim.get("max_depth", Planner.MAX_DEPTH), lim.get("landing_drop", 0.6))
+	return seen.ok and Planner.screen(seen, lim) == ""
+
+
 ## Commits to the current opportunity (the player pressed Space). Early: arms the eased approach. Late: takes off now.
-## False when there is nothing to commit to.
-func commit(body) -> bool:
+## `grant` must come from traversal_controller._authorize for this exact opportunity: no other path can start a vault.
+## False when there is nothing to commit to or the commit is not authorized.
+func commit(body, grant := {}) -> bool:
 	if opportunity.is_empty() or phase != Phase.IDLE or not enabled():
+		return false
+	if grant.get("move", "") != "vault" or grant.get("plan", null) != opportunity:
+		push_warning("Vault commit refused: not authorized by the traversal controller")
 		return false
 	var o := opportunity
 	opportunity = {}

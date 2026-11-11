@@ -1,18 +1,20 @@
-## Unified traversal (Movement Lab 5.0): the character body's one physical action. Every traversal move - jump,
-## vault, mantle, ledge grab, air jump - is a response to the same intent (Space) chosen from the sensed geometry, the
-## body's motion and the character's capabilities, by one fixed set of rules:
+## Unified traversal (Movement Lab 5.0, refined in 5.1): the character body's one physical action. Every traversal
+## move - jump, vault, mantle, climb-over, catch, air jump - answers the same intent (a NEW press of Space), chosen from
+## the sensed geometry, the body's motion and the character's capabilities by one fixed set of rules:
 ##
-##   grounded press  vault (inside its interaction region)  >  mantle (a climbable top in reach)  >  jump
-##   airborne press  ledge grab (a top within grip reach)    >  air jump (capability)              >  buffer
-##   holding Space while airborne into a ledge also grabs it (jump-and-grab)
+##   grounded press  vault (only inside its interaction region)
+##                   > missed window (a vaultable obstacle closer than the region): ordinary jump, never a climb
+##                   > mantle onto / climb over a top that is not a vault (too deep, too high, a platform)
+##                   > jump
+##   airborne press  catch a ledge within reach (then mantle onto it, or climb over a narrow top) > air jump
+##                   (capability) > wait up to CATCH_BUFFER for a ledge to come within reach / the landing buffer
 ##   presses while a move is committed are swallowed; in its second half they buffer and chain into the next move
-##   on landing (vault / mantle if one is offered, else a jump that keeps the landing momentum)
 ##
-## Nothing here moves the character without a press: approaching an obstacle never starts a move. Sensing (probes),
-## planning (vault_planner / mantle_action.evaluate) and execution (vault_action / mantle_action drive the collider
-## kinematically with collision response) stay separate; the animation only reads presentation().
-## Buffered presses mirror the movement core's jump buffer exactly, so the core's jump timing (and bunny hops) are
-## unchanged. Deterministic on the fixed tick; the input frame is the only per-tick input (multiplayer replay).
+## Authorization is central: every move start goes through _authorize(), which requires a press no older than
+## MAX_PRESS_AGE, the capability and the resources, and returns the grant that vault_action.commit() and
+## mantle_action.start() demand. Contact, held Space, and the body's own state can never start a move. Buffered
+## presses mirror the movement core's jump buffer exactly, so jump timing (and bunny hops) are unchanged.
+## Deterministic on the fixed tick; the input frame is the only per-tick input (multiplayer replay).
 extends RefCounted
 
 const VaultAction = preload("res://traversal/vault_action.gd")
@@ -21,24 +23,27 @@ const Capabilities = preload("res://capability/movement_capabilities.gd")
 const Resources = preload("res://capability/movement_resources.gd")
 
 const CHAIN_FROM := 0.5          ## share of a committed move after which a press buffers for the next move
-const GRAB_WISH := 0.5           ## wished direction . travel needed for a ledge grab
+const CATCH_WISH := 0.5          ## wished direction . travel needed for a catch
+const CATCH_BUFFER := 0.2        ## s an airborne press keeps looking for a ledge to come within reach
+const MAX_PRESS_AGE := 0.3       ## s: no press older than this authorizes anything, buffered or chained
 
 var params                       ## traversal_params (the traversal switch)
 var vault := VaultAction.new()
 var mantle := MantleAction.new()
 var capabilities = Capabilities.new()
 var resources = Resources.new()
-var intent_left := 0.0           ## s left on a buffered press (0 = none)
+var intent_left := 0.0           ## s left on a buffered press (0 = none), the movement core's jump-buffer arithmetic
 var chained := false             ## the buffered press was made during a committed move
-var last_choice := ""            ## what the latest press did: jump / vault / late_vault / mantle / grab / air_jump / buffered / swallowed
+var press_age := INF             ## s since the latest new press of Space
+var catch_left := 0.0            ## s left on an airborne press looking for a ledge
+var last_choice := ""            ## what the latest press did: jump / vault / late_vault / mantle / over / catch / catch_over / air_jump / buffered / swallowed
 var last_refusal := ""           ## why the preferred move was not taken on the latest press
+var catch_preview := {}          ## airborne: the catch a press would make now (diagnostics only; computed with the overlay on)
 var air_jumps_used := 0
 var air_jump_time := INF         ## s since the latest air jump (presentation)
 var choices := {}                ## choice -> count (telemetry, tests)
 var _wish := Vector3.ZERO
 var _air_jump_pending := false
-var _was_busy := false
-var _just_released := false
 
 
 func setup(traversal_params, vault_profile, movement_params, exclude: Array[RID] = []) -> void:
@@ -68,7 +73,6 @@ func filter_input(input: Dictionary, body = null, dt := 1.0 / 120.0) -> Dictiona
 	var move: Vector2 = input.get("move", Vector2.ZERO)
 	_wish = Basis(Vector3.UP, float(input.get("yaw", 0.0))) * Vector3(move.x, 0.0, -move.y)
 	var pressed: bool = input.get("jump_pressed", false)
-	var held: bool = input.get("jump_held", false)
 	input = vault.filter_input(input)   # swallows presses while a vault is armed or active
 	if body == null or not enabled():
 		return input
@@ -76,6 +80,7 @@ func filter_input(input: Dictionary, body = null, dt := 1.0 / 120.0) -> Dictiona
 		if pressed and _progress() >= CHAIN_FROM:
 			intent_left = maxf(body.core.p.jump_buffer_time, dt)
 			chained = true
+			press_age = 0.0
 			_record("buffered")
 		elif pressed:
 			_record("swallowed")
@@ -83,18 +88,22 @@ func filter_input(input: Dictionary, body = null, dt := 1.0 / 120.0) -> Dictiona
 	if pressed:
 		intent_left = maxf(body.core.p.jump_buffer_time, dt)
 		chained = false
-	var on_floor: bool = body.is_on_floor()
-	if intent_left > 0.0:
-		if on_floor:
+		press_age = 0.0
+		catch_left = CATCH_BUFFER
+	if body.is_on_floor():
+		catch_left = 0.0
+		if intent_left > 0.0 and press_age <= MAX_PRESS_AGE:
 			return _ground_press(body, input, pressed)
-		if pressed and body.core.coyote_left > 0.0:
-			intent_left = 0.0
-			_record("jump")
-			return input   # coyote jump: the core takes it this tick
-		return _air_press(body, input, pressed)
-	if held and not on_floor and _try_grab(body):
-		return _without_jump(input)
-	return input
+		intent_left = 0.0
+		return input
+	if pressed and body.core.coyote_left > 0.0:
+		intent_left = 0.0
+		catch_left = 0.0
+		_record("jump")
+		return input   # coyote jump: the core takes it this tick
+	if (pressed or catch_left > 0.0) and press_age <= MAX_PRESS_AGE:
+		_air_press(body, pressed)
+	return _without_jump(input)   # in the air the controller owns every press until the feet are down
 
 
 ## Fraction of the committed move done (vault: clip time to landing; mantle: clip time to release).
@@ -128,6 +137,21 @@ func _direction(body) -> Vector3:
 	return Vector3.ZERO
 
 
+## The one gate every move start passes. Returns the grant ({move, plan, cost}) the actions require, or {refusal}.
+func _authorize(move: String, candidate: Dictionary, powered := false) -> Dictionary:
+	if press_age > MAX_PRESS_AGE:
+		return {"refusal": move + ": no_recent_press"}
+	if not capabilities.can(move):
+		return {"refusal": move + ": not_capable"}
+	if powered and not capabilities.can("powered_traversal"):
+		return {"refusal": move + ": needs_upgrade"}
+	var cost := _cost(move, powered)
+	var why: String = resources.refusal(cost)
+	if why != "":
+		return {"refusal": move + ": " + why}
+	return {"move": move, "plan": candidate, "cost": cost}
+
+
 ## A press (fresh or buffered) with the feet on the ground.
 func _ground_press(body, input: Dictionary, pressed: bool) -> Dictionary:
 	last_refusal = ""
@@ -139,28 +163,45 @@ func _ground_press(body, input: Dictionary, pressed: bool) -> Dictionary:
 			vault.evaluate(body, flat.normalized(), flat.length())
 	if not vault.opportunity.is_empty():
 		var offer: Dictionary = vault.opportunity
-		var refusal := _refusal("vault", offer.get("powered", false), offer)
-		if refusal == "" and vault.commit(body):
-			_pay("vault", offer)
+		var grant := _authorize("vault", offer, offer.get("powered", false))
+		if grant.has("refusal"):
+			last_refusal = grant.refusal
+		elif vault.commit(body, grant):
+			resources.spend(grant.cost)
 			_finish_press("late_vault" if vault.active() else "vault")
 			return _without_jump(input)
-		last_refusal = refusal
-	elif vault.reason != "" and vault.reason != "ok" and vault.reason != "ahead":
-		last_refusal = "vault: " + vault.reason
 	var d := _direction(body)
-	if d != Vector3.ZERO and capabilities.can("mantle"):
+	# A vaultable obstacle closer than the interaction region: the window was missed. The consequence is predictable:
+	# the ordinary jump (a catch is then possible from the air) - never a climb straight from the ground.
+	var near: float = vault.region.get("near", VaultAction.Planner.latest_takeoff(VaultAction.Planner.MIN_TRAVEL)) + 0.05
+	if last_refusal == "" and vault.vaultable_ahead(body, d, near):
+		var slow: bool = Vector2(body.velocity.x, body.velocity.z).length() < VaultAction.Planner.MIN_ENTRY_SPEED
+		if vault.reason in ["blocked", "out_of_reach", "body_clip", "no_hand_contact"]:
+			last_refusal = "vault: " + vault.reason
+		else:
+			last_refusal = "vault: too slow (run at it)" if slow else "vault: missed window (too close)"
+		return _jump(input, pressed)
+	if d != Vector3.ZERO:
 		var climb: Dictionary = mantle.evaluate(body, d, false)
 		if climb.get("ok", false):
-			var refusal := _refusal("mantle", climb.powered, climb)
-			if refusal == "":
-				_start_mantle(body, climb)
-				_finish_press("mantle")
+			var grant := _authorize("mantle", climb, climb.powered)
+			if grant.has("refusal"):
+				last_refusal = grant.refusal
+			elif mantle.start(body, climb, grant):
+				resources.spend(grant.cost)
+				vault.cancel()
+				_finish_press("over" if climb.kind == "over" else "mantle")
 				return _without_jump(input)
-			last_refusal = refusal
 		elif not climb.is_empty() and last_refusal == "":
-			last_refusal = "mantle: " + String(climb.reason)
-	# Nothing to traverse: the ordinary jump (a buffered press is handed to the core now, exactly when its own buffer
-	# would have fired).
+			last_refusal = "climb: " + String(climb.reason)
+	if last_refusal == "" and vault.reason != "" and vault.reason not in ["ok", "ahead"]:
+		last_refusal = "vault: " + vault.reason
+	return _jump(input, pressed)
+
+
+## Nothing to traverse: the ordinary jump (a buffered press is handed to the core now, exactly when its own buffer
+## would have fired).
+func _jump(input: Dictionary, pressed: bool) -> Dictionary:
 	_finish_press("jump")
 	if pressed:
 		return input
@@ -169,48 +210,51 @@ func _ground_press(body, input: Dictionary, pressed: bool) -> Dictionary:
 	return input
 
 
-## A press while airborne (no coyote): grab a ledge, else air jump, else keep it buffered for the landing.
-func _air_press(body, input: Dictionary, pressed: bool) -> Dictionary:
-	if _try_grab(body):
-		_finish_press("grab")
-		return _without_jump(input)
+## A press while airborne (no coyote), or one still looking for a ledge: catch, else air jump, else keep looking.
+func _air_press(body, pressed: bool) -> void:
+	if pressed:
+		last_refusal = ""
+	if _try_catch(body):
+		return
 	if pressed and capabilities.can("air_jump") and air_jumps_used < int(capabilities.get_value("air_jumps")):
-		var cost := {"mana": capabilities.get_value("mana_cost_air_jump")}
-		var refusal: String = resources.refusal(cost)
-		if refusal == "":
-			resources.spend(cost)
+		var grant := _authorize("air_jump", {})
+		if grant.has("refusal"):
+			last_refusal = grant.refusal
+		else:
+			resources.spend(grant.cost)
 			air_jumps_used += 1
 			_air_jump_pending = true
 			air_jump_time = 0.0
+			catch_left = 0.0
 			_finish_press("air_jump")
-			return _without_jump(input)
-		last_refusal = "air_jump: " + refusal
+			return
 	if pressed:
 		_record("buffered")
-	return _without_jump(input)   # the controller owns the buffered press until the feet are down
 
 
-func _try_grab(body) -> bool:
-	if not capabilities.can("mantle"):
-		return false
+## Catch a ledge in reach and climb onto / over it. Only ever called for a recent press.
+func _try_catch(body) -> bool:
 	var d := _direction(body)
-	if d == Vector3.ZERO or _wish.length_squared() < 0.01 or _wish.normalized().dot(d) < GRAB_WISH:
+	if d == Vector3.ZERO or _wish.length_squared() < 0.01 or _wish.normalized().dot(d) < CATCH_WISH:
+		if last_refusal == "":
+			last_refusal = "catch: steer toward the ledge"
 		return false
 	var climb: Dictionary = mantle.evaluate(body, d, true)
 	if not climb.get("ok", false):
+		if not climb.is_empty():
+			last_refusal = "catch: " + String(climb.reason)
 		return false
-	if _refusal("mantle", climb.powered, climb) != "":
+	var grant := _authorize("mantle", climb, climb.powered)
+	if grant.has("refusal"):
+		last_refusal = grant.refusal
 		return false
-	_start_mantle(body, climb)
-	if last_choice != "grab":
-		_record("grab")
-	return true
-
-
-func _start_mantle(body, climb: Dictionary) -> void:
-	_pay("mantle", climb)
-	mantle.start(body, climb)
+	if not mantle.start(body, climb, grant):
+		return false
+	resources.spend(grant.cost)
 	vault.cancel()
+	catch_left = 0.0
+	_finish_press("catch_over" if climb.kind == "over" else "catch")
+	return true
 
 
 func _finish_press(choice: String) -> void:
@@ -220,26 +264,13 @@ func _finish_press(choice: String) -> void:
 
 
 func _cost(move: String, powered: bool) -> Dictionary:
+	if move == "air_jump":
+		return {"mana": capabilities.get_value("mana_cost_air_jump")}
 	var cost := {"stamina": capabilities.get_value("stamina_cost_" + move)}
 	if powered:
 		cost["energy"] = capabilities.get_value("energy_cost_assist")
 		cost["heat"] = capabilities.get_value("heat_per_assist")
 	return cost
-
-
-## "" when `move` may be done now; otherwise why not (capability, or a resource).
-func _refusal(move: String, powered: bool, candidate: Dictionary) -> String:
-	if not capabilities.can(move):
-		return move + ": not_capable"
-	if powered and not capabilities.can("powered_traversal"):
-		return move + ": needs_upgrade"
-	var why: String = resources.refusal(_cost(move, powered))
-	candidate["cost"] = _cost(move, powered)
-	return "" if why == "" else move + ": " + why
-
-
-func _pay(move: String, candidate: Dictionary) -> void:
-	resources.spend(candidate.get("cost", _cost(move, false)))
 
 
 func drive(body, dt: float) -> bool:
@@ -264,14 +295,22 @@ func observe(body, dt: float) -> void:
 	vault.observe(body, dt)
 	if grounded:
 		air_jumps_used = 0
+	catch_preview = {}
+	if not grounded and enabled() and params.is_on("debug_overlay"):
+		var d := _direction(body)
+		if d != Vector3.ZERO:
+			catch_preview = mantle.evaluate(body, d, true)
 	air_jump_time += dt
 	_tick(dt, grounded)
 
 
 ## Time passes on every tick, including ticks consumed by a move.
 func _tick(dt: float, grounded: bool) -> void:
+	press_age += dt
 	if intent_left > 0.0 and not (busy() or vault.armed()):
 		intent_left = maxf(0.0, intent_left - dt)
+	if catch_left > 0.0 and not busy():
+		catch_left = maxf(0.0, catch_left - dt)
 	capabilities.tick(dt)
 	resources.tick(dt, grounded)
 
@@ -286,6 +325,8 @@ func cancel() -> void:
 	vault.cancel()
 	mantle.cancel()
 	intent_left = 0.0
+	catch_left = 0.0
+	press_age = INF
 	chained = false
 	_air_jump_pending = false
 	air_jumps_used = 0
