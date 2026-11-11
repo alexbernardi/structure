@@ -222,11 +222,11 @@ def promote(name: str | None, source_branch: str | None, merge: bool, gates: lis
     stamp = buildinfo.utc_stamp()
     label = (name or source).replace("/", "-")
     integration = f"integrate/{label}-{stamp}"
-    where = paths.RUNTIME / "worktrees" / f"integrate-{label}-{stamp}"
-    where.parent.mkdir(parents=True, exist_ok=True)
+    # A short sibling folder: Godot's import caches nest deep paths, and Windows refuses paths over 260 characters.
+    where = paths.REPO.parent / f"{paths.REPO.name.split('-')[0]}-integrate-{stamp}"
     print(f"Promotion of {source} {source_sha[:10]} ({ahead} commits ahead of {base}, {behind} behind)")
     _git("worktree", "add", "-b", integration, str(where), base, check=True)
-    print(f"  integration branch {integration} from {base} {base_sha[:10]} in {where.relative_to(paths.REPO)}")
+    print(f"  integration branch {integration} from {base} {base_sha[:10]} in {where}")
     proc = _git("merge", "--no-ff", "--no-edit", "-m", f"integrate {source} into {base}", source, cwd=where)
     record = {"source": source, "source_sha": source_sha, "base": base, "base_sha": base_sha, "integration": integration,
               "worktree": str(where), "ahead": int(ahead), "behind": int(behind), "gates": gates, "at": buildinfo.utc_now()}
@@ -266,10 +266,26 @@ def promote(name: str | None, source_branch: str | None, merge: bool, gates: lis
         _git("merge", "--ff-only", merge_sha, cwd=main_tree, check=True)
         record["promoted"] = merge_sha
         print(f"  {base} fast-forwarded to the validated merge {merge_sha[:10]} (not pushed)")
+        record["cleaned_up"] = remove_integration(where, integration, base)
     else:
         print(f"  validated merge ready: `structure.py lab promote ... --merge`, or `git -C <{base} worktree> merge "
               f"--ff-only {merge_sha[:10]}`")
     return _save(record, label, stamp)
+
+
+def remove_integration(where: Path, integration: str, base: str) -> bool:
+    """After a promotion has landed: remove its worktree and its branch (only once the branch is part of `base`)."""
+    if _git("merge-base", "--is-ancestor", integration, base).returncode != 0:
+        print(f"  kept {integration}: it is not part of {base}")
+        return False
+    if _git("-c", "core.longpaths=true", "worktree", "remove", "--force", str(where)).returncode != 0 and where.exists():
+        long_path = "\\\\?\\" + str(where.resolve())   # Windows: delete beyond the 260-character limit
+        shutil.rmtree(long_path if sys.platform.startswith("win") else where, ignore_errors=True)
+        _git("worktree", "prune")
+    _git("branch", "-D", integration)
+    gone = not where.exists()
+    print(f"  removed the integration worktree and branch {integration}" if gone else f"  could not remove {where}; delete it by hand")
+    return gone
 
 
 def _require_identity() -> None:

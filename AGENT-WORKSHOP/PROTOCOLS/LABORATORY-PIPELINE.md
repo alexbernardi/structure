@@ -69,12 +69,14 @@ python TOOLS/cli/structure.py lab promote --branch <branch> --merge   # a branch
 
 1. Refuses if the laboratory has uncommitted changes, or if git has no author identity for the merge commit
    (`git config user.name` / `user.email`, or the `GIT_AUTHOR_*` / `GIT_COMMITTER_*` environment variables).
-2. Creates `integrate/<name>-<stamp>` from the current `main` in `.runtime/worktrees/` and merges the laboratory
-   there (`--no-ff`). Conflicts stop it there; `main` and the laboratory are untouched - sync the laboratory and retry.
+2. Creates `integrate/<name>-<stamp>` from the current `main` in a sibling worktree `<repo>-integrate-<stamp>` (short
+   paths: Godot caches nest deep and Windows refuses paths over 260 characters) and merges the laboratory there
+   (`--no-ff`). Conflicts stop it there; `main` and the laboratory are untouched - sync the laboratory and retry.
 3. Runs the gates inside the integration worktree: `setup`, then `test check tools import unit rooms utility labs`
    (`--gates` changes the list; add `multiplayer` when the change can affect the server).
 4. With `--merge`, and only if every gate passed, the `main` worktree is clean and `main` has not moved meanwhile:
-   `main` fast-forwards to the validated merge commit. Records go to `.runtime/promotions/`.
+   `main` fast-forwards to the validated merge commit, and the integration worktree and branch are removed. A failed
+   or unmerged promotion keeps them for inspection. Records go to `.runtime/promotions/`.
 5. If a package system changed: bump its `room.json` version and README table, `room install` it into its declared
    consumers (the sandbox) in the laboratory before promoting, then after the merge run `room release <room>` on
    `main` to tag `<room>/v<version>`. Other laboratories pick it up with `lab sync --update-systems`.
