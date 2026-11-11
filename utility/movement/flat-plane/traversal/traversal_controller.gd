@@ -9,6 +9,8 @@
 ##   airborne press  catch a ledge within reach (then mantle onto it, or climb over a narrow top) > air jump
 ##                   (capability) > wait up to CATCH_BUFFER for a ledge to come within reach / the landing buffer
 ##   presses while a move is committed are swallowed; in its second half they buffer and chain into the next move
+##   airborne contact with a high edge (no press needed): catch it and hang; one press then pulls up and over (5.2);
+##                   crouch, or pulling the stick away from the wall, lets go
 ##
 ## Authorization is central: every move start goes through _authorize(), which requires a press no older than
 ## MAX_PRESS_AGE, the capability and the resources, and returns the grant that vault_action.commit() and
@@ -44,6 +46,15 @@ var air_jump_time := INF         ## s since the latest air jump (presentation)
 var choices := {}                ## choice -> count (telemetry, tests)
 var _wish := Vector3.ZERO
 var _air_jump_pending := false
+var _crouch_prev := false
+var sliding := false             ## a crouch slide is under way (Movement Lab 5.2)
+var slide_time := 0.0            ## s since the slide started
+var slide_exit := -1.0           ## s since the slide ended standing up (presentation; -1 = none)
+var slides := 0
+var slide_velocity := Vector3.ZERO   ## the slide's own horizontal velocity (carried between ticks)
+var _slide_crouch := false
+var _slide_pending := false      ## crouch pressed in the air: slide on touching down at speed
+var _was_on_floor := false
 
 
 func setup(traversal_params, vault_profile, movement_params, exclude: Array[RID] = []) -> void:
@@ -61,7 +72,7 @@ func enabled() -> bool:
 
 
 func busy() -> bool:
-	return vault.active() or mantle.active()
+	return vault.active() or mantle.active() or mantle.hanging()
 
 
 func wish_direction() -> Vector3:
@@ -73,9 +84,20 @@ func filter_input(input: Dictionary, body = null, dt := 1.0 / 120.0) -> Dictiona
 	var move: Vector2 = input.get("move", Vector2.ZERO)
 	_wish = Basis(Vector3.UP, float(input.get("yaw", 0.0))) * Vector3(move.x, 0.0, -move.y)
 	var pressed: bool = input.get("jump_pressed", false)
+	var crouch: bool = input.get("crouch", false)
+	var crouch_edge := crouch and not _crouch_prev
+	_crouch_prev = crouch
 	input = vault.filter_input(input)   # swallows presses while a vault is armed or active
 	if body == null or not enabled():
 		return input
+	if mantle.hanging():
+		return _hang_input(body, input, pressed, crouch_edge)
+	_slide_crouch = crouch
+	# A slide starts on a crouch press at speed, or when crouch is held through a landing at speed.
+	var landed: bool = body.is_on_floor() and not _was_on_floor
+	_was_on_floor = body.is_on_floor()
+	if crouch and (crouch_edge or landed or _slide_pending) and not sliding and not busy():
+		_slide_pending = not _try_slide(body) and not body.is_on_floor()
 	if busy() or vault.armed():
 		if pressed and _progress() >= CHAIN_FROM:
 			intent_left = maxf(body.core.p.jump_buffer_time, dt)
@@ -103,7 +125,140 @@ func filter_input(input: Dictionary, body = null, dt := 1.0 / 120.0) -> Dictiona
 		return input   # coyote jump: the core takes it this tick
 	if (pressed or catch_left > 0.0) and press_age <= MAX_PRESS_AGE:
 		_air_press(body, pressed)
+	elif not mantle.active() and _touching_wall(body):
+		_try_hang(body)
 	return _without_jump(input)   # in the air the controller owns every press until the feet are down
+
+
+## Crouch at speed on the ground: a slide that runs on its own momentum (see adjust()). Any other crouch is the ordinary
+## crouch of the movement core.
+func _try_slide(body) -> bool:
+	var flat := Vector3(body.velocity.x, 0.0, body.velocity.z)
+	if not body.is_on_floor() or flat.length() < capabilities.get_value("slide_min_speed"):
+		return false
+	var grant := _authorize("slide", {}, false, false)
+	if grant.has("refusal"):
+		last_refusal = grant.refusal
+		return false
+	resources.spend(grant.cost)
+	var boost: float = capabilities.get_value("slide_boost")
+	slide_velocity = flat.normalized() * minf(flat.length() + boost, capabilities.get_value("slide_max_speed"))
+	sliding = true
+	slide_time = 0.0
+	slide_exit = -1.0
+	slides += 1
+	vault.cancel()
+	_record("slide")
+	return true
+
+
+## One tick of slide momentum, after the movement core (whose crouch walk it replaces while sliding): proportional and
+## constant slowing, gravity along the slope, and steering limited to slide_steer. Ends below slide_end_speed or when
+## crouch is released - standing only where there is headroom; under something low it keeps scooting.
+func _slide_tick(body, dt: float) -> void:
+	var core = body.core
+	if core.just_jumped:
+		_end_slide(body, false)          # a slide jump keeps the slide's speed (the core already carried it)
+		return
+	if not body.is_on_floor() and not core.grounded:
+		return                           # airborne off an edge: momentum is the core's until the feet are down
+	slide_time += dt
+	var v := slide_velocity
+	var speed := v.length()
+	var n: Vector3 = body.get_floor_normal() if body.is_on_floor() else Vector3.UP
+	var gravity := Vector3.DOWN * float(core.p.gravity)
+	var along := gravity - n * gravity.dot(n)
+	v += Vector3(along.x, 0.0, along.z) * capabilities.get_value("slide_slope_gain") * dt
+	speed = v.length()
+	if speed > 0.0001:
+		var slowed := maxf(0.0, speed - (capabilities.get_value("slide_friction") * speed + capabilities.get_value("slide_drag")) * dt)
+		v *= slowed / speed
+		speed = slowed
+	if _wish.length_squared() > 0.01 and speed > 0.1:
+		var heading := v / speed
+		var wanted := _wish.normalized()
+		var angle := heading.signed_angle_to(wanted, Vector3.UP)
+		if absf(angle) < 2.0:            # a stick pulled back brakes (friction), it does not spin the slide around
+			var limit: float = capabilities.get_value("slide_steer") * dt
+			v = heading.rotated(Vector3.UP, clampf(angle, -limit, limit)) * speed
+	speed = minf(v.length(), capabilities.get_value("slide_max_speed"))
+	v = v.normalized() * speed if speed > 0.0001 else Vector3.ZERO
+	var low_room: bool = not body.can_rise_to(body.params.get_value("crouch_height"))
+	if (speed < capabilities.get_value("slide_end_speed") or not _slide_crouch) and not low_room:
+		_end_slide(body, true)
+		return
+	if low_room and speed < 1.0:
+		v = (v.normalized() if speed > 0.01 else Vector3(core.velocity.x, 0.0, core.velocity.z).normalized()) * 1.0   # scoot out
+	slide_velocity = v
+	var full := Vector3(v.x, 0.0, v.z)
+	full -= n * full.dot(n)
+	if full.length() > 0.0001:
+		full = full.normalized() * v.length()
+	core.velocity = full + Vector3.UP * minf(core.velocity.y, 0.0)
+	body.height_override = capabilities.get_value("slide_height")
+
+
+func _end_slide(body, standing: bool) -> void:
+	sliding = false
+	body.height_override = 0.0
+	slide_exit = 0.0 if standing and not _slide_crouch else -1.0
+
+
+## While hanging: a new press pulls up and over (the whole climb, no further input); crouch or pulling the stick away
+## from the wall lets go. A press whose climb is not possible (no room on top, blocked) keeps the hang and says why.
+func _hang_input(body, input: Dictionary, pressed: bool, crouch_edge: bool) -> Dictionary:
+	var away := _wish.length_squared() > 0.01 and _wish.normalized().dot(mantle.plan.direction) < -0.5
+	if crouch_edge or away:
+		mantle.drop(body)
+		_record("let_go")
+	elif pressed:
+		press_age = 0.0
+		last_refusal = ""
+		var climb: Dictionary = mantle.evaluate(body, mantle.plan.direction, true, true)
+		if not climb.get("ok", false):
+			last_refusal = "climb: " + String(climb.get("reason", "no_ledge"))
+			_record("hang_refused")
+		else:
+			var grant := _authorize("mantle", climb, climb.powered)
+			if grant.has("refusal"):
+				last_refusal = grant.refusal
+				_record("hang_refused")
+			elif mantle.start(body, climb, grant):
+				resources.spend(grant.cost)
+				_finish_press("pullup_over" if climb.kind == "over" else "pullup")
+	return _without_jump(input)
+
+
+## The airborne body is pressed against a wall-like surface this tick (its last move slid along one).
+func _touching_wall(body) -> bool:
+	if not capabilities.can("mantle"):
+		return false
+	for i in body.get_slide_collision_count():
+		var n: Vector3 = body.get_slide_collision(i).get_normal()
+		if absf(n.y) < MantleAction.MAX_TILT:
+			return true
+	return false
+
+
+## Catch on contact: a reachable edge high enough to hang from, approached (wished) toward, held by the grip.
+func _try_hang(body) -> bool:
+	var d := _direction(body)
+	if d == Vector3.ZERO or _wish.length_squared() < 0.01:
+		return false
+	var climb: Dictionary = mantle.evaluate(body, d, true)
+	if not mantle.can_hang(body, climb) or _wish.normalized().dot(climb.direction) < MantleAction.MIN_TOWARD:
+		return false
+	var grant := _authorize("hang", climb, false, false)
+	if grant.has("refusal"):
+		last_refusal = grant.refusal
+		return false
+	if not mantle.begin_hang(body, climb, grant):
+		return false
+	vault.cancel()
+	catch_left = 0.0
+	intent_left = 0.0
+	_record("hang")
+	return true
 
 
 ## Fraction of the committed move done (vault: clip time to landing; mantle: clip time to release).
@@ -138,10 +293,10 @@ func _direction(body) -> Vector3:
 
 
 ## The one gate every move start passes. Returns the grant ({move, plan, cost}) the actions require, or {refusal}.
-func _authorize(move: String, candidate: Dictionary, powered := false) -> Dictionary:
-	if press_age > MAX_PRESS_AGE:
+func _authorize(move: String, candidate: Dictionary, powered := false, needs_press := true) -> Dictionary:
+	if needs_press and press_age > MAX_PRESS_AGE:
 		return {"refusal": move + ": no_recent_press"}
-	if not capabilities.can(move):
+	if not capabilities.can("mantle" if move == "hang" else move):
 		return {"refusal": move + ": not_capable"}
 	if powered and not capabilities.can("powered_traversal"):
 		return {"refusal": move + ": needs_upgrade"}
@@ -214,7 +369,7 @@ func _jump(input: Dictionary, pressed: bool) -> Dictionary:
 func _air_press(body, pressed: bool) -> void:
 	if pressed:
 		last_refusal = ""
-	if _try_catch(body):
+	if _try_catch(body, pressed):
 		return
 	if pressed and capabilities.can("air_jump") and air_jumps_used < int(capabilities.get_value("air_jumps")):
 		var grant := _authorize("air_jump", {})
@@ -233,7 +388,7 @@ func _air_press(body, pressed: bool) -> void:
 
 
 ## Catch a ledge in reach and climb onto / over it. Only ever called for a recent press.
-func _try_catch(body) -> bool:
+func _try_catch(body, pressed := true) -> bool:
 	var d := _direction(body)
 	if d == Vector3.ZERO or _wish.length_squared() < 0.01 or _wish.normalized().dot(d) < CATCH_WISH:
 		if last_refusal == "":
@@ -241,7 +396,7 @@ func _try_catch(body) -> bool:
 		return false
 	var climb: Dictionary = mantle.evaluate(body, d, true)
 	if not climb.get("ok", false):
-		if not climb.is_empty():
+		if not climb.is_empty() and (pressed or last_refusal == ""):   # a buffered retry keeps the press's own reason
 			last_refusal = "catch: " + String(climb.reason)
 		return false
 	var grant := _authorize("mantle", climb, climb.powered)
@@ -264,6 +419,10 @@ func _finish_press(choice: String) -> void:
 
 
 func _cost(move: String, powered: bool) -> Dictionary:
+	if move == "hang":
+		return {}
+	if move == "slide":
+		return {"stamina": capabilities.get_value("stamina_cost_slide")}
 	if move == "air_jump":
 		return {"mana": capabilities.get_value("mana_cost_air_jump")}
 	var cost := {"stamina": capabilities.get_value("stamina_cost_" + move)}
@@ -283,6 +442,8 @@ func drive(body, dt: float) -> bool:
 
 func adjust(body, dt: float) -> void:
 	vault.adjust(body, dt)
+	if sliding:
+		_slide_tick(body, dt)
 	if _air_jump_pending:
 		_air_jump_pending = false
 		body.core.velocity.y = maxf(body.core.velocity.y, capabilities.get_value("air_jump_impulse"))
@@ -307,6 +468,8 @@ func observe(body, dt: float) -> void:
 ## Time passes on every tick, including ticks consumed by a move.
 func _tick(dt: float, grounded: bool) -> void:
 	press_age += dt
+	if slide_exit >= 0.0:
+		slide_exit += dt
 	if intent_left > 0.0 and not (busy() or vault.armed()):
 		intent_left = maxf(0.0, intent_left - dt)
 	if catch_left > 0.0 and not busy():
@@ -330,6 +493,8 @@ func cancel() -> void:
 	chained = false
 	_air_jump_pending = false
 	air_jumps_used = 0
+	sliding = false
+	slide_exit = -1.0
 
 
 func offset(fraction: float) -> Vector3:
@@ -350,4 +515,6 @@ func presentation(fraction: float) -> Dictionary:
 		result["mantle"] = climb
 	if air_jump_time < 1.0:
 		result["air_jump"] = air_jump_time
+	if sliding or (slide_exit >= 0.0 and slide_exit < 0.5):
+		result["slide"] = {"time": slide_time, "speed": slide_velocity.length(), "exit": slide_exit}
 	return result

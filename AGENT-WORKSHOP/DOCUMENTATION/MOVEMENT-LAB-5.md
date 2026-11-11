@@ -4,6 +4,26 @@ Branch: `benchmark/opus-traversal`. Tasks: [0007](../TASKS/0007-unified-traversa
 [0008](../TASKS/0008-traversal-refinement.md) (5.1). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
 [3.0 authored locomotion](MOVEMENT-LAB-3.md); both are preserved.
 
+## 5.2: catch-and-hang, sharp angles, two-handed pull-up, crouch slide
+
+Task [0009](../TASKS/0009-hang-angles-slide.md). How to use each move:
+
+| Move | Input | Notes |
+|---|---|---|
+| Catch and hang | jump into a high edge (top at least 1.5 m above the feet, hanging feet clear of the ground); no press | both hands grip the lip (authored `ClimbUp_2m` grip frame, two-hand IK); Ctrl or stick back lets go |
+| Pull up | Space once while hanging | `ClimbUp_2m` pull-up and step over onto the top, or over a thin top and down the far side; refused climbs keep the hang and say why |
+| Early catch | Space in the air as the body reaches the edge | climbs at once (no hang), the press is never lost |
+| Fence / sharp angle | Space near it, or in the air near it | vault up to 35 degrees; beyond, climb over square to the face keeping the speed along it |
+| Slide | Ctrl while running at 4.5 m/s or more (or Ctrl held through a landing) | runs on momentum: drag, slope gravity, limited steering; 0.8 m collider; Space: slide jump; release Ctrl to stand where there is room |
+
+New attributes: `slide_min_speed`, `slide_boost`, `slide_friction`, `slide_drag`, `slide_steer`, `slide_slope_gain`,
+`slide_end_speed`, `slide_max_speed`, `slide_height`, `stamina_cost_slide`; capability `slide`. Pull strength and
+reach use `mantle_strength`, `grip_reach`, `catch_distance`, `grip_strength` (the cybernetic upgrade raises them).
+
+New lanes: `lane_i` (fences 30-75 degrees), `lane_j` (2.2 / 2.6 m walls, thin 2.4 m, covered 2.6 m, 3.0 m; also
+`lane_j_thin`, `lane_j_covered`), `lane_k` (slide: 1.0 m-clearance bars, 12 degree ramps; `lane_k_plateau`),
+`lane_l` (vault, mantle, pull-up, slide).
+
 ## 5.1 refinement: variation, authorization, airborne climbing
 
 The selection rules now read (they replace the 5.0 table further down; held Space no longer grabs):

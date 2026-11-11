@@ -327,3 +327,46 @@ func test_vaults_respond_to_angle_speed_and_stride(t) -> void:
 			t.ok(rhythm[0].pitch > 0.05, "a sprint vault leans into the obstacle (%.3f rad)" % rhythm[0].pitch)
 		else:
 			t.ok(rhythm[0].pitch < 0.06, "a 6 m/s vault stays more upright (%.3f rad)" % rhythm[0].pitch)
+
+
+## Movement Lab 5.2: a jump toward a ledge needs exactly one more press to get onto it, whenever that press comes
+## (before contact, at contact, or while hanging). Jump distances 0.8-2.4 m before the 1.9 m face, press at the apex.
+func test_one_press_after_a_jump_gets_onto_the_ledge(t) -> void:
+	var scene = await _scene()
+	for gap in [0.8, 1.4, 2.0, 2.4]:
+		await _place(scene, "lane_e_ledge")
+		var plan := {"step": 0, "presses": 0}
+		var stats: Dictionary = await _run(scene, 420, func(s, _i):
+			var x: float = s.body.global_position.x
+			if plan.step == 0 and x > 58.5 - gap:
+				plan.step = 1
+				plan.presses += 1
+				return _input(true)
+			if plan.step == 1 and not s.body.core.grounded and s.body.velocity.y < 0.5:
+				plan.step = 2
+				plan.presses += 1
+				return _input(true)
+			return _input())
+		t.ok(stats.max_y > 1.89, "jump %.1f m before the face + one press: on top (max y %.2f, %s, %s)" % [gap, stats.max_y, stats.choices, stats.refusal])
+		t.eq(plan.presses, 2, "exactly two presses in total (jump, climb)")
+
+
+## Standing jumps toward a high ledge (no run-up): one press after the jump still gets on top.
+func test_one_press_after_a_standing_jump(t) -> void:
+	var scene = await _scene()
+	for gap in [0.5, 1.0]:
+		await _place(scene, "lane_e_ledge", Vector3(58.5 - 0.35 - gap, 0.05, -31.0))
+		var plan := {"step": 0, "presses": 0}
+		var stats: Dictionary = await _run(scene, 420, func(s, i):
+			if plan.step == 0 and i == 30:
+				plan.step = 1
+				plan.presses += 1
+				return {"move": Vector2.ZERO, "yaw": RUN_YAW, "jump_pressed": true, "jump_held": true}
+			if plan.step == 0:
+				return {"move": Vector2.ZERO, "yaw": RUN_YAW}
+			if plan.step == 1 and not s.body.core.grounded and s.body.velocity.y < 0.5:
+				plan.step = 2
+				plan.presses += 1
+				return _input(true)
+			return _input())
+		t.ok(stats.max_y > 1.89, "standing jump %.1f m from the face + one press: on top (max y %.2f, %s, %s)" % [gap, stats.max_y, stats.choices, stats.refusal])

@@ -30,7 +30,8 @@ func _initialize() -> void:
 	scene = Scene.instantiate()
 	scene.options = {"no-capture": "true", "no-hardware": "true", "no-window-state": "true", "tuning-state": "", "traversal-debug": "true", "no-tuning": "true",
 		"landmark": {"mantle": "lane_e", "grab": "lane_e_ledge", "vault": "vault_a", "late": "vault_a", "cyber": "vault_a",
-			"rhythm": "lane_d", "angled": "lane_h_walls", "bar": "lane_f_bar", "catch": "lane_e_ledge"}.get(case_name, "lane_e")}
+			"rhythm": "lane_d", "angled": "lane_h_walls", "bar": "lane_f_bar", "catch": "lane_e_ledge",
+			"hang": "lane_j", "fence": "lane_i", "slide": "lane_k"}.get(case_name, "lane_e")}
 	if case_name == "cyber":
 		scene.options["profile"] = "cyber"
 	root.add_child(scene)
@@ -54,6 +55,10 @@ func _next_input() -> Dictionary:
 	if ticks == 2:
 		if case_name == "cyber":
 			scene.body.teleport(Vector3(11.0, 0.05, -25.0))
+		if case_name == "hang":
+			scene.body.teleport(Vector3(45.0, 0.05, -61.0))
+		if case_name == "fence":
+			scene.body.teleport(Vector3(52.0, 0.05, -55.0))
 		scene.toggle_side_view()
 		# A close outside view between the lanes (lanes are 6 m apart), like the 4.0 lane C view.
 		scene._side_offset = Vector3(0.0, 0.0, -3.4) if case_name in ["mantle", "grab"] else Vector3(0.0, 0.0, 4.0)
@@ -83,6 +88,28 @@ func _next_input() -> Dictionary:
 				holding = true
 				input.jump_pressed = true
 				return input
+			return input
+		"hang":
+			# jump at the 2.6 m wall, hang on contact for 0.5 s, then one press pulls up
+			if not pressed and x > 48.4:
+				pressed = true
+				input.jump_pressed = true
+				return input
+			if pressed and not holding and scene.traversal.mantle.hanging() and scene.traversal.mantle._hang_time > 0.5:
+				holding = true
+				input.jump_pressed = true
+			return input
+		"fence":
+			# the 60 degree fence (centre x 58): press near it
+			var gap: float = absf((scene.body.global_position - Vector3(58, 0, -55)).dot(Vector3(-1, 0, 0).rotated(Vector3.UP, deg_to_rad(60.0))))
+			if not pressed and gap < 0.9:
+				pressed = true
+				input.jump_pressed = true
+			return input
+		"slide":
+			input.sprint = true
+			input["crouch"] = x > 44.0
+			pressed = pressed or scene.traversal.sliding
 			return input
 		"catch":
 			if not pressed and x > 57.6:
@@ -120,6 +147,11 @@ func _frame() -> void:
 			print("CAPTURE %s: %d frames, vaults %d, variants %s, sides %s" % [case_name, shots, scene.vault.vaults, scene.authored_animation.vault_variants, scene.vault.sides])
 			quit(0)
 		return
+	if case_name in ["hang", "slide"] and t < 0.0:
+		if scene.traversal.mantle.hanging():
+			t = 0.2 + scene.traversal.mantle._hang_time * 0.1
+		elif scene.traversal.sliding:
+			t = scene.traversal.slide_time
 	if t >= 0.0 and t - last_shot >= 0.08 and shots < 10 and out_dir != "":
 		last_shot = t
 		var path := "%s/%s_%02d_t%.2f.png" % [out_dir, case_name, shots, t]

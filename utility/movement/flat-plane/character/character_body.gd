@@ -26,6 +26,7 @@ var step_offset := 0.0
 ## Optional physical traversal action (traversal/vault_action.gd): filters the input, may take over whole ticks, adjusts
 ## the core's velocity before the move and observes the world after it. Null = plain movement.
 var action = null   ## traversal/traversal_controller.gd in the lab scenes
+var height_override := 0.0   ## m: a traversal move's collider height (the slide); 0 = standing / crouching as usual
 
 const STEP_EASE_RATE := 14.0   ## 1/s; time constant ~70 ms
 const FLAT_TOLERANCE_DEG := 3.0
@@ -64,6 +65,8 @@ func _sync_slope_settings() -> void:
 
 func _apply_shape(crouched: bool) -> void:
 	var h: float = params.get_value("crouch_height") if crouched else params.get_value("stand_height")
+	if height_override > 0.0:
+		h = height_override
 	_shape.height = maxf(h, RADIUS * 2.0)
 	_collider.position.y = _shape.height / 2.0
 
@@ -166,6 +169,12 @@ func step_offset_at(fraction: float) -> float:
 	return lerpf(_step_offset_prev, step_offset, fraction)
 
 
+## True when the collider can grow from its current height to `height` without hitting anything above.
+func can_rise_to(height: float) -> bool:
+	var extra := height - _shape.height
+	return extra <= 0.0 or not test_move(global_transform, Vector3.UP * (extra + 0.02))
+
+
 func _can_stand() -> bool:
 	if not core.crouching:
 		return true
@@ -222,6 +231,7 @@ func respawn() -> void:
 func teleport(pos: Vector3, basis := Basis.IDENTITY) -> void:
 	step_offset = 0.0
 	_step_offset_prev = 0.0
+	height_override = 0.0
 	if action != null:
 		action.cancel()
 	global_transform = Transform3D(basis, pos)

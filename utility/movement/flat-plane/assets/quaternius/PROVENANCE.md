@@ -65,10 +65,10 @@ Every node, skin, mesh and material is kept. It verifies that the kept sampler b
 | `UAL2_RM.glb` (source, not committed) | 20,756,380 | `a295ddb1fe171ed225517e88aa1baeaa3939cd00c775b39c75745c3e6a57060d` | Root-motion source |
 | [UAL2_Traversal.glb](UAL2_Traversal.glb) | 720,416 | `2343c92472316f49455afebc46bc049539a4f7cdbbfdf6926947285f7d4b76d7` | Vault pose, retargeted like UAL1 |
 | [UAL2_Traversal_RM.glb](UAL2_Traversal_RM.glb) | 720,416 | `a2f8b3309e546181b0b3b7b633eed061686d9c3f6de2e91b12cf580c18edef47` | Root path and contact timing only; never moves a body directly |
-| [UAL2_Climb.glb](UAL2_Climb.glb) | 831,456 | `faaf743603048ab0b18e0e255d2d55692fcb3b160c0ec8ec6d0c2822634662f7` | `ClimbUp_1m` + `DoubleJump` in-place poses (5.0); `python tools/extract_glb_clips.py <UAL2.glb> assets/quaternius/UAL2_Climb.glb ClimbUp_1m DoubleJump` |
+| [UAL2_Climb.glb](UAL2_Climb.glb) | 1,377,804 | `aa60ec7e82f275c80adf97d963ce10f38ac436890a652475adb3d06158a69be8` | `ClimbUp_1m` + `DoubleJump` (5.0), `ClimbUp_2m` (two-handed pull-up) and `Slide_Start` / `Slide_Loop` / `Slide_Exit` (5.2) in-place poses; `python tools/extract_glb_clips.py <UAL2.glb> assets/quaternius/UAL2_Climb.glb ClimbUp_1m DoubleJump ClimbUp_2m Slide_Start Slide_Loop Slide_Exit`. Godot imports `Slide_Loop` as `Slide` (loop suffix) |
 
-The climb's root motion (linear 1.0 m up, 1.676 m forward, source units) was read from `UAL2_RM.glb` and is recorded
-as constants in `traversal/mantle_clip.gd`; no root-motion extract is committed for it.
+The climbs' root motion was read from `UAL2_RM.glb` and is recorded as constants: `traversal/mantle_clip.gd` (linear
+1.0 m up, 1.676 m forward) and `traversal/pullup_clip.gd` (ClimbUp_2m's 40 keys); no root-motion extract is committed.
 
 Both extracts use the same 65-bone character as UAL1, so the existing `BoneMap` import settings apply unchanged.
 Measured contact timing and root travel are documented in the

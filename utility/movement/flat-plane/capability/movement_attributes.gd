@@ -51,6 +51,26 @@ const DEFS: Array[Dictionary] = [
 	{"id": "stamina_cost_jump", "unit": "pt", "min": 0.0, "max": 100.0, "default": 4.0, "meaning": "Stamina per jump (a jump is never refused)"},
 	{"id": "stamina_cost_vault", "unit": "pt", "min": 0.0, "max": 100.0, "default": 8.0, "meaning": "Stamina per vault"},
 	{"id": "stamina_cost_mantle", "unit": "pt", "min": 0.0, "max": 100.0, "default": 15.0, "meaning": "Stamina per mantle"},
+	{"id": "stamina_cost_slide", "unit": "pt", "min": 0.0, "max": 100.0, "default": 3.0, "meaning": "Stamina per slide"},
+	# Crouch slide (Movement Lab 5.2): momentum, not a fixed distance
+	{"id": "slide_min_speed", "unit": "m/s", "min": 1.0, "max": 20.0, "default": 4.5,
+		"meaning": "Slowest horizontal speed at which crouch starts a slide (slower: an ordinary crouch)"},
+	{"id": "slide_boost", "unit": "m/s", "min": 0.0, "max": 10.0, "default": 1.0,
+		"meaning": "Speed added along the slide as the body drops into it (never above slide_max_speed)"},
+	{"id": "slide_friction", "unit": "1/s", "min": 0.0, "max": 5.0, "default": 0.15,
+		"meaning": "Proportional slowing while sliding (air and body drag: speed lost per second per m/s)"},
+	{"id": "slide_drag", "unit": "m/s^2", "min": 0.0, "max": 20.0, "default": 2.0,
+		"meaning": "Constant slowing while sliding (ground contact friction, about 0.1 g), on top of slide_friction"},
+	{"id": "slide_steer", "unit": "rad/s", "min": 0.0, "max": 10.0, "default": 1.4,
+		"meaning": "Fastest the slide direction turns toward the stick: steering, never an instant turn"},
+	{"id": "slide_slope_gain", "unit": "x", "min": 0.0, "max": 2.0, "default": 1.0,
+		"meaning": "Share of gravity along the slope that speeds a slide downhill and slows it uphill"},
+	{"id": "slide_end_speed", "unit": "m/s", "min": 0.5, "max": 10.0, "default": 2.2,
+		"meaning": "Below this the slide is over (the body crouches, or stands if it can)"},
+	{"id": "slide_max_speed", "unit": "m/s", "min": 2.0, "max": 40.0, "default": 15.0,
+		"meaning": "Fastest a slide can go, downhill included"},
+	{"id": "slide_height", "unit": "m", "min": 0.5, "max": 1.4, "default": 0.8,
+		"meaning": "Collider height while sliding: what a slide fits under"},
 	{"id": "energy_max", "unit": "pt", "min": 0.0, "max": 1000.0, "default": 0.0, "meaning": "Battery capacity (cybernetics)"},
 	{"id": "energy_regen", "unit": "pt/s", "min": 0.0, "max": 200.0, "default": 0.0, "meaning": "Battery recharge per second"},
 	{"id": "energy_cost_assist", "unit": "pt", "min": 0.0, "max": 200.0, "default": 0.0,
@@ -64,7 +84,7 @@ const DEFS: Array[Dictionary] = [
 ]
 
 ## The moves a baseline human has. Modifiers grant or revoke further capabilities (air_jump, powered_traversal ...).
-const BASE_CAPABILITIES := ["jump", "vault", "mantle"]
+const BASE_CAPABILITIES := ["jump", "vault", "mantle", "slide"]
 
 static var _index := {}
 

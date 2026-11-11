@@ -15,6 +15,7 @@
 extends RefCounted
 
 const Clip = preload("res://traversal/mantle_clip.gd")
+const Pullup = preload("res://traversal/pullup_clip.gd")
 
 const RADIUS := 0.35            ## character collider radius (character_body.gd)
 const SKIN := 0.03              ## m kept between the collider and the face / top while climbing
@@ -23,15 +24,19 @@ const GROUND_FACE_RAYS := [0.45, 1.25]  ## m above the feet: face probes from th
 const AIR_FACE_STEP := 0.25     ## m between face probes from the air (from AIR_FACE_LOW up to the grip reach)
 const AIR_FACE_LOW := 0.1
 const MAX_TILT := 0.25          ## |normal.y| of a climbable face
-const MIN_FACING := 0.64        ## cos 50 degrees: steepest approach that still climbs
-const TOP_INSET := 0.08
+const MIN_TOWARD := 0.2         ## wished direction . face direction (about 78 degrees): sharper approaches still climb
+const FAN := [0.0, -0.45, 0.45, -0.9, 0.9, -1.3, 1.3]   ## rad: probe directions around the intent (sharp approaches, fences)
+const PULLUP_MIN := 1.5         ## m of top above the feet from which a catch is a two-handed pull-up (ClimbUp_2m)
+const HANG_CONTACT := 0.2       ## m from the body's surface to the face for a ledge to be caught on contact
+const HANG_SETTLE := 0.15       ## s to settle from the contact position into the hang
+const TOP_INSET := 0.04          ## m past the face the top is probed (a fence is 0.08 m thick)
 const TOP_FLAT := 0.75          ## normal.y of a top that can be climbed onto (about 41 degrees: irregular rubble, slopes)
 const LATERAL := 0.25           ## m either side the top must also be there (no climbing onto a pole)
 const AGREE := 0.2              ## m the top may vary across the hands (irregular tops); the climb clears the highest
 const GROUND_MIN := 0.55        ## m: lower tops are stepped / jumped onto
 const AIR_MIN := 0.2            ## m below the top the feet must still be for a catch to be worth a climb
 const MAX_OVER_DEPTH := 0.9     ## m: the deepest top climbed over rather than onto
-const HANG_DROP := 1.5          ## m a climb-over may drop beyond landing_tolerance (the body hangs before it lets go)
+const HANG_DROP := 1.9          ## m a climb-over may drop beyond landing_tolerance (the body hangs at arm's length first)
 const RISE_SHARE := 0.55        ## share of the physical climb spent rising (the rest goes over the top)
 const PATH_SAMPLES := 16
 const DROP_SAMPLES := 4
@@ -41,7 +46,7 @@ const OFFSET_EASE := 14.0
 const MIN_RATE := 0.6
 const MAX_RATE := 2.0
 
-enum Phase {IDLE, ACTIVE}
+enum Phase {IDLE, ACTIVE, HANG}
 
 var capabilities                ## MovementCapabilities (effective attributes)
 var exclude: Array[RID] = []
@@ -55,6 +60,10 @@ var mantles := 0
 var overs := 0                  ## climbs over a top too narrow to stand on
 var aborts := 0
 var last_seen := {}             ## latest evaluated ledge geometry, for the debug overlay
+var hangs := 0
+var _hang_from := Vector3.ZERO
+var _hang_to := Vector3.ZERO
+var _hang_time := 0.0
 var _time_prev := 0.0
 var _offset := Vector3.ZERO
 var _offset_prev := Vector3.ZERO
@@ -69,6 +78,10 @@ func _init() -> void:
 
 func active() -> bool:
 	return phase == Phase.ACTIVE
+
+
+func hanging() -> bool:
+	return phase == Phase.HANG
 
 
 func _cast(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> Dictionary:
@@ -90,7 +103,7 @@ func reach(airborne: bool) -> float:
 
 ## The climb available along horizontal `direction` from where the body is now: a plan ({ok: true, kind: "mantle" |
 ## "over", ...}), {ok: false, reason}, or {} when no face is in reach. Pure query: changes nothing.
-func evaluate(body, direction: Vector3, airborne: bool) -> Dictionary:
+func evaluate(body, direction: Vector3, airborne: bool, from_hang := false) -> Dictionary:
 	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
 	var feet: Vector3 = body.global_position
 	var max_top := _attr("grip_reach", 2.1) if airborne else _attr("mantle_max_height", 1.45)
@@ -103,17 +116,50 @@ func evaluate(body, direction: Vector3, airborne: bool) -> Dictionary:
 		while h < max_top:
 			heights.append(h)
 			h += AIR_FACE_STEP
-	var hit := {}
-	for height in heights:
-		var from: Vector3 = feet + Vector3.UP * height
-		var found := _cast(space, from, from + direction * (limit + 0.05))
-		if not found.is_empty():
-			var along := (found.position as Vector3 - from).dot(direction)
-			if hit.is_empty() or along < hit.distance - 0.01:
-				found["distance"] = along
-				hit = found
-	if hit.is_empty():
+	# A fan of probes around the intent finds faces approached at sharp angles (a fence run along diagonally); the climb
+	# then goes square to the face it found, from the perpendicular distance.
+	var intent := direction
+	var faces := {}     # one candidate per face: the nearest point of it found by any probe
+	for offset in FAN:
+		var ray: Vector3 = intent.rotated(Vector3.UP, offset)
+		var length := (limit + 0.05) / maxf(cos(offset), 0.3)
+		for height in heights:
+			var from: Vector3 = feet + Vector3.UP * height
+			var found := _cast(space, from, from + ray * length)
+			if found.is_empty():
+				continue
+			var n: Vector3 = found.normal
+			var square := -Vector3(n.x, 0.0, n.z).normalized()
+			if absf(n.y) > MAX_TILT or square.dot(intent) < MIN_TOWARD:
+				continue
+			var across := (found.position as Vector3 - from).dot(square)
+			if across > limit + 0.05:
+				continue
+			var key := "%d|%.2f|%.2f" % [found.collider_id, square.x, square.z]
+			if not faces.has(key) or across < faces[key].distance - 0.01:
+				found["distance"] = across
+				found["square"] = square
+				faces[key] = found
+	if faces.is_empty():
 		return {}
+	# Nearest face first; if it cannot be climbed (a fence's narrow end, say), the next faces are tried.
+	var ordered: Array = faces.values()
+	ordered.sort_custom(func(x, y) -> bool: return x.distance < y.distance)
+	var first := {}
+	for k in mini(ordered.size(), 3):
+		var outcome := _evaluate_face(body, space, feet, ordered[k], intent, airborne, from_hang, max_top, min_top, limit)
+		if outcome.get("ok", false):
+			return outcome
+		if first.is_empty():
+			first = outcome
+	last_seen = first
+	return first
+
+
+## The climb onto or over one face found by evaluate()'s probes, square to it.
+func _evaluate_face(body, space: PhysicsDirectSpaceState3D, feet: Vector3, hit: Dictionary, intent: Vector3, airborne: bool,
+		from_hang: bool, max_top: float, min_top: float, limit: float) -> Dictionary:
+	var direction: Vector3 = hit.square
 	var result := {"ok": false, "reason": "", "airborne": airborne, "face": hit.position, "reach": limit}
 	last_seen = result
 	if airborne and -float(body.velocity.y) > _attr("grip_strength", 7.0):
@@ -124,9 +170,6 @@ func evaluate(body, direction: Vector3, airborne: bool) -> Dictionary:
 		result.reason = "not_a_wall"
 		return result
 	var flat := Vector3(normal.x, 0.0, normal.z).normalized()
-	if -flat.dot(direction) < MIN_FACING:
-		result.reason = "too_angled"
-		return result
 	var distance: float = hit.distance
 	var right := direction.cross(Vector3.UP)
 	var tops: Array[float] = []
@@ -134,7 +177,12 @@ func evaluate(body, direction: Vector3, airborne: bool) -> Dictionary:
 	var slope := flat.dot(right) / flat.dot(direction)   # face offset along travel per metre sideways (angled faces)
 	for side in [0.0, -LATERAL, LATERAL]:
 		var column: Vector3 = feet - right * side + direction * (distance + side * slope + TOP_INSET)
-		var top := _cast(space, column + Vector3.UP * (max_top + 0.35), Vector3(column.x, (hit.position as Vector3).y - 0.01, column.z))
+		# Search down from below whatever is above the top (a slab or ceiling), not from inside it.
+		var from_y: float = feet.y + max_top + 0.35
+		var above := _cast(space, Vector3(column.x, (hit.position as Vector3).y + 0.02, column.z), Vector3(column.x, from_y, column.z))
+		if not above.is_empty():
+			from_y = (above.position as Vector3).y - 0.01
+		var top := _cast(space, Vector3(column.x, from_y, column.z), Vector3(column.x, (hit.position as Vector3).y - 0.01, column.z))
 		if top.is_empty():
 			result.reason = "too_high" if side == 0.0 else "narrow"
 			return result
@@ -161,9 +209,9 @@ func evaluate(body, direction: Vector3, airborne: bool) -> Dictionary:
 	if not _cast(space, top_point + Vector3.UP * 0.02, top_point + Vector3.UP * crouch).is_empty():
 		result.reason = "no_headroom"
 		return result
-	var built := _stand(space, body, feet, direction, distance, height, highest, top_point, crouch, airborne)
+	var built := _stand(space, body, feet, direction, distance, height, highest, top_point, crouch, airborne, from_hang)
 	if built.is_empty():
-		built = _over(space, feet, direction, distance, height, highest, top_point, crouch, airborne)
+		built = _over(space, feet, direction, distance, height, highest, top_point, crouch, airborne, from_hang)
 	if not built.get("ok", true):
 		result.reason = built.reason
 		return result
@@ -174,13 +222,17 @@ func evaluate(body, direction: Vector3, airborne: bool) -> Dictionary:
 	built.ok = true
 	built.reason = "ok"
 	built["powered"] = capabilities != null and highest > capabilities.base_value("grip_reach" if airborne else "mantle_max_height") + 1e-4
+	# Sideways momentum along the wall survives the climb (a fence taken at a sharp angle).
+	var flat_velocity := Vector3(body.velocity.x, 0.0, body.velocity.z)
+	built["tangent"] = (flat_velocity - direction * flat_velocity.dot(direction)) * _attr("momentum_conservation", 0.6)
+	built["intent"] = intent
 	last_seen = built
 	return built
 
 
 ## A standing spot on the top for the whole footprint, at the authored inset or as much less as still fits.
 func _stand(space: PhysicsDirectSpaceState3D, _body, feet: Vector3, direction: Vector3, distance: float, height: float,
-		highest: float, top_point: Vector3, crouch: float, airborne: bool) -> Dictionary:
+		highest: float, top_point: Vector3, crouch: float, airborne: bool, from_hang := false) -> Dictionary:
 	for candidate in [Clip.exit_inset(), 0.85, 0.65, RADIUS + 0.12]:
 		var point: Vector3 = feet + direction * (distance + candidate)
 		var level := INF
@@ -196,7 +248,7 @@ func _stand(space: PhysicsDirectSpaceState3D, _body, feet: Vector3, direction: V
 				# A flat-bottomed cylinder on a sloped top rests on its uphill edge.
 				level += (RADIUS - SKIN) * tan(acos(clampf((ground.normal as Vector3).y, 0.0, 1.0)))
 		if supported and _fits(space, Vector3(point.x, level, point.z), crouch):
-			var built := _build(feet, direction, distance, height, highest, candidate, airborne, "mantle")
+			var built := _build(feet, direction, distance, height, highest, candidate, airborne, "mantle", from_hang)
 			built["settle"] = level - feet.y
 			built["crest"] = maxf(built.crest, built.settle + CREST)   # a top rising away from the edge (a slope)
 			return built
@@ -205,7 +257,7 @@ func _stand(space: PhysicsDirectSpaceState3D, _body, feet: Vector3, direction: V
 
 ## Over a narrow top: its back edge, then a landing beyond within a hang-drop, with room for the drop.
 func _over(space: PhysicsDirectSpaceState3D, feet: Vector3, direction: Vector3, distance: float, height: float,
-		highest: float, top_point: Vector3, crouch: float, airborne: bool) -> Dictionary:
+		highest: float, top_point: Vector3, crouch: float, airborne: bool, from_hang := false) -> Dictionary:
 	var behind: Vector3 = feet + direction * (distance + MAX_OVER_DEPTH + 0.3) + Vector3.UP * (height - 0.06)
 	var back := _cast(space, behind, behind - direction * (MAX_OVER_DEPTH + 0.35))
 	if back.is_empty() or (back.normal as Vector3).dot(direction) < 0.7:
@@ -218,7 +270,7 @@ func _over(space: PhysicsDirectSpaceState3D, feet: Vector3, direction: Vector3, 
 	var ground := _cast(space, Vector3(probe.x, top_point.y + 0.2, probe.z), Vector3(probe.x, top_point.y - deepest, probe.z))
 	if ground.is_empty() or (ground.normal as Vector3).y < 0.7:
 		return {"ok": false, "reason": "bad_landing"}
-	var built := _build(feet, direction, distance, height, highest, past, airborne, "over")
+	var built := _build(feet, direction, distance, height, highest, past, airborne, "over", from_hang)
 	built["depth"] = depth
 	built["landing"] = (ground.position as Vector3).y - feet.y
 	# The fall from the release point must be clear down to the landing.
@@ -239,27 +291,39 @@ func _fits(space: PhysicsDirectSpaceState3D, bottom: Vector3, height: float) -> 
 	return space.intersect_shape(_shape, 1).is_empty()
 
 
-func _build(feet: Vector3, direction: Vector3, distance: float, height: float, highest: float, inset: float, airborne: bool, kind: String) -> Dictionary:
-	var start := 0.0
-	if airborne and height < Clip.RISE:
-		start = minf(Clip.LENGTH * (1.0 - height / Clip.RISE), 0.4)   # join the clip where the climb left matches
+## Timing and warp of one climb. A catch of a top at least PULLUP_MIN above the feet is the two-handed pull-up
+## (ClimbUp_2m from its grip: from the hang, or joined just before the hands arrive); lower tops use the quick running
+## climb (ClimbUp_1m). Both share the physical path; only the authored clip and its warp differ.
+func _build(feet: Vector3, direction: Vector3, distance: float, height: float, highest: float, inset: float, airborne: bool,
+		kind: String, from_hang := false) -> Dictionary:
+	var pullup := airborne and height >= PULLUP_MIN
+	var clip = Pullup if pullup else Clip
 	var strength := _attr("mantle_strength", 1.0)
+	var start := 0.0
+	var contact := Clip.CONTACT
 	var rate := clampf(strength / sqrt(clampf(height / Clip.RISE, 0.6, 2.5)), MIN_RATE, MAX_RATE)
-	var contact := maxf(Clip.CONTACT, start + 0.1)
+	if pullup:
+		start = Pullup.GRIP if from_hang else Pullup.REACH - 0.03
+		contact = start + 0.1
+		rate = clampf(strength / sqrt(clampf(height / Pullup.EDGE, 0.75, 1.6)), MIN_RATE, MAX_RATE)
+	elif airborne and height < Clip.RISE:
+		start = minf(Clip.LENGTH * (1.0 - height / Clip.RISE), 0.4)   # join the clip where the climb left matches
+		contact = maxf(Clip.CONTACT, start + 0.1)
+	var release: float = clip.RELEASE
 	var plan_dict := {"origin": feet, "direction": direction, "distance": distance, "height": height, "crest": highest + CREST,
-		"inset": inset, "kind": kind, "settle": height, "start": start, "rate": rate, "contact": contact,
-		"wait": maxf(distance - RADIUS - SKIN, 0.0),
-		"delta": Vector2(distance - (Clip.FACE - Clip.forward(start)), height - (Clip.RISE - Clip.rise(start))),
-		"airborne": airborne, "duration": (Clip.RELEASE - start) / rate}
-	var at_contact: float = Clip.forward(contact) - Clip.forward(start) + plan_dict.delta.x
-	var remaining := Clip.forward(Clip.LENGTH) - Clip.forward(contact)
+		"inset": inset, "kind": kind, "settle": height, "start": start, "rate": rate, "contact": contact, "release": release,
+		"clip": "pullup" if pullup else "climb", "length": clip.LENGTH, "wait": maxf(distance - RADIUS - SKIN, 0.0),
+		"delta": Vector2(distance - (clip.FACE - clip.forward(start)), height - (clip.EDGE - clip.rise(start))),
+		"airborne": airborne, "duration": (release - start) / rate}
+	var at_contact: float = clip.forward(contact) - clip.forward(start) + plan_dict.delta.x
+	var remaining: float = clip.forward(clip.LENGTH) - clip.forward(contact)
 	plan_dict["compress"] = (distance + inset - at_contact) / remaining if remaining > 0.001 else 1.0
 	return plan_dict
 
 
 ## Collider bottom relative to the start, as (along travel, up), at clip time `t`.
 static func collider_point(p: Dictionary, t: float) -> Vector2:
-	var u := clampf((t - p.start) / (Clip.RELEASE - p.start), 0.0, 1.0)
+	var u := clampf((t - p.start) / (p.release - p.start), 0.0, 1.0)
 	var crest: float = p.crest
 	if u < RISE_SHARE:
 		return Vector2(p.wait * smoothstep(0.0, RISE_SHARE, u), crest * smoothstep(0.0, RISE_SHARE * 0.85, u))
@@ -270,12 +334,13 @@ static func collider_point(p: Dictionary, t: float) -> Vector2:
 
 ## Visual (animation) root relative to the start at clip time `t`: the authored path, warped onto the ledge.
 static func visual_point(p: Dictionary, t: float) -> Vector2:
+	var clip = Pullup if p.get("clip", "climb") == "pullup" else Clip
 	var weight := smoothstep(p.start, p.contact, t)
-	var y: float = Clip.rise(t) - Clip.rise(p.start) + p.delta.y * weight
-	var z: float = Clip.forward(t) - Clip.forward(p.start) + p.delta.x * weight
+	var y: float = clip.rise(t) - clip.rise(p.start) + p.delta.y * weight
+	var z: float = clip.forward(t) - clip.forward(p.start) + p.delta.x * weight
 	if t > p.contact:
-		var at_contact: float = Clip.forward(p.contact) - Clip.forward(p.start) + p.delta.x
-		z = at_contact + (Clip.forward(t) - Clip.forward(p.contact)) * p.compress
+		var at_contact: float = clip.forward(p.contact) - clip.forward(p.start) + p.delta.x
+		z = at_contact + (clip.forward(t) - clip.forward(p.contact)) * p.compress
 	return Vector2(z, y)
 
 
@@ -285,7 +350,7 @@ func _world(p: Dictionary, point: Vector2) -> Vector3:
 
 func _path_clear(space: PhysicsDirectSpaceState3D, p: Dictionary, crouch: float) -> bool:
 	for i in PATH_SAMPLES + 1:
-		var t: float = lerpf(p.start, Clip.RELEASE, float(i) / PATH_SAMPLES)
+		var t: float = lerpf(p.start, p.release, float(i) / PATH_SAMPLES)
 		if not _fits(space, _world(p, collider_point(p, t)), crouch):
 			return false
 	return true
@@ -300,6 +365,7 @@ func start(body, p: Dictionary, grant := {}) -> bool:
 	time = p.start
 	_time_prev = time
 	phase = Phase.ACTIVE
+	_offset_prev = _offset
 	presenting = true
 	if p.kind == "over":
 		overs += 1
@@ -315,14 +381,23 @@ func start(body, p: Dictionary, grant := {}) -> bool:
 func drive(body, dt: float) -> bool:
 	_time_prev = time
 	_offset_prev = _offset
+	if phase == Phase.HANG:
+		_hang_time += dt
+		var hold: Vector3 = _hang_from.lerp(_hang_to, smoothstep(0.0, HANG_SETTLE, _hang_time))
+		body.drive_to(hold, dt)
+		# The drawn body eases from where the catch happened onto the authored grip as the collider settles.
+		_offset = (_world(plan, visual_point(plan, time)) - body.global_position) * smoothstep(0.0, HANG_SETTLE, _hang_time)
+		if body.global_position.distance_to(hold) > ABORT_HORIZONTAL + 0.1:
+			drop(body)                     # something pushed the body off the wall
+		return true
 	if phase != Phase.ACTIVE:
 		if presenting:
-			time = minf(time + plan.rate * dt, Clip.LENGTH)
-			presenting = time < Clip.LENGTH
+			time = minf(time + plan.rate * dt, plan.length)
+			presenting = time < plan.length
 		_offset *= exp(-OFFSET_EASE * dt)
 		return false
 	time += plan.rate * dt
-	var target := _world(plan, collider_point(plan, minf(time, Clip.RELEASE)))
+	var target := _world(plan, collider_point(plan, minf(time, plan.release)))
 	body.drive_to(target, dt)
 	var error: Vector3 = target - body.global_position
 	_set_offset(body.global_position)
@@ -333,18 +408,75 @@ func drive(body, dt: float) -> bool:
 		presenting = false
 		body.release(Vector3.ZERO, false)
 		return true
-	if time >= Clip.RELEASE:
+	if time >= plan.release:
 		phase = Phase.IDLE
 		var wish: Vector3 = body.action.wish_direction() if body.action != null and body.action.has_method("wish_direction") else Vector3.ZERO
-		var exit := 0.0
-		if wish.length_squared() > 0.01 and wish.normalized().dot(plan.direction) > 0.5:
-			exit = _attr("mantle_exit_speed", 2.5)
+		var exit := Vector3.ZERO
+		if wish.length_squared() > 0.01 and wish.normalized().dot(plan.direction) > 0.2:
+			exit = plan.direction * _attr("mantle_exit_speed", 2.5) + plan.get("tangent", Vector3.ZERO)
 		if plan.kind == "over":
 			presenting = false          # the fall and landing take over the presentation
-			body.release(plan.direction * exit, false)
+			body.release(exit, false)
 		else:
-			body.release(plan.direction * exit, true)
+			body.release(exit, true)
 	return true
+
+
+## Catches the ledge on contact and hangs from it (both hands on the lip, feet braced on the wall), until a press climbs
+## (climb_plan_from_hang + start) or the player lets go (drop). `p` is an airborne plan whose top is high enough to hang.
+func begin_hang(body, p: Dictionary, grant := {}) -> bool:
+	if grant.get("move", "") != "hang" or grant.get("plan", null) != p:
+		push_warning("Hang refused: not authorized by the traversal controller")
+		return false
+	var feet: Vector3 = body.global_position
+	var top_y: float = feet.y + p.height
+	_hang_from = feet
+	_hang_to = feet + p.direction * p.wait
+	_hang_to.y = top_y - Pullup.hang_drop()
+	plan = p.duplicate()
+	plan["clip"] = "pullup"
+	plan["start"] = Pullup.GRIP
+	plan["length"] = Pullup.LENGTH
+	plan["release"] = Pullup.RELEASE
+	plan["origin"] = _hang_to
+	plan["distance"] = RADIUS + SKIN          # the edge relative to the hanging body
+	plan["height"] = Pullup.hang_drop()
+	plan["delta"] = Vector2(RADIUS + SKIN - (Pullup.FACE - Pullup.forward(Pullup.GRIP)), 0.0)
+	plan["contact"] = Pullup.GRIP + 0.1
+	_hang_time = 0.0
+	time = Pullup.GRIP
+	_time_prev = time
+	phase = Phase.HANG
+	presenting = true
+	hangs += 1
+	reason = "hang"
+	_offset = Vector3.ZERO
+	_offset_prev = _offset
+	return true
+
+
+## True when a hang at this plan's ledge is possible: the top is high enough that the hanging body (feet
+## Pullup.hang_drop() below the top) is off the ground, and the body is touching the face.
+func can_hang(body, p: Dictionary) -> bool:
+	if not p.get("ok", false) or not p.get("airborne", false) or p.height < PULLUP_MIN:
+		return false
+	if p.distance - RADIUS > HANG_CONTACT:
+		return false
+	var feet: Vector3 = body.global_position
+	var hang_feet: float = feet.y + p.height - Pullup.hang_drop()
+	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
+	var below := _cast(space, feet + Vector3.UP * 0.1, feet + Vector3.DOWN * 3.0)
+	return below.is_empty() or (below.position as Vector3).y < hang_feet - 0.02
+
+
+## Lets go of the ledge: falls from the hang with a small push off the wall.
+func drop(body) -> void:
+	if phase != Phase.HANG:
+		return
+	phase = Phase.IDLE
+	presenting = false
+	reason = "let_go"
+	body.release(-plan.direction * 0.6, false)
 
 
 func _set_offset(body_position: Vector3) -> void:
@@ -365,5 +497,9 @@ func cancel() -> void:
 func presentation(fraction: float) -> Dictionary:
 	if not presenting:
 		return {}
-	return {"mantle": true, "time": lerpf(_time_prev, time, fraction), "rate": plan.rate,
-		"heading": atan2(-plan.direction.x, -plan.direction.z)}
+	var top_y: float = plan.origin.y + plan.height
+	var edge: Vector3 = plan.origin + plan.direction * plan.distance
+	return {"mantle": true, "time": lerpf(_time_prev, time, fraction), "rate": plan.rate, "clip": plan.get("clip", "climb"),
+		"hang": phase == Phase.HANG, "length": plan.get("length", Clip.LENGTH),
+		"heading": atan2(-plan.direction.x, -plan.direction.z),
+		"edge": Vector3(edge.x, top_y, edge.z), "direction": plan.direction}

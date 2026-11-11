@@ -6,6 +6,12 @@ const FootOrientation = preload("res://animation/foot_orientation.gd")
 const TwoBoneCorrection = preload("res://animation/two_bone_correction.gd")
 const VaultClip = preload("res://traversal/vault_clip.gd")
 const MantleClip = preload("res://traversal/mantle_clip.gd")
+const PullupClip = preload("res://traversal/pullup_clip.gd")
+const ClipPose = preload("res://traversal/clip_pose.gd")
+const SLIDE_START_SHOWN := 0.55    ## s of Slide_Start (the drop into the slide) before the slide loop
+const SLIDE_LOOP_LENGTH := 2.0
+const SLIDE_EXIT_LENGTH := 0.5
+const SLIDE_LOOP_SPEED := 4.5      ## m/s the authored slide loop travels (its root motion)
 const AIR_JUMP_CLIP := "DoubleJump"
 const AIR_JUMP_SHOWN := 0.45       ## s of the authored double jump shown before the air loop takes over
 const MIRROR_VAULT := "SafetyVault_Mirror"
@@ -40,6 +46,12 @@ var _arm                     ## TwoBoneCorrection.Chain of the current vault's s
 var _arm_right
 var _arm_left
 var has_vault_mirror := false
+var has_pullup := false
+var has_slide := false
+var grip_error := 0.0           ## m: the larger hand distance from its edge target while both hands grip (telemetry)
+var _gripping := false
+var _grip_targets := {}
+var _grip_hand := {}
 var vault_mirrored := false     ## the vault showing now is the mirrored (left-hand, right-foot) variant
 var vault_variants := {"right": 0, "left": 0}   ## variants shown (telemetry, tests)
 var vault_pitch := 0.0          ## the speed-linked torso pitch applied this frame (telemetry)
@@ -70,7 +82,14 @@ func _capture_final_feet() -> void:
 	for side in ["Left", "Right"]:
 		final_feet[side] = visual.skeleton.get_bone_global_pose(visual.bone_index[side + "Foot"])
 	hand_error = 0.0
-	if _arm.active:
+	grip_error = 0.0
+	if _gripping:
+		for side in _grip_targets:
+			var chain = _arm_left if side == "Left" else _arm_right
+			if chain.active and chain.influence > 0.99:
+				var final: Vector3 = visual.skeleton.global_transform * visual.skeleton.get_bone_global_pose(visual.bone_index[side + "Hand"]).origin
+				grip_error = maxf(grip_error, final.distance_to(_grip_targets[side]))
+	if _arm.active and not _gripping:
 		var wrist: Vector3 = visual.skeleton.get_bone_global_pose(visual.bone_index.LeftHand if vault_mirrored else visual.bone_index.RightHand).origin
 		hand_error = (visual.skeleton.global_transform * wrist).distance_to(_hand_world)
 
@@ -157,23 +176,33 @@ func _build_graph() -> void:
 					transition.xfade_time = 0.12
 					machine.add_transition(pair[0], pair[1], transition)
 					vault_transitions.append(transition)
-	# Movement Lab 5.0 moves: the mantle is seeked to the action's clip time, the air jump to the time since it.
+	# Movement Lab 5.0-5.2 moves, each played by the clock of the action that owns it: the mantle and the pull-up by
+	# the climb's clip time (the hang holds the pull-up's grip frame), the air jump by the time since it, the slide by
+	# the slide's own time.
 	has_mantle = visual.traversal_clips.has(MantleClip.CLIP)
 	has_air_jump = visual.traversal_clips.has(AIR_JUMP_CLIP)
-	for pair in [["Mantle", MantleClip.CLIP, has_mantle], ["AirJump", AIR_JUMP_CLIP, has_air_jump]]:
-		if not pair[2]:
+	has_pullup = visual.traversal_clips.has(PullupClip.CLIP)
+	has_slide = visual.traversal_clips.has("Slide") and visual.traversal_clips.has("Slide_Start") and visual.traversal_clips.has("Slide_Exit")
+	for entry in [["Mantle", MantleClip.CLIP, has_mantle], ["AirJump", AIR_JUMP_CLIP, has_air_jump], ["Pullup", PullupClip.CLIP, has_pullup],
+			["SlideStart", "Slide_Start", has_slide], ["SlideLoop", "Slide", has_slide], ["SlideExit", "Slide_Exit", has_slide]]:
+		if not entry[2]:
 			continue
 		var node := AnimationNodeBlendTree.new()
-		node.add_node("Clip", _clip(pair[1]))
+		node.add_node("Clip", _clip(entry[1]))
 		node.add_node("Seek", AnimationNodeTimeSeek.new())
 		node.connect_node("Seek", 0, "Clip")
 		node.connect_node("output", 0, "Seek")
-		machine.add_node(pair[0], node)
-		for other in STATES + (["Vault"] if has_vault else []) + (["VaultMirror"] if has_vault_mirror else []) + (["Mantle"] if pair[0] == "AirJump" and has_mantle else []):
-			for link in [[other, pair[0]], [pair[0], other]]:
+		machine.add_node(entry[0], node)
+	var names: Array = STATES.duplicate()
+	for extra in ["Vault", "VaultMirror", "Mantle", "AirJump", "Pullup", "SlideStart", "SlideLoop", "SlideExit"]:
+		if machine.has_node(extra):
+			names.append(extra)
+	for a in names:
+		for b in names:
+			if a != b and not machine.has_transition(a, b):
 				var transition := AnimationNodeStateMachineTransition.new()
 				transition.xfade_time = 0.12
-				machine.add_transition(link[0], link[1], transition)
+				machine.add_transition(a, b, transition)
 				vault_transitions.append(transition)
 	tree.name = "AuthoredAnimationTree"
 	visual.add_child(tree)
@@ -235,7 +264,10 @@ func update(dt: float, state: Dictionary) -> void:
 		var swing := smoothstep(VaultClip.HAND_PLANT, VaultClip.HAND_RELEASE + 0.05, t) * (1.0 - smoothstep(0.5, VaultClip.LANDING, t))
 		heading = vault.heading + float(vault.get("turn", 0.0)) * swing
 	var climb: Dictionary = vault.get("mantle", {})
-	var mantling: bool = has_mantle and not climb.is_empty() and climb.time < MantleClip.LENGTH - response * float(climb.rate)
+	var pulling: bool = has_pullup and not climb.is_empty() and climb.get("clip", "climb") == "pullup"
+	var mantling: bool = (has_mantle or pulling) and not climb.is_empty() and (climb.get("hang", false) or climb.time < float(climb.get("length", MantleClip.LENGTH)) - response * float(climb.rate))
+	var slide: Dictionary = vault.get("slide", {})
+	var sliding: bool = has_slide and not slide.is_empty() and not mantling and not vaulting
 	if mantling:
 		heading = climb.heading
 	var air_jumping: bool = has_air_jump and not mantling and not vaulting and not state.grounded and float(vault.get("air_jump", INF)) < AIR_JUMP_SHOWN
@@ -247,7 +279,9 @@ func update(dt: float, state: Dictionary) -> void:
 	var was_running: bool = model.state == "Run"
 	model.update(dt, speed, state.grounded, state.vy, state.get("accel_forward", 0.0), teleported, state.get("crouching", false), vaulting or mantling)
 	if mantling:
-		model.state = "Mantle"
+		model.state = "Pullup" if pulling else "Mantle"
+	elif sliding:
+		model.state = _slide_state(slide)
 	elif air_jumping:
 		model.state = "AirJump"
 	elif vaulting and vault_mirrored:
@@ -273,7 +307,10 @@ func update(dt: float, state: Dictionary) -> void:
 		var node := "VaultMirror" if vault_mirrored else "Vault"
 		tree.set("parameters/%s/Seek/seek_request" % node, clampf(vault.time, 0.0, VaultClip.LENGTH - 0.0005))
 	if mantling:
-		tree.set("parameters/Mantle/Seek/seek_request", clampf(float(climb.time), 0.0, MantleClip.LENGTH - 0.0005))
+		var node := "Pullup" if pulling else "Mantle"
+		tree.set("parameters/%s/Seek/seek_request" % node, clampf(float(climb.time), 0.0, float(climb.get("length", MantleClip.LENGTH)) - 0.0005))
+	if sliding:
+		_seek_slide(slide)
 	if air_jumping:
 		tree.set("parameters/AirJump/Seek/seek_request", clampf(float(vault.air_jump), 0.0, AIR_JUMP_SHOWN))
 	_advance_run_phase(vault, vaulting, starting_run, dt)
@@ -289,7 +326,8 @@ func update(dt: float, state: Dictionary) -> void:
 	vault_pitch = clampf((float(vault.get("speed", 0.0)) - 4.0) / 5.0, 0.0, 1.0) * SPEED_PITCH * shape if vaulting else 0.0
 	visual.skeleton.set_bone_pose_rotation(chest, Quaternion(Vector3.RIGHT, model.lean + vault_pitch) * visual.skeleton.get_bone_pose_rotation(chest))
 	_support(vault)
-	_correct_feet(state.grounded and not vaulting and not mantling, dt)
+	_grip(climb if mantling and pulling else {})
+	_correct_feet(state.grounded and not vaulting and not mantling and not sliding, dt)
 
 
 ## The vault shows until the crossfade back to running would finish with the clip, so the run picks up mid-landing
@@ -426,6 +464,78 @@ func _start_vault_variant(vault: Dictionary) -> void:
 	_orientation.orientations.erase(visual.bone_index.LeftHand)
 	_arm = _arm_left if vault_mirrored else _arm_right
 	vault_variants["left" if vault_mirrored else "right"] += 1
+
+
+## The slide's authored states: the drop into it, the loop while momentum lasts, the recovery.
+func _slide_state(slide: Dictionary) -> String:
+	if float(slide.get("exit", -1.0)) >= 0.0:
+		return "SlideExit"
+	return "SlideStart" if float(slide.time) < SLIDE_START_SHOWN / _slide_rate(slide) else "SlideLoop"
+
+
+## Playback follows the slide speed: the authored loop travels 4.5 m/s, so a faster slide drags faster.
+func _slide_rate(slide: Dictionary) -> float:
+	return clampf(float(slide.get("speed", SLIDE_LOOP_SPEED)) / SLIDE_LOOP_SPEED, 0.6, 1.6)
+
+
+func _seek_slide(slide: Dictionary) -> void:
+	var rate := _slide_rate(slide)
+	var t: float = slide.time
+	tree.set("parameters/SlideStart/Seek/seek_request", clampf(t * rate, 0.0, SLIDE_START_SHOWN))
+	tree.set("parameters/SlideLoop/Seek/seek_request", fposmod(maxf(t - SLIDE_START_SHOWN / rate, 0.0) * rate, SLIDE_LOOP_LENGTH))
+	var exit: float = slide.get("exit", -1.0)
+	if exit >= 0.0:
+		tree.set("parameters/SlideExit/Seek/seek_request", clampf(exit, 0.0, SLIDE_EXIT_LENGTH - 0.0005))
+
+
+## Two-handed grip on the edge while hanging and pulling up: each hand is pinned where the authored pose puts it along
+## the edge, on the lip (LIP below the top, at the face), until the authored release of that hand. Keeps the hands on
+## the wall while the body hangs and the root motion's linear approximation drifts during the pull.
+func _grip(climb: Dictionary) -> void:
+	var skeleton: Skeleton3D = visual.skeleton
+	var active := not climb.is_empty() and climb.has("edge") and float(climb.time) < PullupClip.LEFT_RELEASE + 0.06
+	if not active:
+		if _gripping:
+			for chain in [_arm_left, _arm_right]:
+				chain.active = false
+			_orientation.orientations.erase(visual.bone_index.LeftHand)
+			_orientation.orientations.erase(visual.bone_index.RightHand)
+			_grip_targets.clear()
+		_gripping = false
+		return
+	_gripping = true
+	var edge: Vector3 = climb.edge
+	var d: Vector3 = climb.direction
+	var to_skeleton := skeleton.global_transform.affine_inverse()
+	for side in ["Left", "Right"]:
+		var chain = _arm_left if side == "Left" else _arm_right
+		var release: float = PullupClip.LEFT_RELEASE if side == "Left" else PullupClip.RIGHT_RELEASE
+		var weight := 1.0 - smoothstep(release - 0.06, release, float(climb.time))
+		var hand_bone: int = visual.bone_index[side + "Hand"]
+		var hand := skeleton.get_bone_global_pose(hand_bone)
+		if not _grip_targets.has(side):
+			# The authored hand's sideways place on the edge in the grip frame itself (clip x = the character's left),
+			# mapped onto the wall: independent of the crossfade the drawn body is in on the first frame.
+			var scale: float = skeleton.global_transform.basis.get_scale().x   # skeleton space is scaled to the mannequin
+			_grip_targets[side] = edge - d.cross(Vector3.UP) * _grip_hand_x(side) * scale + d * 0.02 + Vector3.DOWN * PullupClip.LIP
+		var target: Vector3 = _grip_targets[side]
+		var elbow := skeleton.get_bone_global_pose(visual.bone_index[side + "LowerArm"]).origin
+		var shoulder := skeleton.get_bone_global_pose(visual.bone_index[side + "UpperArm"]).origin
+		chain.active = weight > 0.001
+		chain.influence = weight
+		chain.target = to_skeleton * target
+		chain.pole = elbow + (elbow - (shoulder + hand.origin) * 0.5).normalized() * 0.5
+		_orientation.orientations[hand_bone] = hand.basis
+
+
+## Sideways (clip x) position of a hand in the authored pull-up's grip frame, sampled from the clip once.
+func _grip_hand_x(side: String) -> float:
+	if _grip_hand.is_empty():
+		var clip: Animation = visual.player.get_animation(PullupClip.CLIP)
+		var pose := ClipPose.sample(clip, visual.skeleton, PullupClip.GRIP)
+		for name in ["Left", "Right"]:
+			_grip_hand[name] = pose[visual.bone_index[name + "Hand"]].origin.x
+	return _grip_hand[side]
 
 
 ## Support hand and torso: the planned lean toward the support arm, and the hand pinned to its contact point while it
