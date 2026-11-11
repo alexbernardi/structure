@@ -1,6 +1,6 @@
 extends RefCounted
 
-const ParamSet = preload("res://animation/param_set.gd")
+const ParamSet = preload("res://systems/movement_core/animation/param_set.gd")
 const PATHS := {
 	"walk_blend": "parameters/WalkBlend/blend_amount",
 	"body_blend": "parameters/BodyAdd/add_amount",

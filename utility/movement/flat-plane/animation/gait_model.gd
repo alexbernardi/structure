@@ -20,8 +20,8 @@
 ## hanging limb forward). Units are metres, seconds, radians.
 extends RefCounted
 
-const Visual = preload("res://character/character_visual.gd")
-const RigParams = preload("res://animation/rig_params.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
+const RigParams = preload("res://systems/movement_core/animation/rig_params.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const Reference = preload("res://animation/walk_reference.gd")
 

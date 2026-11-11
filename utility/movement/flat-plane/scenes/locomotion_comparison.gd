@@ -1,6 +1,7 @@
 ## Independent physics worlds receive the same recorded input frame and the same parameter object.
 ## --trial=vault (optionally --lane=a|b|c): A is the approved authored baseline with traversal off, B the same with the
-## authored vault, both replaying one recorded run down a vault-course lane in a side view.
+## authored vault, both replaying one recorded run down a vault-course lane in a side view. B presses Space whenever a
+## vault is offered (skilled_press), since 5.0 vaults are intentional.
 extends Control
 
 const Playground = preload("res://scenes/flat_plane.tscn")
@@ -116,6 +117,16 @@ static func input_frame(record: Array) -> Dictionary:
 		"jump_pressed": bool(record[4]), "jump_held": bool(record[5]), "crouch": bool(record[6])}
 
 
+## Movement Lab 5.0: vaults need Space. B replays the recording as a skilled player would: Space on the first tick a
+## vault is offered (the far edge of the interaction region). A keeps the recording unchanged (no presses).
+static func skilled_press(scene, frame: Dictionary) -> Dictionary:
+	if not scene.vault.opportunity.is_empty() and scene.vault.phase == scene.vault.Phase.IDLE:
+		frame = frame.duplicate()
+		frame.jump_pressed = true
+		frame.jump_held = true
+	return frame
+
+
 func restart() -> void:
 	cursor = 0
 	for scene in [left, right]:
@@ -139,6 +150,8 @@ func _physics_process(dt: float) -> void:
 		restart()
 	var frame := input_frame(frames[cursor])
 	left.simulate_tick(frame, dt)
+	if vault_trial:
+		frame = skilled_press(right, frame)
 	right.simulate_tick(frame, dt)
 	cursor += 1
 

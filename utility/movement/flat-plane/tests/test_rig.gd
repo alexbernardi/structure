@@ -4,10 +4,10 @@ extends RefCounted
 ## drag-and-drop handles that edit it.
 
 const SCENE := "res://scenes/gait_treadmill.tscn"
-const RigParams = preload("res://animation/rig_params.gd")
+const RigParams = preload("res://systems/movement_core/animation/rig_params.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const GaitModel = preload("res://animation/gait_model.gd")
-const Visual = preload("res://character/character_visual.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
 
 var _tree: SceneTree
 var _s

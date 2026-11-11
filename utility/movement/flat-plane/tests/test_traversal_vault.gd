@@ -5,10 +5,10 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/flat_plane.tscn")
-const Visual = preload("res://character/authored_mannequin.gd")
-const Profile = preload("res://traversal/vault_profile.gd")
-const Planner = preload("res://traversal/vault_planner.gd")
-const Clip = preload("res://traversal/vault_clip.gd")
+const Visual = preload("res://systems/movement_core/character/authored_mannequin.gd")
+const Profile = preload("res://systems/movement_core/traversal/vault_profile.gd")
+const Planner = preload("res://systems/movement_core/traversal/vault_planner.gd")
+const Clip = preload("res://systems/movement_core/traversal/vault_clip.gd")
 const DT := 1.0 / 120.0
 const RUN_YAW := -PI / 2.0   ## the vault lanes run toward +X
 var _tree: SceneTree
@@ -69,6 +69,16 @@ func _run_input(sprint := false) -> Dictionary:
 	return {"move": Vector2(0, 1), "yaw": RUN_YAW, "sprint": sprint}
 
 
+## Movement Lab 5.0: vaults are intentional. A skilled player presses Space on the first tick a vault is offered (the
+## far edge of the interaction region), which arms the same eased approach the 4.0 vault armed automatically.
+func _skilled(scene, sprint := false) -> Dictionary:
+	var input := _run_input(sprint)
+	if not scene.vault.opportunity.is_empty() and scene.vault.phase == scene.vault.Phase.IDLE:
+		input["jump_pressed"] = true
+		input["jump_held"] = true
+	return input
+
+
 ## One unpaced tick: physics, the presented frame, and the skeleton modifiers (deferred to the next idle otherwise).
 func _tick(scene, input: Dictionary) -> void:
 	scene.simulate_tick(input, DT)
@@ -95,7 +105,7 @@ func _trial(scene, lane: String, ticks: int, sprint := false, start_x := NAN) ->
 	for i in ticks:
 		if i % 240 == 0:
 			await _tree.physics_frame
-		_tick(scene, _run_input(sprint))
+		_tick(scene, _skilled(scene, sprint))
 		if i == 0:
 			stats["teleport_speed"] = animator.measured_speed
 		var position: Vector3 = scene.body.global_position
@@ -371,7 +381,7 @@ func test_blocked_vault_clearance_is_refused_before_takeoff(t) -> void:
 func _arm(scene) -> bool:
 	await _place(scene, "a")
 	for i in 240:
-		_tick(scene, _run_input())
+		_tick(scene, _skilled(scene))
 		if scene.vault.armed():
 			return true
 	return false
@@ -481,7 +491,7 @@ func test_active_vault_physics_does_not_depend_on_rendered_animation(t) -> void:
 		for i in 480:
 			if i % 240 == 0:
 				await _tree.physics_frame
-			_tick(scene, _run_input(true))
+			_tick(scene, _skilled(scene, true))
 			path.append([scene.body.global_position, scene.body.velocity, scene.vault.phase, scene.vault.time])
 		t.ok(scene.vault.vaults >= 3, "the equivalence trial includes multiple active vaults")
 		t.eq(scene.vault.aborts, 0, "the physical vault completes with animation on or off")
@@ -511,7 +521,7 @@ func test_live_frames_plant_feet_and_hand_on_their_targets(t) -> void:
 	await _place(scene, "a")
 	for i in 260:
 		await _tree.physics_frame
-		scene.simulate_tick(_run_input(), DT)
+		scene.simulate_tick(_skilled(scene), DT)
 	animator._orientation.modification_processed.disconnect(measure)
 	t.eq(scene.vault.vaults, 1, "the first wall is vaulted")
 	t.ok(errors.feet_samples > 20 and errors.hand_samples > 3, "both contacts were presented (%d foot, %d hand frames)" % [errors.feet_samples, errors.hand_samples])
@@ -550,7 +560,7 @@ func test_cameras_follow_the_vault_travel_without_hump_or_dip(t) -> void:
 			"side_low": INF, "side_high": -INF, "side_step": 0.0, "hump": 0.0}
 		for i in 720:
 			await _tree.physics_frame
-			scene.simulate_tick(_run_input(), DT)
+			scene.simulate_tick(_skilled(scene), DT)
 			var side_y: float = scene._side_cam.global_position.y
 			if not scene.vault.presenting:
 				if scene.vault.vaults > before:

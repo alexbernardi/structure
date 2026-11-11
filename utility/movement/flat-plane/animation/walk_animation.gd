@@ -1,7 +1,7 @@
 extends Node
 
 const GraphParams = preload("res://animation/graph_params.gd")
-const Visual = preload("res://character/character_visual.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
 const SAMPLES := 128
 const RUN_SAMPLES := 192
 

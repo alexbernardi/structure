@@ -78,7 +78,7 @@ are in [provenance](../../utility/movement/flat-plane/assets/quaternius/PROVENAN
 in the ignored `AGENT-WORKSHOP/DOWNLOADS/`. No clip is fabricated; with the clip missing, the character keeps running.
 Independent re-verification compared both extracts against the supplied originals: all 195 animation samplers
 per extract, channel targets, accessor types/dimensions, skeleton nodes and licence bytes match.
-The [integrity report](../../.runtime/movement-lab-4-verification/asset-integrity.json) records the source/extract hashes.
+The `integrity report` (local evidence: `.runtime/movement-lab-4-verification/asset-integrity.json`, git-ignored) records the source/extract hashes.
 
 The clip retargets through the same native `BoneMap` as 3.0. `tools/audit_vault_clip.gd` measured it on the original
 rig at mannequin scale. `traversal/vault_clip.gd` holds those numbers, and the tests re-measure them from the import.
@@ -222,17 +222,17 @@ They retain results rather than relying on an earlier session's unverified test-
 
 | Evidence | Contents |
 |---|---|
-| [Verification summary](../../.runtime/movement-lab-4-verification/verification-summary.json) | Final report totals and hashes of the tested changed GDScript files |
-| [Focused report](../../.runtime/movement-lab-4-verification/focused.json), [log](../../.runtime/movement-lab-4-verification/focused.log) | Per-test results and machine-readable `VAULT_LANE_RESULT` records |
-| [Playground report](../../.runtime/movement-lab-4-verification/playground.json) | MIDI/presets, authored A/B and final camera visibility checks |
-| [Full report](../../.runtime/movement-lab-4-verification/full-suite.json), [log](../../.runtime/movement-lab-4-verification/full-suite.log) | Final 499/499 regression, including the camera repairs |
-| [Process preflight](../../.runtime/movement-lab-4-verification/full-suite-context.json), [earlier loaded run](../../.runtime/movement-lab-4-verification/full-suite-live-playground.json) | No competing lab in the final run; earlier legacy timing failure preserved |
-| [Legacy module](../../.runtime/movement-lab-4-verification/legacy-module.json), [isolated check](../../.runtime/movement-lab-4-verification/legacy-cost-recheck.json) | Independent passing timing rechecks |
-| [Benchmark](../../.runtime/movement-lab-4-verification/benchmark.json) | Recorded CPU samples |
-| [Native telemetry summary](../../.runtime/movement-lab-4-verification/native-results.json) | Per-capture counts, contact errors and warnings; distinguishes superseded camera captures |
-| [Lane A poses](../../.runtime/movement-lab-4-verification/native-a-final/vault_a_0.png), [sprint poses](../../.runtime/movement-lab-4-verification/native-a-sprint/vault_a_sprint_0.png) | Native side-view samples |
-| [Lane C contact](../../.runtime/movement-lab-4-verification/native-c-final/side_contact.png), [orbit contact](../../.runtime/movement-lab-4-verification/native-orbit/orbit_contact.png) | Native side/full-3D inspection |
-| [Playtest readiness](../../.runtime/movement-lab-4-verification/playtest-readiness.json), [startup log](../../.runtime/movement-lab-4-verification/playtest.log) | Checkpoint relaunched at lane A; responsive native window and clean startup verified |
+| `Verification summary` (local evidence: `.runtime/movement-lab-4-verification/verification-summary.json`, git-ignored) | Final report totals and hashes of the tested changed GDScript files |
+| `Focused report` (local evidence: `.runtime/movement-lab-4-verification/focused.json`, git-ignored), `log` (local evidence: `.runtime/movement-lab-4-verification/focused.log`, git-ignored) | Per-test results and machine-readable `VAULT_LANE_RESULT` records |
+| `Playground report` (local evidence: `.runtime/movement-lab-4-verification/playground.json`, git-ignored) | MIDI/presets, authored A/B and final camera visibility checks |
+| `Full report` (local evidence: `.runtime/movement-lab-4-verification/full-suite.json`, git-ignored), `log` (local evidence: `.runtime/movement-lab-4-verification/full-suite.log`, git-ignored) | Final 499/499 regression, including the camera repairs |
+| `Process preflight` (local evidence: `.runtime/movement-lab-4-verification/full-suite-context.json`, git-ignored), `earlier loaded run` (local evidence: `.runtime/movement-lab-4-verification/full-suite-live-playground.json`, git-ignored) | No competing lab in the final run; earlier legacy timing failure preserved |
+| `Legacy module` (local evidence: `.runtime/movement-lab-4-verification/legacy-module.json`, git-ignored), `isolated check` (local evidence: `.runtime/movement-lab-4-verification/legacy-cost-recheck.json`, git-ignored) | Independent passing timing rechecks |
+| `Benchmark` (local evidence: `.runtime/movement-lab-4-verification/benchmark.json`, git-ignored) | Recorded CPU samples |
+| `Native telemetry summary` (local evidence: `.runtime/movement-lab-4-verification/native-results.json`, git-ignored) | Per-capture counts, contact errors and warnings; distinguishes superseded camera captures |
+| `Lane A poses` (local evidence: `.runtime/movement-lab-4-verification/native-a-final/vault_a_0.png`, git-ignored), `sprint poses` (local evidence: `.runtime/movement-lab-4-verification/native-a-sprint/vault_a_sprint_0.png`, git-ignored) | Native side-view samples |
+| `Lane C contact` (local evidence: `.runtime/movement-lab-4-verification/native-c-final/side_contact.png`, git-ignored), `orbit contact` (local evidence: `.runtime/movement-lab-4-verification/native-orbit/orbit_contact.png`, git-ignored) | Native side/full-3D inspection |
+| `Playtest readiness` (local evidence: `.runtime/movement-lab-4-verification/playtest-readiness.json`, git-ignored), `startup log` (local evidence: `.runtime/movement-lab-4-verification/playtest.log`, git-ignored) | Checkpoint relaunched at lane A; responsive native window and clean startup verified |
 
 ## Limitations
 

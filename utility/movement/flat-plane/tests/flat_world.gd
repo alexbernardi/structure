@@ -1,7 +1,7 @@
 ## Tiny deterministic world for testing the movement core without the physics server: a flat floor at y = 0.
 extends RefCounted
 
-const Core = preload("res://movement/movement_core.gd")
+const Core = preload("res://systems/movement_core/movement/movement_core.gd")
 
 const DT := 1.0 / 120.0
 

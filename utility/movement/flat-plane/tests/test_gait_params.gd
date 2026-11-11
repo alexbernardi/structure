@@ -3,7 +3,7 @@ extends RefCounted
 const GaitParams = preload("res://animation/gait_params.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
-const RigParams = preload("res://animation/rig_params.gd")
+const RigParams = preload("res://systems/movement_core/animation/rig_params.gd")
 const GraphParams = preload("res://animation/graph_params.gd")
 
 

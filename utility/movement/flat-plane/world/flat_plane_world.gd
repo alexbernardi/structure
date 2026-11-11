@@ -24,6 +24,7 @@ func build() -> void:
 	_obstacles()
 	_tunnel_and_ledge()
 	_vault_course()
+	_traversal_course()
 	_spawn_pad()
 	_axis_labels()
 
@@ -207,9 +208,233 @@ func _vault_course() -> void:
 		landmarks["vault_" + String(lane[0])] = Vector3(-27.0, 0.0, lane[1])
 
 
+## Movement Lab 5.0 traversal course: four more 3 m-wide lanes toward +X, east of the vault course (landmarks lane_d ..
+## lane_g at x 33, facing down the lane). Every obstacle is a plain box: the traversal system reads geometry only.
+##   D (z -25) rhythm   - five 1.0 m walls 6 m apart, then a pair 3.6 m apart (a vault lands inside the next one's
+##                        region: chain with a press during the descent), then a 0.8 m wall
+##   E (z -31) climb    - 1.0 m block 2.5 m deep (too deep to vault: mantle onto it, run off), 1.4 m platform (mantle),
+##                        1.9 m ledge (too high to mantle from the ground: jump and grab), 3.0 m ledge (beyond a
+##                        human's grab: cybernetic jump or zephyr double jump), then 1.6 m wall (cybernetic vault)
+##   F (z -37) invalid  - the test bar: a 1.0 m wall with a bar 1.2 m beyond it at 1.68-1.83 m. The bar blocks every
+##                        vault arc (refused: blocked). Human solution: jump at the wall, press again to catch its top and
+##                        climb over into the gap, then crouch under the bar or jump and catch the bar to climb over it.
+##                        A 2 m deck ending in a 1.0 m wall over a 2 m
+##                        drop (lane_f_drop; human landing refused, cybernetic accepts), a 0.4 m-wide post (narrow), a 1.0 m wall at 30 degrees, and a
+##                        1.3 m block under an overhang (no headroom to mantle)
+##   G (z -43) heights  - 1.2 m platform with a 1.0 m vault wall on it, a 5 m gap (sprint to clear it, or air jump)
+##                        to a second 1.2 m platform, and a drop back to the ground over a 1.0 m wall
+func _traversal_course() -> void:
+	var wall := _tint(Color(0.80, 0.42, 0.36))
+	var block := _tint(Color(0.36, 0.55, 0.80))
+	var gate := _tint(Color(0.75, 0.35, 0.80))
+	var bad := _tint(Color(0.35, 0.35, 0.35))
+	var x0 := 40.0
+	# D: rhythm
+	for i in 5:
+		_course_wall(Vector3(x0 + i * 6.0, 0.0, -25.0), 1.0, 0.35, 0.0, wall, "LaneD%d" % i, "1.0 m")
+	_course_wall(Vector3(x0 + 30.0, 0.0, -25.0), 1.0, 0.35, 0.0, wall, "LaneDPairA", "pair")
+	_course_wall(Vector3(x0 + 33.6, 0.0, -25.0), 1.0, 0.35, 0.0, wall, "LaneDPairB", "3.6 m")
+	_course_wall(Vector3(x0 + 40.0, 0.0, -25.0), 0.8, 0.35, 0.0, wall, "LaneD80", "0.8 m")
+	# E: climb
+	_course_wall(Vector3(x0 + 1.25, 0.0, -31.0), 1.0, 2.5, 0.0, block, "LaneEBlock", "1.0 m x 2.5 m deep")
+	_course_wall(Vector3(x0 + 10.0, 0.0, -31.0), 1.4, 3.0, 0.0, block, "LaneEPlatform", "1.4 m platform")
+	_course_wall(Vector3(x0 + 20.0, 0.0, -31.0), 1.9, 3.0, 0.0, block, "LaneELedge19", "1.9 m: jump + grab")
+	_course_wall(Vector3(x0 + 30.0, 0.0, -31.0), 3.6, 3.0, 0.0, gate, "LaneELedge36", "3.6 m: upgrades only")
+	_course_wall(Vector3(x0 + 40.0, 0.0, -31.0), 1.6, 0.35, 0.0, gate, "LaneEWall160", "1.6 m: cybernetic vault")
+	# F: invalid and awkward
+	_course_wall(Vector3(x0, 0.0, -37.0), 1.0, 0.35, 0.0, wall, "LaneFBarred", "test bar: catch + climb")
+	_box(Vector3(x0 + 1.2, 1.75, -37.0), Vector3(0.3, 0.15, 3.0), Vector3.ZERO, bad, "LaneFBar")
+	_box(Vector3(x0 + 6.0, 1.0, -37.0), Vector3(6.0, 2.0, 3.0), Vector3.ZERO, block, "LaneFDeck")
+	_course_wall(Vector3(x0 + 8.825, 2.0, -37.0), 1.0, 0.35, 0.0, wall, "LaneFDropWall", "2 m drop")
+	_course_wall(Vector3(x0 + 18.0, 0.0, -37.0), 1.0, 0.4, 0.0, wall, "LaneFPost", "narrow post")
+	_course_wall(Vector3(x0 + 26.0, 0.0, -37.0), 1.0, 0.35, 30.0, wall, "LaneF30", "30 deg")
+	_course_wall(Vector3(x0 + 34.0, 0.0, -37.0), 1.3, 2.0, 0.0, block, "LaneFCovered", "overhang")
+	_box(Vector3(x0 + 34.0, 2.0, -37.0), Vector3(3.0, 0.2, 3.0), Vector3.ZERO, bad, "LaneFOverhang")
+	# G: mixed elevation
+	_box(Vector3(x0 + 6.0, 0.6, -43.0), Vector3(12.0, 1.2, 3.0), Vector3.ZERO, block, "LaneGPlatformA")
+	_course_wall(Vector3(x0 + 7.0, 1.2, -43.0), 1.0, 0.35, 0.0, wall, "LaneGTopWall", "wall on platform")
+	_box(Vector3(x0 + 23.0, 0.6, -43.0), Vector3(12.0, 1.2, 3.0), Vector3.ZERO, block, "LaneGPlatformB")
+	_course_wall(Vector3(x0 + 31.0, 0.0, -43.0), 1.0, 0.35, 0.0, wall, "LaneGDropWall", "1.0 m after drop")
+	_label(Vector3(x0 + 14.5, 1.8, -43.0), "5 m gap")
+	for lane in [["d", -25.0], ["e", -31.0], ["f", -37.0], ["g", -43.0]]:
+		landmarks["lane_" + String(lane[0])] = Vector3(x0 - 7.0, 0.0, lane[1])
+	landmarks["lane_d_pair"] = Vector3(x0 + 25.0, 0.0, -25.0)
+	landmarks["lane_e_ledge"] = Vector3(x0 + 15.0, 0.0, -31.0)
+	landmarks["lane_e_gate"] = Vector3(x0 + 24.0, 0.0, -31.0)
+	landmarks["lane_g_top"] = Vector3(x0 + 1.0, 1.2, -43.0)
+	landmarks["lane_f_drop"] = Vector3(x0 + 3.3, 2.0, -37.0)
+	landmarks["lane_f_bar"] = Vector3(x0 - 4.0, 0.0, -37.0)
+	_irregular_lane(x0)
+
+
+## Movement Lab 5.1 lane H (z -49, landmark lane_h): irregular tops and the vault-variation sequence.
+##   seven 0.4 m crates 1.18-1.32 m across the lane (uneven top: mantle), a block whose top slopes up 10 degrees,
+##   a 1.3 m ledge turned 30 degrees (diagonal mantle), then vault walls turned +25 and -25 degrees, a 1.1 m and a
+##   0.7 m wall (one vault each: hand side, body turn, lift and lean follow the angle, height, speed and stride)
+func _irregular_lane(x0: float) -> void:
+	var block := _tint(Color(0.36, 0.55, 0.80))
+	var crate := _tint(Color(0.62, 0.50, 0.34))
+	var wall := _tint(Color(0.80, 0.42, 0.36))
+	var z := -49.0
+	var crates := [1.18, 1.26, 1.20, 1.32, 1.26, 1.20, 1.24]
+	for i in crates.size():
+		var h: float = crates[i]
+		_box(Vector3(x0 + 0.8, h / 2.0, z + (i - 3) * 0.4), Vector3(1.6, h, 0.4), Vector3.ZERO, crate, "LaneHCrate%d" % i)
+	_label(Vector3(x0 + 0.8, 1.8, z), "uneven crates")
+	_box(Vector3(x0 + 10.0, 0.5, z), Vector3(2.0, 1.2, 3.0), Vector3(0.0, 0.0, 10.0), block, "LaneHSlope")
+	_label(Vector3(x0 + 10.0, 1.8, z), "sloped top")
+	_course_wall(Vector3(x0 + 18.0, 0.0, z), 1.3, 2.0, 30.0, block, "LaneHDiagonal", "1.3 m at 30 deg")
+	_course_wall(Vector3(x0 + 27.0, 0.0, z), 1.0, 0.35, 25.0, wall, "LaneHWallP25", "+25 deg")
+	_course_wall(Vector3(x0 + 33.0, 0.0, z), 1.0, 0.35, -25.0, wall, "LaneHWallM25", "-25 deg")
+	_course_wall(Vector3(x0 + 39.0, 0.0, z), 1.1, 0.35, 0.0, wall, "LaneHWall110", "1.1 m")
+	_course_wall(Vector3(x0 + 45.0, 0.0, z), 0.7, 0.35, 0.0, wall, "LaneHWall70", "0.7 m")
+	landmarks["lane_h"] = Vector3(x0 - 7.0, 0.0, z)
+	landmarks["lane_h_walls"] = Vector3(x0 + 21.5, 0.0, z)
+	_lanes_52(x0)
+
+
+## Movement Lab 5.2 lanes (landmarks lane_i .. lane_l, facing +X):
+##   I (z -55) fences  - 1.1 m fences 0.08 m thick turned 30, 45, 60 and 75 degrees: vault (up to 35 degrees),
+##                       otherwise climb over square to the fence keeping the sideways momentum, from the ground or a catch
+##   J (z -61) high    - 2.2 and 2.6 m walls (2 m deep): jump, catch on contact and hang, one press pulls up and over;
+##                       a 2.4 m wall 0.3 m thick (pull up and over the far side); a 2.6 m wall with a slab just above its
+##                       top (no room: the hang holds, the press is refused); a 3.0 m wall (a human's jump and reach,
+##                       5.4) and a 3.6 m wall (cybernetic reach)
+##   K (z -67) slide   - 30 m of flat run-out with two bars leaving 1.0 m of clearance (slide under, too low to crouch
+##                       under), then a 12 degree ramp up, a plateau and a 12 degree ramp down
+##   L (z -73) combo   - vault a 1.0 m wall, mantle a 1.2 m block, drop off, catch and pull up a 2.4 m wall, run off it,
+##                       slide under a 1.0 m bar
+##   M (z -79) flip    - (5.3) open ground for standing and slide flips, a 1.0 m deck to flip off (a longer fall),
+##                       a 0.5 m box to flip onto (a shorter one), a bar with 1.0 m clearance (no room: refused)
+##   N (z -85) hang    - (5.4) a 3.0 m wall 8 m long to catch and shimmy along; at its +z end a 3.6 m block flush with
+##                       it (the lip steps up: the shimmy stops); at its -z end its 2 m end face (an outside corner, 5.5),
+##                       a 0.6 m gap and a 3.0 m wall 4 m long; a 2.6 m wall 6 m long (hangs closer to the ground)
+##   O (z -97) corners - (5.5) a free-standing 3.0 m block 4 x 4 m (four outside corners), an inside corner (two 3.0 m
+##                       walls in an L), a 0.25 m thick 2.4 m wall (its end face is too narrow to hang on: refused), and
+##                       a 3.0 m shelf over a recessed wall (no wall within the feet's reach: the hang dangles)
+##   P (z -105) feet   - (5.5) uneven ground (pads 0.03-0.15 m), a 0.2 m step to stand across, 0.15 m stairs, a 15
+##                       degree slope
+func _lanes_52(x0: float) -> void:
+	var fence := _tint(Color(0.55, 0.45, 0.30))
+	var block := _tint(Color(0.36, 0.55, 0.80))
+	var wall := _tint(Color(0.80, 0.42, 0.36))
+	var gate := _tint(Color(0.75, 0.35, 0.80))
+	var bar := _tint(Color(0.30, 0.30, 0.30))
+	var deck := _tint(Color(0.62, 0.62, 0.58))
+	# I: fences at sharp angles
+	var zi := -55.0
+	for i in 4:
+		var angle: float = [30.0, 45.0, 60.0, 75.0][i]
+		_course_wall(Vector3(x0 + i * 9.0, 0.0, zi), 1.1, 0.08, angle, fence, "LaneIFence%d" % int(angle), "fence %d deg" % int(angle), 7.0)
+	landmarks["lane_i"] = Vector3(x0 - 7.0, 0.0, zi)
+	# J: high walls
+	var zj := -61.0
+	_course_wall(Vector3(x0 + 1.0, 0.0, zj), 2.2, 2.0, 0.0, block, "LaneJWall22", "2.2 m: jump, catch, Space")
+	_course_wall(Vector3(x0 + 11.0, 0.0, zj), 2.6, 2.0, 0.0, block, "LaneJWall26", "2.6 m")
+	_course_wall(Vector3(x0 + 20.0, 0.0, zj), 2.4, 0.3, 0.0, wall, "LaneJThin24", "2.4 m thin: over")
+	_course_wall(Vector3(x0 + 29.0, 0.0, zj), 2.6, 2.0, 0.0, block, "LaneJCovered", "2.6 m, no room")
+	_box(Vector3(x0 + 29.0, 3.15, zj), Vector3(2.0, 0.3, 3.0), Vector3.ZERO, bar, "LaneJSlab")
+	_course_wall(Vector3(x0 + 39.0, 0.0, zj), 3.0, 2.0, 0.0, block, "LaneJWall30", "3.0 m: human reach")
+	_course_wall(Vector3(x0 + 48.0, 0.0, zj), 3.6, 2.0, 0.0, gate, "LaneJWall36", "3.6 m: cybernetic")
+	landmarks["lane_j"] = Vector3(x0 - 7.0, 0.0, zj)
+	landmarks["lane_j_26"] = Vector3(x0 + 5.5, 2.2, zj)
+	landmarks["lane_j_thin"] = Vector3(x0 + 15.0, 0.0, zj)
+	landmarks["lane_j_covered"] = Vector3(x0 + 24.5, 0.0, zj)
+	# K: slide
+	var zk := -67.0
+	for i in 2:
+		var bx := x0 + 10.0 + i * 8.0
+		_box(Vector3(bx, 1.0 + 0.15, zk), Vector3(0.3, 0.3, 3.0), Vector3.ZERO, bar, "LaneKBar%d" % i)
+		_box(Vector3(bx, 0.5, zk - 1.6), Vector3(0.3, 1.0, 0.2), Vector3.ZERO, bar, "LaneKPostL%d" % i)
+		_box(Vector3(bx, 0.5, zk + 1.6), Vector3(0.3, 1.0, 0.2), Vector3.ZERO, bar, "LaneKPostR%d" % i)
+	_label(Vector3(x0 + 10.0, 1.8, zk), "1.0 m clearance: slide")
+	var slope := deg_to_rad(12.0)
+	var run := 10.0
+	var up_x := x0 + 30.0
+	var rise := run * tan(slope)
+	var length := run / cos(slope)
+	_box(Vector3(up_x + run * 0.5 + 0.2 * sin(slope), rise * 0.5 - 0.2 * cos(slope), zk), Vector3(length, 0.4, 3.0), Vector3(0.0, 0.0, 12.0), deck, "LaneKRampUp")
+	_box(Vector3(up_x + run + 3.0, rise * 0.5, zk), Vector3(6.0, rise, 3.0), Vector3.ZERO, deck, "LaneKPlateau")
+	var down_x := up_x + run + 6.0
+	_box(Vector3(down_x + run * 0.5 - 0.2 * sin(slope), rise * 0.5 - 0.2 * cos(slope), zk), Vector3(length, 0.4, 3.0), Vector3(0.0, 0.0, -12.0), deck, "LaneKRampDown")
+	_label(Vector3(up_x + 2.0, 1.2, zk), "12 deg up / down")
+	landmarks["lane_k"] = Vector3(x0 - 7.0, 0.0, zk)
+	landmarks["lane_k_plateau"] = Vector3(up_x + run + 0.5, rise, zk)
+	# L: combo
+	var zl := -73.0
+	_course_wall(Vector3(x0, 0.0, zl), 1.0, 0.35, 0.0, wall, "LaneLWall", "vault")
+	_course_wall(Vector3(x0 + 8.0, 0.0, zl), 1.2, 2.5, 0.0, block, "LaneLBlock", "mantle")
+	_course_wall(Vector3(x0 + 18.0, 0.0, zl), 2.4, 2.0, 0.0, block, "LaneLHigh", "catch + pull up")
+	_box(Vector3(x0 + 26.0, 1.15, zl), Vector3(0.3, 0.3, 3.0), Vector3.ZERO, bar, "LaneLBar")
+	_label(Vector3(x0 + 26.0, 1.8, zl), "slide")
+	landmarks["lane_l"] = Vector3(x0 - 7.0, 0.0, zl)
+	# M: crouch flip
+	var zm := -79.0
+	_label(Vector3(x0 + 2.0, 1.4, zm), "Ctrl + Space: flip")
+	_box(Vector3(x0 + 16.0, 0.5, zm), Vector3(6.0, 1.0, 3.0), Vector3.ZERO, deck, "LaneMDeck")
+	_label(Vector3(x0 + 18.5, 1.9, zm), "flip off: 1.0 m")
+	_box(Vector3(x0 + 26.0, 0.25, zm), Vector3(3.0, 0.5, 3.0), Vector3.ZERO, block, "LaneMBox")
+	_label(Vector3(x0 + 26.0, 1.3, zm), "flip onto: 0.5 m")
+	_box(Vector3(x0 + 34.0, 1.15, zm), Vector3(0.3, 0.3, 3.0), Vector3.ZERO, bar, "LaneMBar")
+	_label(Vector3(x0 + 34.0, 1.8, zm), "no room to flip")
+	landmarks["lane_m"] = Vector3(x0 - 7.0, 0.0, zm)
+	landmarks["lane_m_deck"] = Vector3(x0 + 14.0, 1.0, zm)
+	# N: hang and shimmy (walls 2 m deep along +X, long along Z)
+	var zn := -85.0
+	_course_wall(Vector3(x0 + 4.0, 0.0, zn), 3.0, 2.0, 0.0, block, "LaneNLong", "3.0 m: catch, stick left / right", 8.0)
+	_course_wall(Vector3(x0 + 4.0, 0.0, zn - 6.6), 3.0, 2.0, 0.0, block, "LaneNShort", "gap 0.6 m", 4.0)
+	_course_wall(Vector3(x0 + 16.0, 0.0, zn), 2.6, 2.0, 0.0, wall, "LaneNLow", "2.6 m", 6.0)
+	_box(Vector3(x0 + 4.0, 1.8, zn + 5.0), Vector3(2.0, 3.6, 2.0), Vector3.ZERO, wall, "LaneNStep")
+	_label(Vector3(x0 + 4.0, 4.0, zn + 5.0), "lip steps up: stop")
+	landmarks["lane_n"] = Vector3(x0 - 4.0, 0.0, zn)
+	# O: corners
+	var zo := -97.0
+	_box(Vector3(x0 + 6.0, 1.5, zo), Vector3(4.0, 3.0, 4.0), Vector3.ZERO, block, "LaneOBlock")
+	_label(Vector3(x0 + 6.0, 3.5, zo), "outside corners")
+	_box(Vector3(x0 + 21.0, 1.5, zo - 0.5), Vector3(2.0, 3.0, 5.0), Vector3.ZERO, block, "LaneOWallA")
+	_box(Vector3(x0 + 19.0, 1.5, zo + 3.0), Vector3(6.0, 3.0, 2.0), Vector3.ZERO, block, "LaneOWallB")
+	_label(Vector3(x0 + 19.0, 3.5, zo + 1.0), "inside corner")
+	_box(Vector3(x0 + 32.0, 1.2, zo), Vector3(0.25, 2.4, 4.0), Vector3.ZERO, wall, "LaneOThin")
+	_label(Vector3(x0 + 32.0, 2.9, zo), "0.25 m wall: corner refused")
+	_box(Vector3(x0 + 43.0, 1.2, zo), Vector3(2.0, 2.4, 4.0), Vector3.ZERO, wall, "LaneOShelfWall")
+	_box(Vector3(x0 + 42.4, 2.7, zo), Vector3(3.2, 0.6, 4.0), Vector3.ZERO, block, "LaneOShelf")
+	_label(Vector3(x0 + 42.4, 3.4, zo), "shelf: nothing for the feet")
+	landmarks["lane_o"] = Vector3(x0 - 3.0, 0.0, zo)
+	landmarks["lane_o_inside"] = Vector3(x0 + 15.0, 0.0, zo - 1.0)
+	landmarks["lane_o_thin"] = Vector3(x0 + 27.0, 0.0, zo)
+	landmarks["lane_o_shelf"] = Vector3(x0 + 36.0, 0.0, zo)
+	# P: feet on uneven ground, a step, stairs and a slope
+	var zp := -105.0
+	var pads := [0.06, 0.12, 0.03, 0.15, 0.09, 0.05, 0.13, 0.08]
+	for i in pads.size():
+		var h: float = pads[i]
+		_box(Vector3(x0 + 2.0 + (i % 4) * 0.8, h * 0.5, zp - 0.4 + (i / 4) * 0.8), Vector3(0.8, h, 0.8), Vector3.ZERO, deck, "LanePPad%d" % i)
+	_label(Vector3(x0 + 3.2, 0.8, zp), "uneven ground")
+	_box(Vector3(x0 + 10.0, 0.1, zp), Vector3(2.0, 0.2, 3.0), Vector3.ZERO, deck, "LanePStep")
+	_label(Vector3(x0 + 9.0, 0.8, zp), "0.2 m step")
+	for k in 6:
+		_box(Vector3(x0 + 15.0 + k * 0.3 + 0.15, (k + 1) * 0.075, zp), Vector3(0.3, (k + 1) * 0.15, 3.0), Vector3.ZERO, deck, "LanePStair%d" % k)
+	_label(Vector3(x0 + 15.9, 1.4, zp), "0.15 m stairs")
+	var slope_p := deg_to_rad(15.0)
+	_box(Vector3(x0 + 25.0, 1.0 * tan(slope_p) * 2.0 - 0.15, zp), Vector3(4.0 / cos(slope_p), 0.3, 3.0), Vector3(0.0, 0.0, 15.0), deck, "LanePSlope")
+	_label(Vector3(x0 + 25.0, 1.8, zp), "15 deg slope")
+	landmarks["lane_p"] = Vector3(x0 - 3.0, 0.0, zp)
+	landmarks["lane_p_step"] = Vector3(x0 + 9.0, 0.2, zp)
+
+
+func _label(position: Vector3, caption: String) -> void:
+	var label := Label3D.new()
+	label.text = caption
+	label.pixel_size = 0.006
+	label.font_size = 56
+	label.position = position
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	add_child(label)
+
+
 ## A course wall standing on the ground at `base` (its centre), `depth` along +X, turned `yaw_deg` about Y.
-func _course_wall(base: Vector3, height: float, depth: float, yaw_deg: float, mat: Material, node_name: String, caption: String) -> void:
-	_box(base + Vector3(0.0, height / 2.0, 0.0), Vector3(depth, height, 3.0), Vector3(0.0, yaw_deg, 0.0), mat, node_name)
+func _course_wall(base: Vector3, height: float, depth: float, yaw_deg: float, mat: Material, node_name: String, caption: String, width := 3.0) -> void:
+	_box(base + Vector3(0.0, height / 2.0, 0.0), Vector3(depth, height, width), Vector3(0.0, yaw_deg, 0.0), mat, node_name)
 	var label := Label3D.new()
 	label.text = caption
 	label.pixel_size = 0.006

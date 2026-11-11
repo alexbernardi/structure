@@ -2,7 +2,7 @@ extends RefCounted
 
 const Takeover = preload("res://tuning/soft_takeover.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
-const Params = preload("res://movement/movement_params.gd")
+const Params = preload("res://systems/movement_core/movement/movement_params.gd")
 
 
 func test_arm_engages_when_already_aligned(t) -> void:

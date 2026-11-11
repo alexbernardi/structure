@@ -3,7 +3,7 @@
 ## Booleans are switches (a fader at or above half = on).
 extends RefCounted
 
-const ParamSet = preload("res://animation/param_set.gd")
+const ParamSet = preload("res://systems/movement_core/animation/param_set.gd")
 
 const GROUPS := ["playback", "cycle", "feet", "pelvis", "upper", "running", "switches", "view"]
 const RUN_OVERRIDES := ["step_length", "duty_factor", "step_height", "swing_peak", "swing_forward", "midstance_at",

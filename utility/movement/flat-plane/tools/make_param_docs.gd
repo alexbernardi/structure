@@ -3,13 +3,13 @@
 ## Run:  godot --headless --path utility/movement/flat-plane --script res://tools/make_param_docs.gd
 extends SceneTree
 
-const Params = preload("res://movement/movement_params.gd")
+const Params = preload("res://systems/movement_core/movement/movement_params.gd")
 const BodyParams = preload("res://animation/body_params.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
-const RigParams = preload("res://animation/rig_params.gd")
+const RigParams = preload("res://systems/movement_core/animation/rig_params.gd")
 const GraphParams = preload("res://animation/graph_params.gd")
-const LocomotionParams = preload("res://animation/locomotion_params.gd")
-const TraversalParams = preload("res://traversal/traversal_params.gd")
+const LocomotionParams = preload("res://systems/movement_core/animation/locomotion_params.gd")
+const TraversalParams = preload("res://systems/movement_core/traversal/traversal_params.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 
 const OUT := "../../../AGENT-WORKSHOP/DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md"

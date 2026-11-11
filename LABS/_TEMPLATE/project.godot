@@ -1,0 +1,27 @@
+; {{LAB_NAME}} laboratory (scaffolded by `structure.py lab create`; see LABS/README.md).
+; Approved systems are installed under res://systems/<system>/ (read-only, pinned in lab.json).
+
+config_version=5
+
+[application]
+
+config/name="{{LAB_NAME}} laboratory"
+config/description="Structure laboratory: develop one system against approved, pinned shared systems."
+run/main_scene="res://scenes/lab.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+run/flush_stdout_on_print=true
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[filesystem]
+
+import/fbx2gltf/enabled=false
+import/blender/enabled=false
+
+[physics]
+
+common/physics_ticks_per_second=120
+common/physics_interpolation=true

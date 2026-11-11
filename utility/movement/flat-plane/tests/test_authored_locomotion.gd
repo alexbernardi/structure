@@ -1,9 +1,9 @@
 extends RefCounted
 
-const Params = preload("res://animation/locomotion_params.gd")
-const Model = preload("res://animation/locomotion_model.gd")
-const Visual = preload("res://character/authored_mannequin.gd")
-const Animator = preload("res://animation/authored_animation.gd")
+const Params = preload("res://systems/movement_core/animation/locomotion_params.gd")
+const Model = preload("res://systems/movement_core/animation/locomotion_model.gd")
+const Visual = preload("res://systems/movement_core/character/authored_mannequin.gd")
+const Animator = preload("res://systems/movement_core/animation/authored_animation.gd")
 const DT := 1.0 / 120.0
 var _tree: SceneTree
 var _visual

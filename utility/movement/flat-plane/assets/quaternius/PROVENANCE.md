@@ -12,7 +12,7 @@ The GLBs below are byte-for-byte original. The 65-bone reference character is in
 | File | SHA-256 | Use |
 |---|---|---|
 | Downloaded Standard ZIP (not committed) | `cc73fc4e495b82958207316596317a3f40b9fa38065bde1027937452da537724` | Provenance |
-| [UAL1_Standard.glb](UAL1_Standard.glb) | `69591853d817488edaa8fd9bf8fc1d821eaeaf789f8627b3cd23b41c4ed67997` | In-place source/reference |
+| [UAL1_Standard.glb](../../systems/movement_core/assets/quaternius/UAL1_Standard.glb) | `69591853d817488edaa8fd9bf8fc1d821eaeaf789f8627b3cd23b41c4ed67997` | In-place source/reference |
 | [UAL1_Standard_RM.glb](UAL1_Standard_RM.glb) | `be684571ed655a1b892c2c07e6e2aeca053b606c442d34004adaf1d944090d01` | Displacement calibration only; never drives a CharacterBody3D |
 
 ## Initial subset, inspected from the real files
@@ -44,14 +44,16 @@ a 1.01 m hip height, drops unused finger tracks and keeps authentic core tracks.
 constant limb lengths and compatible normalized jog/sprint footstep phases are tested.
 See the [3.0 audit and review checkpoint](../../../../../AGENT-WORKSHOP/DOCUMENTATION/MOVEMENT-LAB-3.md).
 
-# Quaternius Universal Animation Library 2 - paid package (vault only)
+# Quaternius Universal Animation Library 2 - paid package (vault, climb, double jump)
 
 Source: the author's paid UAL2 package, bought from the official itch page by the user and placed in
 `AGENT-WORKSHOP/DOWNLOADS/` on 2026-11-08. That folder is **not committed** (it is git-ignored; it holds a 68 MB
 `.blend`, Unity and Unreal/Godot exports). The package's `License.txt` is the same **CC0 1.0** text as above.
 The free UAL2 Standard ZIP (`4008ea208a604773a2b2177d965f0f5d3195498b5bf838c3f5785d68e95f2a68`) has no vault clip.
 
-The Unreal/Godot export has **134 animations**. Only `SafetyVault` (0.7333 s, 22 frames at 30 fps) is used.
+The Unreal/Godot export has **134 animations**. `SafetyVault` (0.7333 s, 22 frames at 30 fps) is used since 4.0;
+Movement Lab 5.0 adds `ClimbUp_1m` (0.6667 s, mantle and ledge grab) and `DoubleJump` (0.9 s, the spell's air jump)
+in a separate extract, so the verified vault extract is unchanged.
 [extract_glb_clips.py](../../tools/extract_glb_clips.py) copies the source GLB and keeps only the named animation.
 Every node, skin, mesh and material is kept. It verifies that the kept sampler bytes are identical to the source:
 
@@ -61,8 +63,15 @@ Every node, skin, mesh and material is kept. It verifies that the kept sampler b
 |---|---:|---|---|
 | `UAL2.glb` (source, not committed) | 20,717,364 | `ad3ae049c7d3d4846133b59dba6218fdabebe05d3aec646caef6665f6c540684` | In-place source |
 | `UAL2_RM.glb` (source, not committed) | 20,756,380 | `a295ddb1fe171ed225517e88aa1baeaa3939cd00c775b39c75745c3e6a57060d` | Root-motion source |
-| [UAL2_Traversal.glb](UAL2_Traversal.glb) | 720,416 | `2343c92472316f49455afebc46bc049539a4f7cdbbfdf6926947285f7d4b76d7` | Vault pose, retargeted like UAL1 |
+| [UAL2_Traversal.glb](../../systems/movement_core/assets/quaternius/UAL2_Traversal.glb) | 720,416 | `2343c92472316f49455afebc46bc049539a4f7cdbbfdf6926947285f7d4b76d7` | Vault pose, retargeted like UAL1 |
 | [UAL2_Traversal_RM.glb](UAL2_Traversal_RM.glb) | 720,416 | `a2f8b3309e546181b0b3b7b633eed061686d9c3f6de2e91b12cf580c18edef47` | Root path and contact timing only; never moves a body directly |
+| [UAL2_Climb.glb](../../systems/movement_core/assets/quaternius/UAL2_Climb.glb) | 1,518,000 | `f8cad0837c29f613e4f68afbf18cb69b41ad4bf397651af76b0cff608a5fcc7c` | `ClimbUp_1m` + `DoubleJump` (5.0), `ClimbUp_2m` (two-handed pull-up) and `Slide_Start` / `Slide_Loop` / `Slide_Exit` (5.2), `JogToFlip` (5.3 crouch flip) in-place poses; `python tools/extract_glb_clips.py <UAL2.glb> assets/quaternius/UAL2_Climb.glb ClimbUp_1m DoubleJump ClimbUp_2m Slide_Start Slide_Loop Slide_Exit JogToFlip`. Godot imports `Slide_Loop` as `Slide` (loop suffix) |
+
+The climbs' root motion was read from `UAL2_RM.glb` and is recorded as constants: `traversal/mantle_clip.gd` (linear
+1.0 m up, 1.676 m forward) and `traversal/pullup_clip.gd` (ClimbUp_2m's 40 keys); no root-motion extract is committed.
+`JogToFlip` (1.2 s) is used without its root motion: its pelvis track is identical in both exports and already rises
+1.2 m, so the root-motion export's extra 1.2 m root arc is not added; the body's physics jump supplies the height and
+the presentation removes the clip's own rise (`traversal/flip_clip.gd`, measured by `tools/audit_flip_clip.gd`).
 
 Both extracts use the same 65-bone character as UAL1, so the existing `BoneMap` import settings apply unchanged.
 Measured contact timing and root travel are documented in the

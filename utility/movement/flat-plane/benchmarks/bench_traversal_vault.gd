@@ -4,9 +4,9 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/flat_plane.tscn")
-const Visual = preload("res://character/authored_mannequin.gd")
-const Profile = preload("res://traversal/vault_profile.gd")
-const Planner = preload("res://traversal/vault_planner.gd")
+const Visual = preload("res://systems/movement_core/character/authored_mannequin.gd")
+const Profile = preload("res://systems/movement_core/traversal/vault_profile.gd")
+const Planner = preload("res://systems/movement_core/traversal/vault_planner.gd")
 const DT := 1.0 / 120.0
 const TICKS := 900
 const WARMUP := 60
@@ -67,7 +67,9 @@ func bench_vault_course_ticks(b) -> void:
 			if i % 240 == 0:
 				await tree.physics_frame
 			var start := Time.get_ticks_usec()
-			scene.simulate_tick({"move": Vector2(0, 1), "yaw": -PI / 2.0}, DT)
+			# 5.0: vaults are intentional; press Space on the first tick one is offered, as the tests' skilled player.
+			var offered: bool = not scene.vault.opportunity.is_empty() and scene.vault.phase == scene.vault.Phase.IDLE
+			scene.simulate_tick({"move": Vector2(0, 1), "yaw": -PI / 2.0, "jump_pressed": offered, "jump_held": offered}, DT)
 			var simulated := Time.get_ticks_usec() - start
 			scene._process(DT)
 			scene.authored_visual.skeleton.notification(Skeleton3D.NOTIFICATION_UPDATE_SKELETON)

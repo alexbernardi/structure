@@ -3,7 +3,7 @@
 ## Pure measurement code: used by tests/test_baseline_behavior.gd and tools/audit_baseline.gd.
 extends RefCounted
 
-const Core = preload("res://movement/movement_core.gd")
+const Core = preload("res://systems/movement_core/movement/movement_core.gd")
 
 
 ## One flat-floor simulation. Returns {pos, core} after `seconds`. `script` is a Callable(tick, core) -> input dict.

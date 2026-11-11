@@ -9,7 +9,7 @@ extends SceneTree
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Presets = preload("res://tuning/preset_store.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
-const RigParams = preload("res://animation/rig_params.gd")
+const RigParams = preload("res://systems/movement_core/animation/rig_params.gd")
 const GraphParams = preload("res://animation/graph_params.gd")
 
 const BINDINGS_PATH := "res://config/gait_bindings.json"

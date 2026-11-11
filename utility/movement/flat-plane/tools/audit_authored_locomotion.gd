@@ -2,8 +2,8 @@
 extends SceneTree
 
 const Reference = preload("res://scenes/animation_reference.tscn")
-const Animator = preload("res://animation/authored_animation.gd")
-const Params = preload("res://animation/locomotion_params.gd")
+const Animator = preload("res://systems/movement_core/animation/authored_animation.gd")
+const Params = preload("res://systems/movement_core/animation/locomotion_params.gd")
 const DT := 1.0 / 120.0
 const SPEEDS := [0.0, 1.0, 2.0, 4.0, 6.0, 8.0, 12.0]
 var output := ""

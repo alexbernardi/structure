@@ -24,9 +24,11 @@ Agents on other machines: clone, run `setup`, then pull before starting a task a
 | Multiplayer | dedicated authoritative ENet server; login handshake with protocol check; validated requests; cheat-resistant (tested); players see each other; 30 Hz tick |
 | Persistence | world saved on every change (atomic, backed up), schema-checked on load, heartbeat lease, snapshots with guarded restore |
 | Containers | server image (unique tags + build manifest), compose environments `dev`, `iso-a`, `iso-b` on localhost, graceful stop, healthcheck, tools image |
-| Systems | room template + `movement` room (tests, benchmarks, golden fixture) integrated through the gateway |
+| Systems | room template + `movement` room (tests, benchmarks, golden fixture) integrated through the gateway; **approved package system `movement_core` 1.0.0** (the Movement Lab's movement character, installed in the sandbox) |
+| Laboratories | [laboratory pipeline](PROTOCOLS/LABORATORY-PIPELINE.md): `lab create / sync / validate / promote` on git worktrees, pinned system versions, [LABS/](../LABS/README.md) (task [0014](TASKS/0014-movement-promotion-pipeline.md)) |
 | Assets | Blender 5.0.1 pipeline example `resource_stone` (spec -> GLB -> validation -> Godot), reproducible bytes |
 | Quality | 8 automated suites, performance baselines, structured logs, static `check` |
+| Traversal (5.0, branch `benchmark/opus-traversal`) | [Movement Lab 5.0](DOCUMENTATION/MOVEMENT-LAB-5.md), task [0007](TASKS/0007-unified-traversal.md): vaults only on Space inside a visible interaction region (early press arms the 4.0 approach, late press fits a shorter stride); one traversal controller picks vault > mantle > jump on the ground and ledge grab > air jump > buffer in the air, with chained presses; authored `ClimbUp_1m` mantle / ledge grab (motion-warped) and `DoubleJump`; capability layer (unit-bearing attributes, add/mul/set/cap/floor modifiers, grants/revokes, stamina/energy/heat/mana) with human, cybernetic legs, timed spell and injury (keys 1-4, `--profile=`); course lanes D-G (`lane_d` ...). **5.1** (task [0008](TASKS/0008-traversal-refinement.md)): one authorization gate (no vault from contact, held Space or stale presses; a missed window is a jump), airborne catch -> mantle / climb-over (reach, grip strength, irregular tops), mirrored authored vault chosen by face angle and stride with angle turn and speed lean, lane F test bar solvable, lane H. **5.2** (task [0009](TASKS/0009-hang-angles-slide.md)): jump into a high wall to catch and hang (no press), one Space pulls up (authored two-handed `ClimbUp_2m`); fences and sharp angles climbed square to the face keeping momentum; Ctrl at speed slides (momentum, slopes, steering, 0.8 m collider, authored slide clips); lanes I-L. **5.3** (task [0010](TASKS/0010-crouch-flip.md)): Space while crouched or sliding is a front flip (authored `JogToFlip`, physics jump keeping momentum, turn spread over the real airtime, refused without headroom); lane M. **5.4** (task [0011](TASKS/0011-hang-reach-shimmy.md)): catch reach from the body (stand height x 1.306) and the jump (a human catches 3.0 m), hands placed on the lip by rays (palm down, fingers over), fixed hand mesh, dangling hang with pendulum swing and lagging legs (procedural), shimmy left / right along the ledge (stops at ends); lane N. **5.5** (task [0012](TASKS/0012-skeleton-ik-corners.md)): K skeleton view (real final pose through a 40 % body) and F10 contact markers; foot IK on real ground (steps, slopes, stairs, pelvis drop, no sinking); braced climber hang (feet on the wall, knees up); hanging round outside and inside corners (arc, asymmetric grip, refusals); mantle hand planted; lanes O, P. **5.6** (task [0013](TASKS/0013-climber-hang-shuffle.md)): the braced hang as a climber's efficient position (arms straight and square, hips in, feet staggered with toes on the face, knees turned out); a coordinated hanging shuffle (lead hand, lead foot, trail hand, trail foot; no body bob); the 5.5 leg jitter fixed; shimmy 0.6 m/s. Awaiting user playtest (KI-024) |
 | Movement utility | [Movement Lab 4.0](DOCUMENTATION/MOVEMENT-LAB-4.md): one authored running vault (CC0 Quaternius UAL2 `SafetyVault`) on top of the user-approved [3.0](DOCUMENTATION/MOVEMENT-LAB-3.md) authored Quaternius running. Run -> Anticipate -> Vault -> Land -> Run, with collision-safe travel, support-hand contact and repaired first-sprint entry phase. Vault lanes A/B/C (T / Shift+T), F10 overlay, V side view, `--trial=vault` A/B and four Traversal MIDI controls. 6 m/s run, 12 m/s Shift approach (vault travel capped at 8 m/s); no gameplay walking; physics unchanged without a vault. Retained checks: full regression 499/499, vault/MIDI 17/17, Playground 6/6; run CPU checks without competing lab instances (KI-023). Native side/orbit captures verified; human visual/MIDI approval remains open (KI-020). Legacy gait, F9 3.0 A/B, [2.0 treadmill](DOCUMENTATION/MOVEMENT-LAB-2.md), editors, presets and circling benchmark preserved |
 
 Verified and unverified items, test results and open problems: [TASKS/0001-bootstrap.md](TASKS/0001-bootstrap.md).
@@ -37,7 +39,9 @@ Verified and unverified items, test results and open problems: [TASKS/0001-boots
 |---|---|
 | `AGENT-WORKSHOP/` | this headquarters: [PROTOCOLS](PROTOCOLS/), [BLUEPRINTS](BLUEPRINTS/README.md) (templates), [CONCEPTS](CONCEPTS/PILLARS.md), [GAMEPLAY-MAPS](GAMEPLAY-MAPS/FIRST-LOOP.md), [PLANNING](PLANNING/), [TASKS](TASKS/README.md), [DECISIONS](DECISIONS/README.md), [DOCUMENTATION](DOCUMENTATION/), [INVENTORY](INVENTORY/), [RESEARCH](RESEARCH/) (sourced technique and asset reviews); `DOWNLOADS/` holds user-supplied originals and is git-ignored |
 | `SANDBOX/` | the playable Godot project, configuration notes, scenarios ([README](../SANDBOX/README.md)) |
-| `SYSTEM-ROOMS/` | isolated system laboratories ([README](../SYSTEM-ROOMS/README.md)) |
+| `SYSTEM-ROOMS/` | isolated system rooms and package rooms (approved, versioned systems) ([README](../SYSTEM-ROOMS/README.md)) |
+| `LABS/` | laboratory projects on `lab/<name>` branches, scaffolded from `LABS/_TEMPLATE` ([README](../LABS/README.md)) |
+| `utility/` | standalone utilities; `utility/movement/flat-plane` is the movement laboratory and the workbench of `movement_core` |
 | `COMMON-ASSETS/` | asset library with metadata and manifest ([README](../COMMON-ASSETS/README.md)) |
 | `PIPELINES/` | Blender -> GLB -> validation -> Godot ([README](../PIPELINES/README.md)) |
 | `INFRASTRUCTURE/` | toolchain pins, Docker, environments, snapshots ([README](../INFRASTRUCTURE/README.md)) |
@@ -78,14 +82,28 @@ python TOOLS/cli/structure.py versions          # what is running / installed
 Controls: WASD, mouse, Space, E (pick up / deposit), Q (drop), Esc (free mouse), F3 (metrics). All commands:
 [DOCUMENTATION/COMMANDS.md](DOCUMENTATION/COMMANDS.md).
 
-## 7. Create a new system room
+## 7. Approved systems and laboratories
+
+- **Approved systems** live in `main` as package rooms with released versions: today
+  [`movement_core` 1.0.0](../SYSTEM-ROOMS/movement_core/README.md) (interface: [CONTRACT](../SYSTEM-ROOMS/movement_core/CONTRACT.md),
+  architecture: [MOVEMENT-CORE.md](DOCUMENTATION/MOVEMENT-CORE.md)). Its source of truth is its workbench,
+  `utility/movement/flat-plane/systems/movement_core/`; every other project has a pinned, read-only copy at
+  `res://systems/movement_core/`.
+- **New work on a system happens in a laboratory**: `python TOOLS/cli/structure.py lab create <name> --systems movement_core`
+  (own branch and worktree from `main`), then `lab validate`, `lab sync`, `lab promote` -
+  [PROTOCOLS/LABORATORY-PIPELINE.md](PROTOCOLS/LABORATORY-PIPELINE.md). Next planned laboratory: combat and weapons.
+- **Do not modify without the user's authorization**: `main` (only through `lab promote` when asked), other agents'
+  branches (e.g. `copilot-fusion`, `benchmark/*` other than your own), installed system copies (`*/systems/<room>/`),
+  release tags, and the remote (`git push` is the user's step).
+
+## 8. Create a new system room
 
 1. Write a short proposal ([BLUEPRINTS/FEATURE-PROPOSAL.md](BLUEPRINTS/FEATURE-PROPOSAL.md)); get approval if it is architectural.
 2. `python TOOLS/cli/structure.py room new <name>` - scaffolds `SYSTEM-ROOMS/<name>/` from `_TEMPLATE` (tests pass immediately).
 3. Fill `SPEC.md`, `CONTRACT.md`, `room.json` (benchmark targets!), implement in `src/`, test in `tests/`.
 4. `room test <name>`, `room bench <name>`; open `SYSTEM-ROOMS/<name>/project.godot` in the editor for experiments.
 
-## 8. Run tests and benchmarks
+## 9. Run tests and benchmarks
 
 ```powershell
 python TOOLS/cli/structure.py check                       # seconds; run before every commit
@@ -97,16 +115,17 @@ python TOOLS/cli/structure.py bench server --docker --bots 8 --duration 30
 Suites and how to write tests: [DOCUMENTATION/TESTING.md](DOCUMENTATION/TESTING.md). Current numbers:
 [INVENTORY/PERFORMANCE-BASELINES.md](INVENTORY/PERFORMANCE-BASELINES.md).
 
-## 9. Propose and integrate a change
+## 10. Propose and integrate a change
 
 1. Follow the [workshop protocol](PROTOCOLS/WORKSHOP-PROTOCOL.md): task note in `TASKS/`, plan with acceptance criteria.
 2. Architectural changes: ADR ([BLUEPRINTS/ADR.md](BLUEPRINTS/ADR.md)) + user approval **before** implementing.
 3. Systems: `room promote <name>` - the [integration gateway](PROTOCOLS/INTEGRATION-GATEWAY.md) checks contract, tests,
-   benchmarks, dependencies, runs the sandbox suites and rolls back on failure.
+   benchmarks, dependencies, runs the sandbox suites and rolls back on failure. Laboratory branches reach `main`
+   through `lab promote` ([laboratory pipeline](PROTOCOLS/LABORATORY-PIPELINE.md)).
 4. Wire/save format changes: bump versions per [PROTOCOLS/VERSIONING.md](PROTOCOLS/VERSIONING.md); snapshot worlds first.
 5. Record results, decisions and open issues; update section 2 of this page.
 
-## 10. Where to find things
+## 11. Where to find things
 
 | Need | Go to |
 |---|---|
@@ -116,5 +135,7 @@ Suites and how to write tests: [DOCUMENTATION/TESTING.md](DOCUMENTATION/TESTING.
 | Conventions (code, units, assets, git) | [PROTOCOLS/CONVENTIONS.md](PROTOCOLS/CONVENTIONS.md) |
 | The gameplay loop mapped to code and tests | [GAMEPLAY-MAPS/FIRST-LOOP.md](GAMEPLAY-MAPS/FIRST-LOOP.md) |
 | Plans | [PLANNING/BOOTSTRAP-PLAN.md](PLANNING/BOOTSTRAP-PLAN.md), [PLANNING/MILESTONES.md](PLANNING/MILESTONES.md) |
-| Movement Lab (MIDI-tuned movement, authored animation, traversal, treadmill lab): status, launch, architecture | [4.0 vault](DOCUMENTATION/MOVEMENT-LAB-4.md), [3.0 authored running](DOCUMENTATION/MOVEMENT-LAB-3.md), [2.0 treadmill](DOCUMENTATION/MOVEMENT-LAB-2.md), [parameters and MIDI banks](DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md), tasks [0004](TASKS/0004-movement-lab-2.md), [0005](TASKS/0005-movement-lab-3.md), [0006](TASKS/0006-fluid-traversal-vault.md), [traversal research](RESEARCH/fluid-traversal.md) |
+| Movement Core (the approved movement character): use it, its interface, its versions | [MOVEMENT-CORE.md](DOCUMENTATION/MOVEMENT-CORE.md), [CONTRACT](../SYSTEM-ROOMS/movement_core/CONTRACT.md), [room README](../SYSTEM-ROOMS/movement_core/README.md) |
+| Laboratories: create, sync, promote, roll back | [PROTOCOLS/LABORATORY-PIPELINE.md](PROTOCOLS/LABORATORY-PIPELINE.md), [ADR-0010](DECISIONS/ADR-0010-shared-systems-and-laboratories.md) |
+| Movement Lab (MIDI-tuned movement, authored animation, traversal, treadmill lab): status, launch, architecture | [5.0 unified traversal](DOCUMENTATION/MOVEMENT-LAB-5.md), [4.0 vault](DOCUMENTATION/MOVEMENT-LAB-4.md), [3.0 authored running](DOCUMENTATION/MOVEMENT-LAB-3.md), [2.0 treadmill](DOCUMENTATION/MOVEMENT-LAB-2.md), [parameters and MIDI banks](DOCUMENTATION/MOVEMENT-LAB-PARAMETERS.md), tasks [0004](TASKS/0004-movement-lab-2.md), [0005](TASKS/0005-movement-lab-3.md), [0006](TASKS/0006-fluid-traversal-vault.md), [traversal research](RESEARCH/fluid-traversal.md) |
 | Asset inventory | [INVENTORY/ASSETS.md](INVENTORY/ASSETS.md) |

@@ -9,8 +9,11 @@ of truth for agent rules; `.github/copilot-instructions.md` only points here.
 1. **Follow the workshop protocol** ([AGENT-WORKSHOP/PROTOCOLS/WORKSHOP-PROTOCOL.md](AGENT-WORKSHOP/PROTOCOLS/WORKSHOP-PROTOCOL.md)):
    enter the workshop -> gather supplies -> map the work -> prepare a plan -> execute -> validate -> return and record.
 2. **Plan before changing anything.** Write a short task note in `AGENT-WORKSHOP/TASKS/` (acceptance criteria + how you will validate).
-3. **Complex systems are built in isolation** in `SYSTEM-ROOMS/<system>/` and enter the sandbox only through the
-   [integration gateway](AGENT-WORKSHOP/PROTOCOLS/INTEGRATION-GATEWAY.md). Never edit `SANDBOX/godot/systems/*` by hand.
+3. **Complex systems are built in isolation** in `SYSTEM-ROOMS/<system>/` or a laboratory (`lab create`, its own branch
+   and worktree) and reach `main` only through the [integration gateway](AGENT-WORKSHOP/PROTOCOLS/INTEGRATION-GATEWAY.md)
+   and the [laboratory pipeline](AGENT-WORKSHOP/PROTOCOLS/LABORATORY-PIPELINE.md). Never edit an installed system copy
+   (`SANDBOX/godot/systems/*`, `LABS/*/systems/*`) by hand; use approved systems (today `movement_core`) only through
+   their `CONTRACT.md`. Do not modify `main`, other agents' branches, release tags or the remote without authorization.
 4. **Ask the user before substantial architectural changes**: new external dependencies, engine/tool pins, network
    or persistence model, repository layout, anything that invalidates an [ADR](AGENT-WORKSHOP/DECISIONS/README.md).
    Propose with `AGENT-WORKSHOP/BLUEPRINTS/ADR.md` first.
@@ -31,6 +34,8 @@ python TOOLS/cli/structure.py setup        # pinned Godot download + project imp
 python TOOLS/cli/structure.py check        # fast static checks (pins, envs, system drift, asset hashes, secrets)
 python TOOLS/cli/structure.py test         # all suites; or: test unit multiplayer ...
 python TOOLS/cli/structure.py play         # local dedicated server + game window
+python TOOLS/cli/structure.py lab create <name> --systems movement_core   # a laboratory from main
+python TOOLS/cli/structure.py lab validate # / lab sync / lab promote <name> [--merge]
 ```
 
 Full reference: [AGENT-WORKSHOP/DOCUMENTATION/COMMANDS.md](AGENT-WORKSHOP/DOCUMENTATION/COMMANDS.md).

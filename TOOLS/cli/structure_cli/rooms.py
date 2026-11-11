@@ -3,6 +3,9 @@
 A room is a tiny standalone Godot project (project.godot + src/ tests/ benchmarks/ ...) described by
 room.json. `promote` copies a validated room's src/ into SANDBOX/godot/systems/<name>/ and records the
 source hash in INTEGRATION.json; sandbox copies must never be edited directly (drift is detected).
+
+Package rooms (room.json "package", ADR-0010) keep their source in a workbench laboratory instead of src/; their
+tests and benchmarks run there and promotion installs a pinned copy into every declared consumer (packages.py).
 """
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ import re
 import shutil
 from pathlib import Path
 
-from . import buildinfo, godot, paths
+from . import buildinfo, godot, packages, paths
 
 TEMPLATE = paths.SYSTEM_ROOMS / "_TEMPLATE"
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
@@ -81,6 +84,8 @@ def new_room(name: str, root: Path = paths.SYSTEM_ROOMS) -> Path:
 # ---------------------------------------------------------------------------------------------- tests
 
 def test_room(name: str, root: Path = paths.SYSTEM_ROOMS, echo: bool = True, experiments: bool = False) -> tuple[int, dict | None]:
+    if root == paths.SYSTEM_ROOMS and packages.is_package(name):
+        return packages.run_workbench(name, "test", echo=echo)
     project = room_dir(name, root)
     godot.import_project(project)
     report = paths.RUNTIME / "test-results" / f"room-{name}-tests.json"
@@ -90,10 +95,13 @@ def test_room(name: str, root: Path = paths.SYSTEM_ROOMS, echo: bool = True, exp
 
 def bench_room(name: str, root: Path = paths.SYSTEM_ROOMS, echo: bool = True) -> dict:
     """Runs benchmarks and compares them with room.json targets (measured, never theoretical)."""
-    project = room_dir(name, root)
-    godot.import_project(project)
-    report = paths.RUNTIME / "test-results" / f"room-{name}-bench.json"
-    code, data = godot.run_gd_tests(project, "bench", ["res://benchmarks"], report, echo=echo)
+    if root == paths.SYSTEM_ROOMS and packages.is_package(name):
+        code, data = packages.run_workbench(name, "bench", echo=echo)
+    else:
+        project = room_dir(name, root)
+        godot.import_project(project)
+        report = paths.RUNTIME / "test-results" / f"room-{name}-bench.json"
+        code, data = godot.run_gd_tests(project, "bench", ["res://benchmarks"], report, echo=echo)
     targets = load_room(name, root).get("benchmarks", {})
     results = {b["name"]: b for b in (data or {}).get("benchmarks", [])}
     problems = [] if code == 0 else ["benchmark run failed"]
@@ -115,8 +123,9 @@ def contract_problems(name: str, root: Path = paths.SYSTEM_ROOMS) -> list[str]:
     for key in ("name", "version", "status", "public_interface", "dependencies", "integration", "benchmarks"):
         if key not in room:
             problems.append(f"room.json: missing '{key}'")
+    base = packages.source_dir(name) if root == paths.SYSTEM_ROOMS and "package" in room else folder
     for rel in room.get("public_interface", []):
-        if not (folder / rel).is_file():
+        if not (base / rel).is_file():
             problems.append(f"room.json: public interface file {rel} does not exist")
     for doc, sections in REQUIRED_SECTIONS.items():
         path = folder / doc
@@ -134,6 +143,16 @@ def contract_problems(name: str, root: Path = paths.SYSTEM_ROOMS) -> list[str]:
 
 
 def integration_status(name: str) -> dict:
+    if packages.is_package(name):
+        st = packages.status(name)
+        sandbox = next((c for c in st["consumers"] if c["project"] == "SANDBOX/godot"), None)
+        return {
+            "room": name, "integrated": sandbox is not None, "room_version": st["version"],
+            "integrated_version": sandbox["version"] if sandbox else None,
+            "drift": bool(sandbox and sandbox["drift"]),
+            "pending": bool(sandbox and not sandbox["matches_source"]),
+            "room_sha256": st["source_sha256"], "sandbox_sha256": None, "consumers": st["consumers"],
+        }
     target = target_dir(name)
     record_path = target / "INTEGRATION.json"
     record = json.loads(record_path.read_text(encoding="utf-8")) if record_path.is_file() else None
@@ -171,6 +190,8 @@ def promote(name: str, run_sandbox_suites, dry_run: bool = False) -> dict:
           ", ".join(f"{r['name']}={r['us_per_op']:.3f}us" for r in bench["results"]))
     deps = room.get("dependencies")
     check("7. dependencies declared", isinstance(deps, dict), json.dumps(deps))
+    if "package" in room:
+        return _promote_package(name, room, run_sandbox_suites, dry_run, checks, check, bench)
     status = integration_status(name)
     check("sandbox copy has not been edited directly", not status["drift"],
           "drift detected: re-promote deliberately or move the edits into the room" if status["drift"] else "")
@@ -207,3 +228,33 @@ def promote(name: str, run_sandbox_suites, dry_run: bool = False) -> dict:
         check("rolled back to the previous integrated copy", True)
         return {"ok": False, "checks": checks, "promoted": False}
     return {"ok": True, "checks": checks, "promoted": True, "record": record}
+
+
+def _promote_package(name: str, room: dict, run_sandbox_suites, dry_run: bool, checks: list, check, bench: dict) -> dict:
+    """Package room: install the workbench version into every declared consumer, then run the sandbox gates."""
+    st = packages.status(name)
+    drifted = [c["project"] for c in st["consumers"] if c["drift"]]
+    check("consumer copies have not been edited directly", not drifted, ", ".join(drifted))
+    if not all(c["ok"] for c in checks) or dry_run:
+        return {"ok": False if not all(c["ok"] for c in checks) else None, "checks": checks, "promoted": False}
+    stamp = buildinfo.utc_stamp()
+    backups = {}
+    for consumer in room.get("consumers", []):
+        target = paths.REPO / consumer / packages.mount(name)
+        if target.exists():
+            backups[consumer] = paths.RUNTIME / "promotions" / f"{name}-{stamp}" / consumer.replace("/", "_")
+            shutil.copytree(target, backups[consumer])
+        record = packages.install(name, paths.REPO / consumer)
+        check(f"installed {name} {record['version']} into {consumer}", True, record["sha256"][:12])
+    check("8. rollback path recorded", True, f"previous copies in .runtime/promotions/{name}-{stamp}/, release tags, git history")
+    gates_ok = run_sandbox_suites()
+    check("3-5. sandbox gameplay, multiplayer authority and persistence suites pass", gates_ok)
+    if not gates_ok:
+        for consumer in room.get("consumers", []):
+            target = paths.REPO / consumer / packages.mount(name)
+            shutil.rmtree(target, ignore_errors=True)
+            if consumer in backups:
+                shutil.copytree(backups[consumer], target)
+        check("rolled back every consumer to its previous copy", True)
+        return {"ok": False, "checks": checks, "promoted": False}
+    return {"ok": True, "checks": checks, "promoted": True}

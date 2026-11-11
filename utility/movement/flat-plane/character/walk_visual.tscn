@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://character/character_visual.gd" id="1_i26vn"]
+[ext_resource type="Script" path="res://systems/movement_core/character/character_visual.gd" id="1_i26vn"]
 [ext_resource type="AnimationNodeBlendTree" path="res://animation/walk_tree.tres" id="2_kyeq5"]
 [ext_resource type="Script" path="res://animation/walk_animation.gd" id="3_rp1xn"]
 

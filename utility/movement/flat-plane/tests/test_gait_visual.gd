@@ -3,7 +3,7 @@ extends RefCounted
 ## The gait pose through the real skeleton: the model plans ankle positions, the visual poses bones from angles; these
 ## tests close the loop by reading the bones back.
 
-const Visual = preload("res://character/character_visual.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const GaitModel = preload("res://animation/gait_model.gd")
 
