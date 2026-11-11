@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import buildinfo, packages, paths, toolchain
+from . import buildinfo, godot, packages, paths, toolchain
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
 TEMPLATE = paths.LABS / "_TEMPLATE"
@@ -134,6 +134,12 @@ def init(name: str, systems: list[str], base_sha: str) -> Path:
     """Inside the new lab worktree: scaffold LABS/<name>/ from LABS/_TEMPLATE, pin the systems, commit."""
     folder = lab_folder(name)
     pins = scaffold(name, systems, folder)
+    # Import once so Godot writes its .uid files now and they are part of the first commit (else the fresh lab looks
+    # dirty after its first run and `lab sync` / `lab promote` refuse).
+    try:
+        godot.import_project(folder)
+    except Exception as exc:  # Godot missing: the lab still works; the .uid files appear on its first import
+        print(f"  (not imported: {exc})")
     lab = {"name": name, "branch": branch(name), "base": base_sha, "created": buildinfo.utc_now(), "systems": pins,
            "develops": [], "note": "Systems listed in `develops` have their workbench in this lab; the rest are pinned."}
     (folder / "lab.json").write_text(json.dumps(lab, indent=2) + "\n", encoding="utf-8")
