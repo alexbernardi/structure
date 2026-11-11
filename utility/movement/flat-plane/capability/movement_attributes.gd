@@ -29,7 +29,7 @@ const DEFS: Array[Dictionary] = [
 		"meaning": "Furthest a face may be from the body's surface for an airborne catch (horizontal grab reach)"},
 	{"id": "grip_strength", "unit": "m/s", "min": 0.0, "max": 30.0, "default": 7.0,
 		"meaning": "Fastest fall a catch can stop: falling faster than this, the hands cannot hold the ledge"},
-	{"id": "shimmy_speed", "unit": "m/s", "min": 0.1, "max": 3.0, "default": 0.9,
+	{"id": "shimmy_speed", "unit": "m/s", "min": 0.1, "max": 3.0, "default": 0.6,
 		"meaning": "Fastest the hanging body moves sideways along a ledge, hand over hand (stick left / right)"},
 	{"id": "mantle_strength", "unit": "x", "min": 0.3, "max": 3.0, "default": 1.0,
 		"meaning": "Climb power: a 1.1 m mantle takes the authored 0.67 s at 1.0; taller climbs take longer"},

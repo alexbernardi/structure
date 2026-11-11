@@ -2,8 +2,35 @@
 
 Branch: `benchmark/opus-traversal`. Tasks: [0007](../TASKS/0007-unified-traversal.md) (5.0),
 [0008](../TASKS/0008-traversal-refinement.md) (5.1), [0009](../TASKS/0009-hang-angles-slide.md) (5.2),
-[0010](../TASKS/0010-crouch-flip.md) (5.3), [0011](../TASKS/0011-hang-reach-shimmy.md) (5.4), [0012](../TASKS/0012-skeleton-ik-corners.md) (5.5). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
+[0010](../TASKS/0010-crouch-flip.md) (5.3), [0011](../TASKS/0011-hang-reach-shimmy.md) (5.4), [0012](../TASKS/0012-skeleton-ik-corners.md) (5.5),
+[0013](../TASKS/0013-climber-hang-shuffle.md) (5.6). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
 [3.0 authored locomotion](MOVEMENT-LAB-3.md); both are preserved.
+
+## 5.6: the climber's hang, the hanging shuffle, no leg jitter
+
+Task [0013](../TASKS/0013-climber-hang-shuffle.md). From the user's playtest with a rock-climber reference.
+
+- **The climber's efficient position (braced).** Arms straight and alike: the shoulders hang a straight arm below the
+  lip 0.38 m from the face, squared to the hands (the authored grip frame twists them; braced they line up level with
+  the hands) at the height that still reaches the shuffle's widest spread. The torso pitches about the shoulders so the
+  hip joints sit 0.30 m from the face: in close, the weight on the feet; if the head or chest would touch the face the
+  shoulders lean out, not the hips. The feet are staggered (the left knee bent to 105 degrees, the right to 150), each
+  on its own wall contact below its hip with the toes on the face (1 cm off), the foot pointing into the wall, turned
+  out 18 degrees, heel 12 degrees low (oriented from the mannequin's sole geometry); each knee goes forward over its
+  foot as far as it clears the face by 9 cm and turns out to its own side beyond that. A foot that finds or loses the
+  wall blends (no snapping). Where nothing is in reach (under a shelf) it dangles as before.
+- **The hanging shuffle.** One gait cycle per 0.32 m of travel along the lip: lead hand, lead foot, trail hand, trail
+  foot (the lead side is the side of travel). Each limb moves once a cycle to where it is centred on its place over the
+  cycle - the lead hand reaches ahead, the trail hand gathers up to it - never past the real ledge end (the reach
+  shortens until the top is under the hand), and never both hands at once (a turn that comes while the other hand is
+  moving waits for it). Limbs trailing too far move out of turn; once the stick is released they re-centre one at a
+  time. The body hangs from the hands' places on the lip (not a lifted hand), so it no longer bobs. Default
+  `shimmy_speed` 0.6 m/s (was 0.9: four limb moves every 0.36 s was a scramble).
+- **Leg jitter (fixed).** The 5.5 brace re-stepped the leading foot every 0.2 s (a 5 Hz in-out pump off the wall) and
+  never re-planted the other foot, which then hung stretched toward its old place and snapped 12 cm when the shimmy
+  stopped; the body bobbed about 3 cm with each hand move (it hung from the lifted hand) and up to 12 cm where a spread
+  hand was out of reach. Measured after: no foot reversal, largest frame move 3.4 cm, the hips level within 1 mm.
+- Tools: `capture_traversal.gd --view=body` (the whole climber in profile) and `--view=legs` (hips and feet on the wall).
 
 ## 5.5: skeleton view, foot IK on real ground, braced hang, corners
 
@@ -22,7 +49,7 @@ Task [0012](../TASKS/0012-skeleton-ik-corners.md).
   own level, pelvis -0.20 m); planted feet tilt to the surface (stance-weighted, up to 35 degrees); finally no sole
   corner may sit below its own ground (a sole across a step edge is held by the higher tread). On flat ground it
   changes nothing.
-- **Braced hang.** The feet come up onto the wall like a climber's: each foot on a real wall contact found by a ray
+- **Braced hang** (posture and foot stepping replaced in 5.6). The feet come up onto the wall like a climber's: each foot on a real wall contact found by a ray
   0.65 m below its hip, ankle 8 cm off the wall, knees up toward the chest; the brace comes in just after the catch,
   steadies the swing out from the wall and holds the shoulders 8 cm further out; feet move one at a time along the
   wall while shimmying and re-plant on the new wall round a corner. Where there is no wall within a leg's reach

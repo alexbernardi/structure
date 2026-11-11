@@ -4,7 +4,8 @@
 ## Cases: mantle (lane E 2.5 m block), grab (lane E 1.9 m ledge, jump + hold), vault (lane A first wall),
 ##        late (lane A, late press), cyber (lane A 1.6 m wall with the cybernetic legs), ... hang, fence, slide (5.2),
 ##        flip (lane M: a standing crouch flip), slideflip (lane K: a flip out of a sprint slide) (5.3),
-##        hang3 (lane N: catch the 3.0 m wall, hang, shimmy right to its end) (5.4); --view=back|side|close|profile;
+##        hang3 (lane N: catch the 3.0 m wall, hang, shimmy right to its end) (5.4);
+##        --view=back|side|close|profile, body|legs (5.6: the whole climber in profile; the hips and feet on the wall);
 ##        --skeleton: the 5.5 skeleton view (stick skeleton through the body at 40 % opacity)
 extends SceneTree
 
@@ -202,8 +203,10 @@ func _frame() -> void:
 		var focus: Vector3 = scene.body.global_position + Vector3(0.6, 1.9, 0.0)
 		if scene.traversal.mantle.hanging():
 			var p: Dictionary = scene.traversal.mantle.presentation(1.0)
-			focus = (p.edge as Vector3) + Vector3.DOWN * {"close": 0.25, "side": 0.75, "profile": 0.15}.get(view, 0.9)
-		var offset: Vector3 = {"profile": Vector3(-0.15, 0.05, 1.1), "side": Vector3(-0.35, 0.15, 2.4), "back": Vector3(-3.6, 0.4, 0.6), "close": Vector3(-0.75, 0.55, 0.85)}.get(view, Vector3(-0.35, 0.15, 2.4))
+			focus = (p.edge as Vector3) + Vector3.DOWN * {"close": 0.25, "side": 0.75, "profile": 0.15, "body": 1.0, "legs": 1.3}.get(view, 0.9)
+		# body = the whole climber in profile; legs = the hips and feet on the wall from below and to the side
+		var offset: Vector3 = {"profile": Vector3(-0.15, 0.05, 1.1), "side": Vector3(-0.35, 0.15, 2.4), "back": Vector3(-3.6, 0.4, 0.6),
+			"close": Vector3(-0.75, 0.55, 0.85), "body": Vector3(-0.6, 0.0, 3.2), "legs": Vector3(-1.6, -0.3, 1.6)}.get(view, Vector3(-0.35, 0.15, 2.4))
 		if scene.traversal.mantle.hanging():
 			# offsets are given for a wall facing +X; they turn with the wall (round a corner)
 			offset = Basis(Vector3.UP, Vector3.RIGHT.signed_angle_to(scene.traversal.mantle.plan.direction, Vector3.UP)) * offset

@@ -467,7 +467,7 @@ func _shimmy(body, dt: float) -> void:
 	if not _turn.is_empty():
 		_advance_turn(dt)
 		return
-	shimmy_velocity = move_toward(shimmy_velocity, shimmy_wish * _attr("shimmy_speed", 0.9), SHIMMY_ACCEL * dt)
+	shimmy_velocity = move_toward(shimmy_velocity, shimmy_wish * _attr("shimmy_speed", 0.6), SHIMMY_ACCEL * dt)
 	if absf(shimmy_velocity) < 1e-4:
 		return
 	var right: Vector3 = plan.direction.cross(Vector3.UP)
@@ -545,7 +545,7 @@ func _try_corner(body, space: PhysicsDirectSpaceState3D, s: float) -> String:
 			return "corner_blocked"
 	var length: float = absf(sweep) * (r0.length() + r1.length()) * 0.5
 	_turn = {"pivot": pivot, "r0": r0, "r1": r1, "sweep": sweep, "d0": d, "d1": d_new, "u": 0.0,
-		"time": maxf(CORNER_MIN_TIME, length / maxf(_attr("shimmy_speed", 0.9), 0.3)), "e0": e0, "e1": e1}
+		"time": maxf(CORNER_MIN_TIME, length / maxf(_attr("shimmy_speed", 0.6), 0.3)), "e0": e0, "e1": e1}
 	corner = {"at": at, "d_old": d, "d_new": d_new, "side": s, "kind": found.kind, "x": -s * e0}
 	shimmy_block = ""
 	return ""
@@ -570,7 +570,7 @@ func _advance_turn(dt: float) -> void:
 	plan["direction"] = d0.rotated(Vector3.UP, d0.signed_angle_to(_turn.d1, Vector3.UP) * w).normalized()
 	plan["origin"] = _hang_to
 	corner.x = lerpf(-float(corner.side) * float(_turn.e0), float(corner.side) * float(_turn.e1), w)
-	shimmy_velocity = float(corner.side) * _attr("shimmy_speed", 0.9) * 0.5
+	shimmy_velocity = float(corner.side) * _attr("shimmy_speed", 0.6) * 0.5
 	if u >= 1.0:
 		plan["direction"] = _turn.d1
 		_turn = {}

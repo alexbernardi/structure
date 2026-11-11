@@ -210,9 +210,10 @@ func test_braced_hang_and_dangling_under_a_shelf(t) -> void:
 		seen.braced = mini(seen.braced, anim.braced_feet))
 	print("BRACE ", seen, " brace ", anim._brace)
 	t.ok(seen.frames > 100 and seen.braced == 2 and anim._brace > 0.95, "both feet braced on the wall (%d, brace %.2f)" % [seen.braced, anim._brace])
-	t.ok(seen.feet_out[0] > 0.03 and seen.feet_out[1] < 0.15, "ankles just off the wall: the feet press on it (%.3f .. %.3f m)" % seen.feet_out)
-	t.ok(seen.hips_out > 0.2, "the hips held out from the wall (%.2f m)" % seen.hips_out)
-	t.ok(seen.knee_up > 0.25, "knees up above the braced feet, a climber's brace (at least %.2f m)" % seen.knee_up)
+	# 5.6: the climber's position (test_traversal_56 checks it in detail): toes on the face, so the ankles a foot's
+	# length out; the hips in close but clear; the knees clear the face.
+	t.ok(seen.feet_out[0] > 0.12 and seen.feet_out[1] < 0.28, "ankles a foot's length off the wall, toes on it (%.3f .. %.3f m)" % seen.feet_out)
+	t.ok(seen.hips_out > 0.2 and seen.hips_out < 0.5, "the hips in near the wall, clear of it (%.2f m)" % seen.hips_out)
 	t.ok(seen.knee_wall > 0.05, "the knees clear the wall (%.3f m)" % seen.knee_wall)
 	t.ok(stats.grip_error < 0.02, "hands on the lip (%.4f m)" % stats.grip_error)
 	await _place(scene, "lane_o_shelf", Vector3(76.0, 0.05, -97.0))
