@@ -1,8 +1,8 @@
 [gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scenes/animation_reference.gd" id="1"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/UAL1_Standard.glb" id="2"]
-[ext_resource type="PackedScene" path="res://assets/quaternius/UAL2_Traversal.glb" id="3"]
+[ext_resource type="PackedScene" path="res://systems/movement_core/assets/quaternius/UAL1_Standard.glb" id="2"]
+[ext_resource type="PackedScene" path="res://systems/movement_core/assets/quaternius/UAL2_Traversal.glb" id="3"]
 
 [sub_resource type="Environment" id="Environment"]
 background_mode = 1

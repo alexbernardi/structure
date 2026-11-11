@@ -1,7 +1,7 @@
 extends RefCounted
 
 const World = preload("res://tests/flat_world.gd")
-const Core = preload("res://movement/movement_core.gd")
+const Core = preload("res://systems/movement_core/movement/movement_core.gd")
 
 const FWD := Vector2(0, 1)
 

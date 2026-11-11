@@ -4,8 +4,8 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/flat_plane.tscn")
-const MantleAction = preload("res://traversal/mantle_action.gd")
-const Profiles = preload("res://capability/movement_profiles.gd")
+const MantleAction = preload("res://systems/movement_core/traversal/mantle_action.gd")
+const Profiles = preload("res://systems/movement_core/capability/movement_profiles.gd")
 const DT := 1.0 / 120.0
 const RUN_YAW := -PI / 2.0
 const FACE_X := 43.0

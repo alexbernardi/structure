@@ -6,7 +6,7 @@ extends RefCounted
 const SCENE := "res://scenes/flat_plane.tscn"
 const Events = preload("res://midi/midi_events.gd")
 const Behavior = preload("res://midi/control_behavior.gd")
-const Visual = preload("res://character/character_visual.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
 const DT := 1.0 / 120.0
 
 const BIND_COPY := "user://body_scene_bindings.json"

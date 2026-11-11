@@ -3,7 +3,7 @@ extends RefCounted
 const Engine_ = preload("res://tuning/tuning_engine.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
-const Params = preload("res://movement/movement_params.gd")
+const Params = preload("res://systems/movement_core/movement/movement_params.gd")
 const BodyParams = preload("res://animation/body_params.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const GraphParams = preload("res://animation/graph_params.gd")

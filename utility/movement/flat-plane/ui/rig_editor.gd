@@ -7,7 +7,7 @@
 ## controller (banks Proportions 1 and 2), in presets and in the HUD. Reads the posed skeleton, writes only rig parameters.
 extends Control
 
-const Visual = preload("res://character/character_visual.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
 const ORANGE := Color(1.0, 0.62, 0.2)
 const PURPLE := Color(0.75, 0.5, 1.0)
 const GREEN := Color(0.4, 0.95, 0.5)

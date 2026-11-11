@@ -2,7 +2,7 @@
 ##   godot --headless --path utility/movement/flat-plane --script res://tools/audit_tables.gd
 extends SceneTree
 
-const Params = preload("res://movement/movement_params.gd")
+const Params = preload("res://systems/movement_core/movement/movement_params.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
 

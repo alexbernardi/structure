@@ -1,8 +1,8 @@
 extends RefCounted
 
 const SCENE := "res://scenes/flat_plane.tscn"
-const InputActions = preload("res://movement/input_actions.gd")
-const InputSource = preload("res://movement/input_source.gd")
+const InputActions = preload("res://scenes/lab_input_actions.gd")
+const InputSource = preload("res://systems/movement_core/movement/input_source.gd")
 const DT := 1.0 / 120.0
 const FWD := Vector2(0, 1)
 

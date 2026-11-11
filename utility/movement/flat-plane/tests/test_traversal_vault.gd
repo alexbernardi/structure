@@ -5,10 +5,10 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/flat_plane.tscn")
-const Visual = preload("res://character/authored_mannequin.gd")
-const Profile = preload("res://traversal/vault_profile.gd")
-const Planner = preload("res://traversal/vault_planner.gd")
-const Clip = preload("res://traversal/vault_clip.gd")
+const Visual = preload("res://systems/movement_core/character/authored_mannequin.gd")
+const Profile = preload("res://systems/movement_core/traversal/vault_profile.gd")
+const Planner = preload("res://systems/movement_core/traversal/vault_planner.gd")
+const Clip = preload("res://systems/movement_core/traversal/vault_clip.gd")
 const DT := 1.0 / 120.0
 const RUN_YAW := -PI / 2.0   ## the vault lanes run toward +X
 var _tree: SceneTree

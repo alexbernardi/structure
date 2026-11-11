@@ -5,7 +5,7 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/flat_plane.tscn")
-const MantleAction = preload("res://traversal/mantle_action.gd")
+const MantleAction = preload("res://systems/movement_core/traversal/mantle_action.gd")
 const DT := 1.0 / 120.0
 const RUN_YAW := -PI / 2.0
 var _tree: SceneTree

@@ -4,8 +4,8 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/flat_plane.tscn")
-const FlipClip = preload("res://traversal/flip_clip.gd")
-const Profiles = preload("res://capability/movement_profiles.gd")
+const FlipClip = preload("res://systems/movement_core/traversal/flip_clip.gd")
+const Profiles = preload("res://systems/movement_core/capability/movement_profiles.gd")
 const DT := 1.0 / 120.0
 const RUN_YAW := -PI / 2.0
 var _tree: SceneTree

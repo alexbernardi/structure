@@ -1,10 +1,10 @@
 extends SceneTree
 
-const Visual = preload("res://character/character_visual.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
 const Walk = preload("res://animation/walk_animation.gd")
 const Gait = preload("res://animation/gait_model.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
-const RigParams = preload("res://animation/rig_params.gd")
+const RigParams = preload("res://systems/movement_core/animation/rig_params.gd")
 const Graph = preload("res://animation/walk_tree.tres")
 
 

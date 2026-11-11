@@ -5,7 +5,7 @@
 ## Later phases add their own benchmarks and must report the cost they ADD to these.
 extends RefCounted
 
-const Core = preload("res://movement/movement_core.gd")
+const Core = preload("res://systems/movement_core/movement/movement_core.gd")
 const SCENE := "res://scenes/flat_plane.tscn"
 const DT := 1.0 / 120.0
 

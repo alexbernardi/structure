@@ -3,8 +3,8 @@
 ##   godot --headless --path utility/movement/flat-plane --script res://tools/audit_mirror.gd
 extends SceneTree
 
-const Visual = preload("res://character/authored_mannequin.gd")
-const Mirror = preload("res://traversal/clip_mirror.gd")
+const Visual = preload("res://systems/movement_core/character/authored_mannequin.gd")
+const Mirror = preload("res://systems/movement_core/traversal/clip_mirror.gd")
 
 
 func _initialize() -> void:

@@ -4,9 +4,9 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/flat_plane.tscn")
-const Visual = preload("res://character/authored_mannequin.gd")
-const Profile = preload("res://traversal/vault_profile.gd")
-const Planner = preload("res://traversal/vault_planner.gd")
+const Visual = preload("res://systems/movement_core/character/authored_mannequin.gd")
+const Profile = preload("res://systems/movement_core/traversal/vault_profile.gd")
+const Planner = preload("res://systems/movement_core/traversal/vault_planner.gd")
 const DT := 1.0 / 120.0
 const TICKS := 900
 const WARMUP := 60

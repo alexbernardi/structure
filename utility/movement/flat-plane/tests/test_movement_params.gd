@@ -1,6 +1,6 @@
 extends RefCounted
 
-const Params = preload("res://movement/movement_params.gd")
+const Params = preload("res://systems/movement_core/movement/movement_params.gd")
 
 
 func test_definitions_are_consistent(t) -> void:

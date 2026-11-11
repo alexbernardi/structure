@@ -10,7 +10,7 @@ extends SceneTree
 const Bindings = preload("res://tuning/tuning_bindings.gd")
 const Presets = preload("res://tuning/preset_store.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
-const Params = preload("res://movement/movement_params.gd")
+const Params = preload("res://systems/movement_core/movement/movement_params.gd")
 const LOCOMOTION_PATH := "res://config/locomotion_bindings.json"
 
 const EXAMPLES := {

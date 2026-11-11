@@ -5,7 +5,7 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/flat_plane.tscn")
-const Profiles = preload("res://capability/movement_profiles.gd")
+const Profiles = preload("res://systems/movement_core/capability/movement_profiles.gd")
 const DT := 1.0 / 120.0
 const RUN_YAW := -PI / 2.0   ## lanes run toward +X
 var _tree: SceneTree

@@ -4,7 +4,7 @@
 ## controller travels equally; the effect flags are booleans (a fader at or above half = on).
 extends RefCounted
 
-const ParamSet = preload("res://animation/param_set.gd")
+const ParamSet = preload("res://systems/movement_core/animation/param_set.gd")
 
 const GROUPS := ["switches", "torso", "pelvis", "landing", "rotation", "head", "arms"]
 

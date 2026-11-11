@@ -4,9 +4,9 @@
 ##   godot --headless --path utility/movement/flat-plane --script res://tools/audit_pullup_clip.gd
 extends SceneTree
 
-const Visual = preload("res://character/authored_mannequin.gd")
-const ClipPose = preload("res://traversal/clip_pose.gd")
-const Pullup = preload("res://traversal/pullup_clip.gd")
+const Visual = preload("res://systems/movement_core/character/authored_mannequin.gd")
+const ClipPose = preload("res://systems/movement_core/traversal/clip_pose.gd")
+const Pullup = preload("res://systems/movement_core/traversal/pullup_clip.gd")
 
 
 func _initialize() -> void:

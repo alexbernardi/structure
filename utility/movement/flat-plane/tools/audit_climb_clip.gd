@@ -4,8 +4,8 @@
 ##   godot --headless --path utility/movement/flat-plane --script res://tools/audit_climb_clip.gd
 extends SceneTree
 
-const Visual = preload("res://character/authored_mannequin.gd")
-const ClipPose = preload("res://traversal/clip_pose.gd")
+const Visual = preload("res://systems/movement_core/character/authored_mannequin.gd")
+const ClipPose = preload("res://systems/movement_core/traversal/clip_pose.gd")
 const RISE := 1.0
 const FORWARD := 1.676
 const RATE := 60.0

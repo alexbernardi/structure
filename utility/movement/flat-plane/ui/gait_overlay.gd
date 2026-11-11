@@ -4,7 +4,7 @@
 extends Control
 
 const Model = preload("res://animation/gait_model.gd")
-const Visual = preload("res://character/character_visual.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
 
 const LEFT := Color(0.40, 0.75, 1.0)
 const RIGHT := Color(1.0, 0.62, 0.28)

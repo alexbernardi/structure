@@ -12,18 +12,18 @@
 ##   F3 HUD, F4 bindings editor, PgUp/PgDn bank, [ ] preset, F5 save preset, Home reset all, F6/F7/F8/F11 window.
 extends Node3D
 
-const Visual = preload("res://character/character_visual.gd")
+const Visual = preload("res://systems/movement_core/character/character_visual.gd")
 const GaitParams = preload("res://animation/gait_params.gd")
 const GaitModel = preload("res://animation/gait_model.gd")
 const Reference = preload("res://animation/walk_reference.gd")
 const RunReference = preload("res://animation/run_reference.gd")
-const RigParams = preload("res://animation/rig_params.gd")
+const RigParams = preload("res://systems/movement_core/animation/rig_params.gd")
 const RigEditor = preload("res://ui/rig_editor.gd")
 const PathEditor = preload("res://ui/gait_path_editor.gd")
 const BodyParams = preload("res://animation/body_params.gd")
 const BodyDynamics = preload("res://animation/body_dynamics.gd")
-const Params = preload("res://movement/movement_params.gd")
-const Actions = preload("res://movement/input_actions.gd")
+const Params = preload("res://systems/movement_core/movement/movement_params.gd")
+const Actions = preload("res://scenes/lab_input_actions.gd")
 const Midi = preload("res://midi/midi_manager.gd")
 const Tuning = preload("res://tuning/tuning_system.gd")
 const Bindings = preload("res://tuning/tuning_bindings.gd")

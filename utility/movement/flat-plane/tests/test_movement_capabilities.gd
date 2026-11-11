@@ -3,13 +3,13 @@
 ## baseline ever being written.
 extends RefCounted
 
-const Attributes = preload("res://capability/movement_attributes.gd")
-const Modifier = preload("res://capability/movement_modifier.gd")
-const Capabilities = preload("res://capability/movement_capabilities.gd")
-const Resources = preload("res://capability/movement_resources.gd")
-const Profiles = preload("res://capability/movement_profiles.gd")
-const Params = preload("res://movement/movement_params.gd")
-const TraversalParams = preload("res://traversal/traversal_params.gd")
+const Attributes = preload("res://systems/movement_core/capability/movement_attributes.gd")
+const Modifier = preload("res://systems/movement_core/capability/movement_modifier.gd")
+const Capabilities = preload("res://systems/movement_core/capability/movement_capabilities.gd")
+const Resources = preload("res://systems/movement_core/capability/movement_resources.gd")
+const Profiles = preload("res://systems/movement_core/capability/movement_profiles.gd")
+const Params = preload("res://systems/movement_core/movement/movement_params.gd")
+const TraversalParams = preload("res://systems/movement_core/traversal/traversal_params.gd")
 
 
 func _caps():

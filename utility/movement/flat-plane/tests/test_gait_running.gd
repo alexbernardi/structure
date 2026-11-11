@@ -1,7 +1,7 @@
 extends RefCounted
 
 const GP = preload("res://animation/gait_params.gd")
-const RP = preload("res://animation/rig_params.gd")
+const RP = preload("res://systems/movement_core/animation/rig_params.gd")
 const GM = preload("res://animation/gait_model.gd")
 const RunReference = preload("res://animation/run_reference.gd")
 const DT := 1.0 / 60.0

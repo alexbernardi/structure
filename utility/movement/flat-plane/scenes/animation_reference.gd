@@ -4,7 +4,7 @@ extends Node3D
 const CLIPS := ["Idle", "Jog_Fwd", "Sprint", "Jump_Start", "Jump", "Jump_Land", "SafetyVault"]
 const LABELS := ["Idle", "Jog", "Sprint", "Jump start", "Air loop (no separate Fall clip)", "Land", "Safety vault (UAL2)"]
 const TRAVERSAL := ["SafetyVault"]
-const Mannequin = preload("res://character/authored_mannequin.gd")
+const Mannequin = preload("res://systems/movement_core/character/authored_mannequin.gd")
 
 @onready var source: Node3D = $Source
 @onready var traversal_source: Node3D = $TraversalSource

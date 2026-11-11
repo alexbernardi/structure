@@ -3,7 +3,7 @@ extends RefCounted
 
 const GaitParams = preload("res://animation/gait_params.gd")
 const GaitModel = preload("res://animation/gait_model.gd")
-const RigParams = preload("res://animation/rig_params.gd")
+const RigParams = preload("res://systems/movement_core/animation/rig_params.gd")
 
 
 func bench_gait_cycle_constants_cache_miss(b) -> void:
@@ -37,7 +37,7 @@ func bench_gait_pose_at(b) -> void:
 
 func bench_visual_apply_rig(b) -> void:
 	var tree: SceneTree = Engine.get_main_loop()
-	var v = load("res://character/character_visual.gd").new()
+	var v = load("res://systems/movement_core/character/character_visual.gd").new()
 	tree.root.add_child(v)
 	await tree.process_frame
 	var rig = RigParams.create()

@@ -1,7 +1,7 @@
 extends RefCounted
 
 const BodyParams = preload("res://animation/body_params.gd")
-const ParamSet = preload("res://animation/param_set.gd")
+const ParamSet = preload("res://systems/movement_core/animation/param_set.gd")
 const Registry = preload("res://tuning/tunable_registry.gd")
 
 

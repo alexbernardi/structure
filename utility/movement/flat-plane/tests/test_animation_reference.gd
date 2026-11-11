@@ -1,11 +1,11 @@
 extends RefCounted
 
 const Scene = preload("res://scenes/animation_reference.tscn")
-const Source = preload("res://assets/quaternius/UAL1_Standard.glb")
+const Source = preload("res://systems/movement_core/assets/quaternius/UAL1_Standard.glb")
 const RootMotion = preload("res://assets/quaternius/UAL1_Standard_RM.glb")
-const TraversalSource = preload("res://assets/quaternius/UAL2_Traversal.glb")
+const TraversalSource = preload("res://systems/movement_core/assets/quaternius/UAL2_Traversal.glb")
 const TraversalRootMotion = preload("res://assets/quaternius/UAL2_Traversal_RM.glb")
-const Mannequin = preload("res://character/authored_mannequin.gd")
+const Mannequin = preload("res://systems/movement_core/character/authored_mannequin.gd")
 
 
 func test_authentic_reference_has_valid_tracks_and_plays_all_clips(t) -> void:
