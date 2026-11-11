@@ -673,7 +673,7 @@ func _hang(climb: Dictionary, dt: float) -> void:
 			_hang_weight = maxf(0.0, _hang_weight - dt / HANG_BLEND)
 			var w := smoothstep(0.0, 1.0, _hang_weight)
 			var now: Transform3D = visual.global_transform
-			visual.global_transform = Transform3D(now.basis.slerp(_hang_basis, w), now.origin + _hang_shift * w)
+			visual.global_transform = Transform3D(now.basis.orthonormalized().slerp(_hang_basis.orthonormalized(), w), now.origin + _hang_shift * w)
 		else:
 			_plants.clear()
 			_step.clear()
@@ -731,9 +731,10 @@ func _hang(climb: Dictionary, dt: float) -> void:
 	if _brace > 0.001:
 		var braced := _braced_body(climb, grip_mid, swing, basis, local, shoulders)
 		var b := smoothstep(0.0, 1.0, _brace)
-		placed = Transform3D(placed.basis.slerp(braced.basis, b).orthonormalized(), placed.origin.lerp(braced.origin, b))
+		placed = Transform3D(placed.basis.orthonormalized().slerp(braced.basis.orthonormalized(), b).orthonormalized(), placed.origin.lerp(braced.origin, b))
 	var now: Transform3D = visual.global_transform
-	visual.global_transform = Transform3D(now.basis.slerp(placed.basis, w), now.origin.lerp(placed.origin, w))
+	# Both rotations normalized first: the drawn body's basis feeds back frame to frame, and rounding drift accumulates.
+	visual.global_transform = Transform3D(now.basis.orthonormalized().slerp(placed.basis.orthonormalized(), w), now.origin.lerp(placed.origin, w))
 	_hang_shift = visual.global_transform.origin - now.origin
 	_hang_basis = visual.global_transform.basis
 	# A planted hand further than its nearly straight arm reaches (hands spread during a shimmy, the sideways swing, the
