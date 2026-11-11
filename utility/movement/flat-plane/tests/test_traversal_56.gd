@@ -167,7 +167,7 @@ func test_hanging_shuffle_is_coordinated(t) -> void:
 	await _place(scene, "lane_n", Vector3(38.0, 0.05, -85.0))
 	var anim = scene.authored_animation
 	var trace := {"prev": {}, "vel": {}, "reversals": 0, "jump": 0.0, "hips_y": [INF, -INF], "lift": 0.0, "order": [],
-		"stepping": [], "moves0": {}, "hands_rest": -1.0, "feet_rest": -1.0, "arm": INF, "feet_off": 0.0, "settled": {}}
+		"stepping": [], "moves0": {}, "spread": [INF, -INF], "hands_rest": -1.0, "feet_rest": -1.0, "arm": INF, "feet_off": 0.0, "settled": {}}
 	await _run(scene, 1320, _catch_then(41.4, func(s, _i):
 		var h: float = s.traversal.mantle._hang_time
 		if h > 1.5 and h < 4.5:
@@ -193,6 +193,9 @@ func test_hanging_shuffle_is_coordinated(t) -> void:
 				trace.vel[side] = v
 			trace.prev[side] = foot
 			trace.arm = minf(trace.arm, _arm_share(s, side))
+		if shuffling and anim._plants.size() == 2:
+			var apart: float = (anim._plants.Left as Vector3).distance_to(anim._plants.Right)
+			trace.spread = [minf(trace.spread[0], apart), maxf(trace.spread[1], apart)]
 		if shuffling:
 			var hips: float = ((_bone(s, "LeftUpperLeg") + _bone(s, "RightUpperLeg")) * 0.5).y
 			trace.hips_y = [minf(trace.hips_y[0], hips), maxf(trace.hips_y[1], hips)]
@@ -217,15 +220,66 @@ func test_hanging_shuffle_is_coordinated(t) -> void:
 			repeats += 1
 	print("SHUFFLE ", {"reversals": trace.reversals, "jump": trace.jump, "hips_y": trace.hips_y, "lift": trace.lift,
 		"hand_order": "".join(trace.order.map(func(x): return x[0])), "repeats": repeats, "moves": moves,
-		"settle": trace.hands_rest, "feet_reach": trace.feet_off, "arm": trace.arm, "both": anim.two_hands_moving})
+		"spread": trace.spread, "settle": trace.hands_rest, "feet_reach": trace.feet_off, "arm": trace.arm, "both": anim.two_hands_moving})
 	t.eq(trace.reversals, 0, "no foot jitters back and forth")
 	t.ok(trace.jump < 0.04, "no foot jumps (largest frame move %.3f m)" % trace.jump)
 	t.ok(moves.Left >= 6 and moves.Right >= 6 and absi(moves.Left - moves.Right) <= 2, "both feet re-planted in turn (%s)" % moves)
 	# a repeat is natural where the shuffle reverses (the new lead hand was the last to move) and in the settle
 	t.ok(trace.order.size() >= 12 and repeats <= 4, "hands move alternately (%d moves, %d repeats)" % [trace.order.size(), repeats])
 	t.eq(anim.two_hands_moving, 0, "never both hands off the ledge")
+	t.ok(trace.spread[1] > 0.5, "the lead hand reaches far out (hands up to %.2f m apart)" % trace.spread[1])
+	t.ok(trace.spread[0] < 0.2, "the trail hand matches up close to it (down to %.2f m apart)" % trace.spread[0])
 	t.ok(trace.hips_y[1] - trace.hips_y[0] < 0.03, "the body does not bob while shuffling (%.3f m)" % (trace.hips_y[1] - trace.hips_y[0]))
 	t.ok(trace.lift < 0.02, "no hand out of reach pulling the body (%.3f m)" % trace.lift)
 	t.ok(trace.arm > 0.8, "arms stay long (at least %.2f of their length)" % trace.arm)
 	t.ok(trace.hands_rest >= 0.0 and trace.hands_rest < 0.6, "released, every limb has settled within %.2f s" % trace.hands_rest)
 	t.ok(trace.feet_off < 0.99, "no leg left stretched toward an old foothold (%.2f of its length)" % trace.feet_off)
+
+
+static func _inside(scene, p: Vector3) -> bool:
+	var q := PhysicsPointQueryParameters3D.new()
+	q.position = p
+	q.exclude = [scene.body.get_rid()]
+	return not scene.body.get_world_3d().direct_space_state.intersect_point(q, 1).is_empty()
+
+
+## Round lane O's outside corner (the block's west face onto its north face) and its inside corner (the L): the braced
+## feet stay on the walls - each keeps its wall until it can step to the next, a move between walls bows out round an
+## outside corner, one foot at a time - so no leg flies up, jumps, or passes into the wall.
+func test_braced_feet_round_corners(t) -> void:
+	var scene = await _scene()
+	var mantle = scene.traversal.mantle
+	var anim = scene.authored_animation
+	for lane in [["lane_o", Vector3(39.0, 0.05, -96.2), 42.4], ["lane_o_inside", Vector3(55.0, 0.05, -96.4), 58.4]]:
+		await _place(scene, lane[0], lane[1])
+		var corners0: int = mantle.corners
+		var tr := {"prev": {}, "jump": 0.0, "inside": 0, "above": -INF, "braced": 2, "frames": 0, "moves0": {}, "one_foot": 0}
+		await _run(scene, 900, _catch_then(lane[2], func(_s, _i):
+			return _input(false, Vector2(1.0, 0.3) if mantle._hang_time > 0.5 and mantle._hang_time < 5.0 else Vector2.ZERO)), func(s):
+			if not mantle.hanging() or anim.final_feet.is_empty() or mantle._hang_time < 0.6:
+				return
+			if tr.moves0.is_empty():
+				tr.moves0 = anim.foot_moves.duplicate()
+			tr.frames += 1
+			tr.braced = mini(tr.braced, anim.braced_feet)
+			if anim.braced_feet < 2:
+				tr.one_foot += 1
+			var hips: Vector3 = (_bone(s, "LeftUpperLeg") + _bone(s, "RightUpperLeg")) * 0.5
+			for side in ["Left", "Right"]:
+				var foot := _ankle(s, side)
+				if tr.prev.has(side):
+					tr.jump = maxf(tr.jump, foot.distance_to(tr.prev[side]))
+				tr.prev[side] = foot
+				tr.above = maxf(tr.above, foot.y - hips.y)
+				if _inside(s, foot) or _inside(s, _sole_ends(s, side)[1]) or _inside(s, anim.final_knees[side]):
+					tr.inside += 1)
+		var moves := {"Left": anim.foot_moves.Left - tr.moves0.Left, "Right": anim.foot_moves.Right - tr.moves0.Right}
+		print("CORNER FEET ", lane[0], " ", tr, " moves ", moves)
+		t.eq(mantle.corners - corners0, 1, "%s: the corner is hung around" % lane[0])
+		# Round an outside corner the hips swing past the end of the old wall: for a moment one foot can have no wall in
+		# reach (it blends toward the dangle and steps on); never both.
+		t.ok(tr.braced >= 1 and tr.one_foot < 24, "%s: braced all the way round (one foot only for %d frames)" % [lane[0], tr.one_foot])
+		t.ok(tr.above < -0.4, "%s: the feet stay well below the hips - no leg flies up (%.2f m)" % [lane[0], tr.above])
+		t.ok(tr.jump < 0.05, "%s: no foot jumps (largest frame move %.3f m)" % [lane[0], tr.jump])
+		t.eq(tr.inside, 0, "%s: no foot, toe or knee inside the wall" % lane[0])
+		t.ok(moves.Left >= 2 and moves.Right >= 2, "%s: both feet step round with the body (%s)" % [lane[0], moves])

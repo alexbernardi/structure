@@ -74,10 +74,35 @@ wall); work on the hanging shuffle; the legs glitch back and forth.
   near the wall with the arms up and nearly straight, the feet staggered with the toes on the face, the high knee
   turned out; the same posture reaching for and turning round the outside corner. Feel still needs the user's playtest.
 
+## Follow-up (same day): reach and match, legs round corners
+
+User: shimmy farther - grab farther out, then match closer with the hands; the legs go crazy round a corner.
+
+- Corner legs, measured (lane O, per-frame trace): round the outside corner the foot rays along the turning body
+  passed the corner, both feet lost the wall, and the dangle's ground probe - cast from the hands, over the block -
+  found the block's top, so both feet flew up to 3.06 m (a 1.79 m one-frame jump). Fixed: the ground is found under
+  the hips; foot contacts are searched on the body's wall, then both corner walls, then the foot's own wall; a foot
+  stays braced while its plant is within 0.995 of its leg (a missed ray does not drop it) and steps when it is beyond
+  0.985; one foot moves at a time (a turn that comes while the other moves waits); long moves take longer (at most
+  2.2 m/s on average); a move round an outside corner bows out around it. After: largest foot move 3.1 cm per frame,
+  nothing inside the walls, the feet at least 0.53 m below the hips, one foot off its wall for 3 frames at most.
+- Reach and match: the lead hand reaches 0.40 m past the hang point (`HAND_REACH`: half the 0.12 m match gap plus
+  three quarters of the 0.45 m stride, so the hands' middle stays centred on the hang point over a cycle), the trail
+  hand then matches up 0.12 m from it. Measured: the hands from 0.12 to 0.69 m apart, alternating, never both off,
+  hips level within 0.5 mm, arms at least 0.95 of their length (the hang height now allows for the matched pair
+  narrower than the shoulders as well as the full reach). The low braced knee is 140 degrees (was 150): room before
+  the leg straightens as the body surges.
+- A still foot no longer re-steps 5 mm (a reach test read before a move that landed in the same frame).
+- Live-play fix (commit `10a6f63`): the hang's body blend normalizes both rotations (rounding drift had made
+  `Basis.slerp` refuse them, spamming errors in play, not in the tests).
+- Tests: `test_traversal_56.gd` 3/3 (new: `test_braced_feet_round_corners`; the shuffle test checks the reach and
+  the match). All `test_traversal*`: 64/64.
+
 ## Limitations
 
 - The stagger is fixed (left foot high); it does not swap with the direction of travel.
 - Stride, timing and leads are tuned by measurement and stills, not yet by feel.
+- Round a corner a foot can still kink once mid-move (one frame, at most about 1.5 m/s) as the body turns.
 - The torso's twist and lean come from one authored grip frame, squared up procedurally; there is no authored hang.
 
 ## Next steps

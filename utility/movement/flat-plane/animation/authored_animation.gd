@@ -31,15 +31,21 @@ const WRIST_UP := 0.024            ## m the wrist sits above the top: the palm r
 const STEP_SETTLE := 0.03          ## m left over once the shimmy stops: the hands re-centre
 const FOOT_SETTLE := 0.05          ## m a braced foot may sit off its place once the shimmy stops
 const STEP_LIFT := 0.07            ## m a moving hand lifts off the top
-## The hanging shuffle: one gait cycle per stride of travel along the lip - lead hand, lead foot, trail hand, trail foot
-## (the lead side is the side of travel). Each limb moves once a cycle, by a stride, to where it is centred on its place
-## over the cycle (half a stride ahead of it as the body arrives, half behind as it leaves): spread and gather.
-const SHUFFLE_STRIDE := 0.32       ## m of travel per cycle
+## The hanging shuffle: one gait cycle per stride of travel along the lip - the lead hand reaches far out, the lead foot
+## steps, the trail hand matches up next to the lead hand, the trail foot steps (the lead side is the side of travel).
+## Each foot moves once a cycle to where it is centred on its place over the cycle.
+const SHUFFLE_STRIDE := 0.45       ## m of travel per cycle
+const HAND_MATCH_GAP := 0.12       ## m between the hands once the trail hand has matched the lead hand
+## The lead hand reaches this far past the hang point (half the match gap plus three quarters of a stride): with the
+## trail hand matching up to it half a cycle later, the hands' middle - what the body hangs from - stays centred on
+## the hang point over the cycle (the body surges toward the reaching hand and settles back under the matched pair).
+const HAND_REACH := HAND_MATCH_GAP * 0.5 + SHUFFLE_STRIDE * 0.75
 const SHUFFLE_STEP_SHARE := 0.32   ## share of a cycle a limb is moving
 const STEP_TIME_MIN := 0.12        ## s: the quickest limb move (fast shimmy)
 const STEP_TIME_MAX := 0.26        ## s: the slowest (and every settling move)
-const HAND_CATCH_UP := 0.21        ## m a hand may trail its place before it moves out of turn
+const HAND_CATCH_UP := 0.45        ## m a hand may trail its place before it moves out of turn
 const FOOT_CATCH_UP := 0.32
+const FOOT_STEP_SPEED := 2.2       ## m/s: a braced foot's fastest average move (long moves round a corner take longer)
 const SWING_LENGTH := 1.3          ## m from the hands to the body's centre of mass (pendulum)
 const SWING_OMEGA2 := 7.5          ## (rad/s)^2: g / L for a compound pendulum hanging from the hands (about 0.37 Hz)
 const SWING_DAMP := 1.4            ## 1/s
@@ -54,7 +60,7 @@ const BRACE_SHOULDER_OUT := 0.38   ## m from the face to the shoulders (the arms
 const BRACE_HIP_OUT := 0.30        ## m from the face to the hips
 const KNEE_WALL_CLEAR := 0.09      ## m a braced knee stays off the face (it turns out further where it would touch)
 const BRACE_KNEE_HIGH := deg_to_rad(105.0)   ## knee angle of the higher foot (the left)
-const BRACE_KNEE_LOW := deg_to_rad(150.0)    ## knee angle of the lower foot (nearly straight, not locked)
+const BRACE_KNEE_LOW := deg_to_rad(140.0)    ## knee angle of the lower foot (long, with room before the leg straightens)
 const FOOT_TOE_GAP := 0.01         ## m between the toe and the face
 const FOOT_HEEL_DROP := deg_to_rad(12.0)     ## the heel sits a little below the toes
 const FOOT_TURN_OUT := deg_to_rad(18.0)      ## each foot turned out with its knee
@@ -139,7 +145,8 @@ var _foot_w := {}                  ## side -> 0 dangling .. 1 on its wall contac
 var _gait := -0.001                ## shuffle cycles travelled (the next cycle starts with the lead hand)
 var _gait_dir := 1.0               ## +1 shuffling toward the right, -1 left
 var _gait_events: Array[int] = []  ## shuffle events crossed this frame: 0 lead hand, 1 lead foot, 2 trail hand, 3 trail foot
-var _hand_queue: Array[String] = []   ## hands whose shuffle turn came while the other hand was off the ledge
+var _foot_pending := ""            ## a foot whose shuffle turn came while the other foot was moving
+var _hand_queue: Array = []        ## [side, "reach" / "match"] moves whose turn came while the other hand was off the ledge
 var _cycle_time := 1.0             ## s per shuffle cycle at the current speed
 var _still := 1.0                  ## s since the shimmy stopped
 var _prev_cx := NAN                ## the corner path coordinate last frame (travel speed around a corner)
@@ -781,7 +788,9 @@ func _hang(climb: Dictionary, dt: float) -> void:
 	# along the lagging swing, kept off the wall and the ground.
 	_hang_legs = true
 	var ground := -INF
-	var below := _probe(space, grip_mid, grip_mid + Vector3.DOWN * 6.0)
+	# The ground under the hips (outside the wall; from the hands the ray can find the top itself round a corner).
+	var hips_now := (_hip("Left") + _hip("Right")) * 0.5
+	var below := _probe(space, hips_now, hips_now + Vector3.DOWN * 6.0)
 	if not below.is_empty():
 		ground = (below.position as Vector3).y
 	var hang_dir := Basis(d, -_legs.y) * Basis(r, -_legs.x) * Vector3.DOWN
@@ -878,15 +887,16 @@ func _braced_body(climb: Dictionary, grip_mid: Vector3, swing: Basis, basis: Bas
 	return placed
 
 
-## How far sideways of its shoulder a hand can be during the shuffle: the authored grip is wider than the shoulders, and
-## a shuffling hand is up to about half a stride off its place. The body hangs at the height where the arm reaches that far
-## (nearly straight at rest, straight at the widest spread), so spreading hands do not bob the body up and down.
+## How far sideways of its shoulder a hand can be: the authored grip is wider than the shoulders, the shuffle reaches a
+## hand out to the stride plus the match gap from the other, and a matched pair is narrower than the shoulders. The
+## body hangs at the height where the arm reaches that far (nearly straight throughout), so it does not bob.
 func _hand_spread(local: Transform3D, shoulders: Vector3) -> float:
 	var skeleton: Skeleton3D = visual.skeleton
 	var scale: float = skeleton.global_transform.basis.get_scale().x
 	var half := (local * skeleton.get_bone_global_pose(visual.bone_index.LeftUpperArm).origin).distance_to(local * shoulders)
 	var grip := maxf(absf(_grip_hand_x("Left")), absf(_grip_hand_x("Right"))) * scale
-	return maxf(0.0, grip - half) + SHUFFLE_STRIDE * 0.4
+	var spread := (SHUFFLE_STRIDE + HAND_MATCH_GAP) * 0.5      # each hand from the pair's middle, fully reached
+	return maxf(maxf(grip - half, spread - half), half - HAND_MATCH_GAP * 0.5)
 
 
 ## The shuffle's clock: cycles of travel along the lip (the hang point's shimmy speed; around a corner, the speed along
@@ -932,12 +942,27 @@ func _shuffle_lead(duration: float) -> float:
 func _brace_feet(climb: Dictionary, space: PhysicsDirectSpaceState3D, d: Vector3, ground: float, settled: bool, dt: float) -> Dictionary:
 	var wanted := {}
 	for side in ["Left", "Right"]:
-		var contact := _foot_contact(space, side, _hip(side), Vector3.ZERO, d, ground)
-		if not contact.is_empty():
-			wanted[side] = contact
+		# The wall the body faces, else (round a corner, where that ray passes the corner) either corner wall, else the
+		# wall the foot is on: a foot keeps its wall until it can step to the next one.
+		var walls: Array = [d]
+		var c: Dictionary = climb.get("corner", {})
+		if not c.is_empty():
+			walls.append_array([c.d_new, c.d_old])
+		if _foot_plants.has(side):
+			walls.append(-(_foot_plants[side].n as Vector3))
+		for wall in walls:
+			var contact := _foot_contact(space, side, _hip(side), Vector3.ZERO, wall, ground)
+			if not contact.is_empty():
+				wanted[side] = contact
+				break
 	braced_feet = wanted.size()
+	# A foot stays braced while its plant is within its leg's reach (a ray missing for a frame round a corner does not
+	# drop it); it lets go only when there is no wall for it and the plant is out of reach.
+	var reachable := {}
 	for side in ["Left", "Right"]:
-		_foot_w[side] = move_toward(float(_foot_w.get(side, 0.0)), 1.0 if settled and wanted.has(side) else 0.0, BRACE_RATE * dt)
+		reachable[side] = _foot_plants.has(side) and _hip(side).distance_to(_foot_plants[side].at) < _leg_length(side) * 0.995
+		var keep: bool = wanted.has(side) or (reachable[side] and _foot_w.get(side, 0.0) > 0.0)
+		_foot_w[side] = move_toward(float(_foot_w.get(side, 0.0)), 1.0 if settled and keep else 0.0, BRACE_RATE * dt)
 	for side in _foot_step.keys():
 		var step: Dictionary = _foot_step[side]
 		step.t = float(step.t) + dt / float(step.dur)
@@ -952,10 +977,20 @@ func _brace_feet(climb: Dictionary, space: PhysicsDirectSpaceState3D, d: Vector3
 				_foot_plants.erase(side)
 		elif not _foot_plants.has(side):
 			_foot_plants[side] = wanted[side]
+	braced_feet = 0
+	for side in ["Left", "Right"]:
+		if _foot_plants.has(side) and float(_foot_w[side]) > 0.0 and (wanted.has(side) or reachable[side]):
+			braced_feet += 1
 	var lead := "Right" if _gait_dir > 0.0 else "Left"
 	for event in _gait_events:
 		if event == 1 or event == 3:
-			_start_foot_step(space, lead if event == 1 else ("Left" if lead == "Right" else "Right"), wanted, d, ground, true)
+			_foot_pending = lead if event == 1 else ("Left" if lead == "Right" else "Right")
+	if _still >= 0.12:
+		_foot_pending = ""
+	if _foot_pending != "" and _foot_step.is_empty():
+		# A foot's turn that came while the other foot was moving waits for it.
+		_start_foot_step(space, _foot_pending, wanted, d, ground, true)
+		_foot_pending = ""
 	if _foot_step.is_empty():
 		var moving := _still < 0.12
 		var best := ""
@@ -965,8 +1000,10 @@ func _brace_feet(climb: Dictionary, space: PhysicsDirectSpaceState3D, d: Vector3
 				continue
 			var gap: float = (_foot_plants[side].at as Vector3).distance_to(wanted[side].at)
 			var turned: bool = (_foot_plants[side].n as Vector3).dot(wanted[side].n) < 0.9
-			var score := gap + (1.0 if turned else 0.0)
-			if (turned or gap > (FOOT_CATCH_UP if moving else FOOT_SETTLE)) and score > worst:
+			# the hips have moved on past it (round a corner); measured now, after any move that landed this frame
+			var stretched: bool = _hip(side).distance_to(_foot_plants[side].at) >= _leg_length(side) * 0.985
+			var score := gap + (1.0 if turned or stretched else 0.0)
+			if (turned or stretched or gap > (FOOT_CATCH_UP if moving else FOOT_SETTLE)) and score > worst:
 				best = side
 				worst = score
 		if best != "":
@@ -982,7 +1019,15 @@ func _brace_feet(climb: Dictionary, space: PhysicsDirectSpaceState3D, d: Vector3
 			var u := clampf(float(step.t), 0.0, 1.0)
 			var s := smoothstep(0.0, 1.0, u)
 			n = (step.n_from as Vector3).slerp(step.n, s)
-			var lift := (n * 0.05 + Vector3.UP * 0.03) * sin(PI * u)     # off the wall and up a little, then back on
+			# Off the wall and up a little, then back on; a step round an outside corner bows out around it (its chord
+			# would cut through the corner: the chord's middle lies behind both walls).
+			var away: Vector3 = n * 0.05
+			var bisector := (step.n_from as Vector3) + (step.n as Vector3)
+			var middle := ((step.from as Vector3) + (step.to as Vector3)) * 0.5
+			var behind := maxf(-(middle - (step.from as Vector3)).dot(step.n_from), -(middle - (step.to as Vector3)).dot(step.n))
+			if behind > 0.0 and bisector.length() > 0.1:
+				away += bisector.normalized() * (behind + 0.05)
+			var lift := (away + Vector3.UP * 0.03) * sin(PI * u)
 			at = (step.from as Vector3).lerp(step.to, s) + lift
 			toe = (step.toe_from as Vector3).lerp(step.toe_to, s) + lift
 		out[side] = {"at": at, "toe": toe, "n": n}
@@ -990,16 +1035,20 @@ func _brace_feet(climb: Dictionary, space: PhysicsDirectSpaceState3D, d: Vector3
 
 
 func _start_foot_step(space: PhysicsDirectSpaceState3D, side: String, wanted: Dictionary, d: Vector3, ground: float, travel: bool) -> void:
-	if _foot_step.has(side) or not wanted.has(side) or not _foot_plants.has(side):
-		return
+	if not _foot_step.is_empty() or not wanted.has(side) or not _foot_plants.has(side):
+		return                       # one foot off the wall at a time
 	var duration := _step_time()
 	var target: Dictionary = wanted[side]
 	if travel:
 		var along := (-(target.n as Vector3)).cross(Vector3.UP) * _gait_dir * _shuffle_lead(duration)
-		var ahead := _foot_contact(space, side, _hip(side), along, d, ground)
+		var ahead := _foot_contact(space, side, _hip(side), along, -(target.n as Vector3), ground)
 		if not ahead.is_empty():
 			target = ahead
 	var plant: Dictionary = _foot_plants[side]
+	if (plant.at as Vector3).distance_to(target.at) < 0.01 and (plant.n as Vector3).dot(target.n) > 0.99:
+		return                       # already there
+	# A long move (round a corner) takes longer: a foot never travels faster than FOOT_STEP_SPEED on average.
+	duration = maxf(duration, (plant.at as Vector3).distance_to(target.at) / FOOT_STEP_SPEED)
 	_foot_step[side] = {"from": plant.at, "to": target.at, "toe_from": plant.toe, "toe_to": target.toe, "n_from": plant.n,
 		"n": target.n, "t": 0.0, "dur": duration}
 
@@ -1126,6 +1175,7 @@ func _start_hang(climb: Dictionary) -> void:
 	_still = 1.0
 	_prev_cx = NAN
 	_hand_queue.clear()
+	_foot_pending = ""
 	hang_swing = Vector2.ZERO
 	_legs = Vector2.ZERO
 	_legs_v = Vector2.ZERO
@@ -1158,42 +1208,57 @@ func _move_hands(climb: Dictionary, space: PhysicsDirectSpaceState3D, dt: float)
 			_step.erase(side)
 			hand_steps += 1
 	var lead := "Right" if _gait_dir > 0.0 else "Left"
+	var trail := "Left" if lead == "Right" else "Right"
 	for event in _gait_events:
 		if event == 0 or event == 2:
-			var side := lead if event == 0 else ("Left" if lead == "Right" else "Right")
-			if not _hand_queue.has(side):
-				_hand_queue.append(side)
+			_hand_queue.append([lead, "reach"] if event == 0 else [trail, "match"])
 	var moving := _still < 0.12
 	if not moving:
 		_hand_queue.clear()
 	if not _step.is_empty():
 		return
 	if not _hand_queue.is_empty():
-		_start_hand_step(climb, space, _hand_queue.pop_front(), slots, true)
+		var move: Array = _hand_queue.pop_front()
+		_start_hand_step(climb, space, move[0], slots, move[1])
 		return
+	# Out of turn: a hand left far behind its place while shuffling; re-centring on its place once stopped.
 	var best := ""
 	var worst := 0.0
 	for side in ["Left", "Right"]:
-		var drift: float = absf(float(slots[side].x) - _path_x(climb, _plants[side]))
-		if drift > (HAND_CATCH_UP if moving else STEP_SETTLE) and drift > worst:
+		var drift: float = float(slots[side].x) - _path_x(climb, _plants[side])
+		var off := drift * _gait_dir if moving else absf(drift)
+		if off > (HAND_CATCH_UP if moving else STEP_SETTLE) and off > worst:
 			best = side
-			worst = drift
+			worst = off
 	if best != "":
-		_start_hand_step(climb, space, best, slots, moving)
+		_start_hand_step(climb, space, best, slots, ("reach" if best == lead else "match") if moving else "settle")
 
 
-func _start_hand_step(climb: Dictionary, space: PhysicsDirectSpaceState3D, side: String, slots: Dictionary, travel: bool) -> void:
+## One hand's move: "reach" - the lead hand far out past the hang point (shortened until the ledge's top is under it);
+## "match" - the trail hand up next to the lead hand; "settle" - back to its place in the authored grip.
+func _start_hand_step(climb: Dictionary, space: PhysicsDirectSpaceState3D, side: String, slots: Dictionary, mode: String) -> void:
 	if not _step.is_empty():
 		return                       # one hand off the ledge at a time
 	var duration := _step_time()
 	var x: float = slots[side].x
-	if travel:
-		var ahead := _gait_dir * _shuffle_lead(duration)
-		for share in [1.0, 0.66, 0.33]:
-			var p := _path_point(climb, x + ahead * share)
+	var c: Dictionary = climb.get("corner", {})
+	var hang_x: float = float(c.x) if not c.is_empty() else 0.0
+	var now := _path_x(climb, _plants[side])
+	if mode == "reach":
+		x = now
+		for share in [1.0, 0.8, 0.6, 0.4]:
+			var reach: float = hang_x + _gait_dir * HAND_REACH * float(share)
+			var p := _path_point(climb, reach)
 			if _top_under(space, p.at, p.d, climb.lip_y):
-				x += ahead * share
+				x = reach
 				break
+		if (x - now) * _gait_dir < 0.03:
+			return                   # nowhere further to reach: the end of the ledge
+	elif mode == "match":
+		var other := "Left" if side == "Right" else "Right"
+		x = _path_x(climb, _plants[other]) - _gait_dir * HAND_MATCH_GAP
+		if (x - now) * _gait_dir < 0.03:
+			return                   # already up with it
 	var to := _path_point(climb, x)
 	_step[side] = {"from": _plants[side], "to": _snap_hand(space, to.at, to.d, climb.lip_y), "d": to.d, "t": 0.0, "dur": duration}
 

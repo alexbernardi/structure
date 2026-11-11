@@ -30,6 +30,11 @@ Task [0013](../TASKS/0013-climber-hang-shuffle.md). From the user's playtest wit
   never re-planted the other foot, which then hung stretched toward its old place and snapped 12 cm when the shimmy
   stopped; the body bobbed about 3 cm with each hand move (it hung from the lifted hand) and up to 12 cm where a spread
   hand was out of reach. Measured after: no foot reversal, largest frame move 3.4 cm, the hips level within 1 mm.
+- **Reach and match; legs round corners** (follow-up). The lead hand reaches 0.40 m past the hang point and the trail
+  hand matches up 0.12 m from it (hands 0.12-0.69 m apart over a 0.45 m stride). Round a corner the feet keep their
+  walls until they can step on (contacts on the body's wall, the corner's walls, then the foot's own), stay braced
+  while in reach, move one at a time and bow out round an outside corner; the ground is found under the hips (from
+  the hands it found the block's top and the legs flew up to it).
 - Tools: `capture_traversal.gd --view=body` (the whole climber in profile) and `--view=legs` (hips and feet on the wall).
 
 ## 5.5: skeleton view, foot IK on real ground, braced hang, corners
