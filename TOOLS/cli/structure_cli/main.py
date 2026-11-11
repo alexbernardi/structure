@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from . import buildinfo, paths, toolchain
 
@@ -359,8 +360,33 @@ def cmd_room(args) -> int:
         for p in result["problems"]:
             print("  PROBLEM", p)
         return 0 if result["ok"] else 1
+    from . import packages
+
     if args.action == "status":
-        print(json.dumps(rooms.integration_status(args.name), indent=2))
+        print(json.dumps(packages.status(args.name) if packages.is_package(args.name) else rooms.integration_status(args.name), indent=2))
+        return 0
+    if args.action == "install":
+        if not packages.is_package(args.name):
+            print(f"{args.name} is not a package room; use `room promote {args.name}`")
+            return 2
+        if not args.project:
+            print("room install: a target project is required (e.g. LABS/combat or SANDBOX/godot)")
+            return 2
+        record = packages.install(args.name, (paths.REPO / args.project), args.version, force=args.force)
+        print(f"installed {args.name} {record['version']} ({record['files']} files, sha256 {record['sha256'][:12]}) into "
+              f"{args.project}/{packages.mount(args.name)}" + (f" from {record['tag']}" if record["tag"] else ""))
+        return 0
+    if args.action == "release":
+        version = rooms.load_room(args.name)["version"]
+        tag = f"{args.name}/v{version}"
+        if subprocess.run(["git", "status", "--porcelain"], cwd=paths.REPO, capture_output=True, text=True).stdout.strip():
+            print("room release: commit everything first (a release tags the current commit)")
+            return 2
+        if subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"], cwd=paths.REPO, capture_output=True).returncode == 0:
+            print(f"room release: {tag} already exists; bump room.json version (and the README table) first")
+            return 2
+        subprocess.run(["git", "tag", "-a", tag, "-m", f"{args.name} {version}"], cwd=paths.REPO, check=True)
+        print(f"tagged {tag} at {subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=paths.REPO, capture_output=True, text=True).stdout.strip()} (not pushed)")
         return 0
     from . import testing
 
@@ -370,6 +396,28 @@ def cmd_room(args) -> int:
     result = rooms.promote(args.name, gates, dry_run=args.dry_run)
     print("PROMOTED" if result["promoted"] else ("dry run: all pre-promotion checks passed" if result["ok"] is None else "NOT promoted"))
     return 0 if result["ok"] in (True, None) else 1
+
+
+def cmd_lab(args) -> int:
+    from . import labs, testing
+
+    if args.action == "list":
+        for lab in labs.list_labs():
+            print(f"{lab['branch']:<24} {lab['commit']}  +{lab['ahead_of_main']} -{lab['behind_main']} vs main  {lab['worktree']}")
+        return 0
+    if args.action == "create":
+        path = labs.create(args.name, args.systems or [], args.base, Path(args.path) if args.path else None)
+        print(f"laboratory {args.name} ready: {path} (branch lab/{args.name}); open LABS/{args.name} in Godot")
+        return 0
+    if args.action == "init":
+        labs.init(args.name, args.systems or [], args.base)
+        return 0
+    if args.action == "sync":
+        return labs.sync(update_systems=args.update_systems, base=args.base)
+    if args.action == "validate":
+        return 0 if labs.validate(args.name, lambda suites: testing.run(suites, [], args) == 0) else 1
+    record = labs.promote(args.name, args.branch, args.merge, args.gates or labs.DEFAULT_GATES, args.base)
+    return 0 if record.get("ok") else 1
 
 
 def cmd_pipeline(args) -> int:
@@ -480,11 +528,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_bench)
 
     p = sub.add_parser("room", help="system rooms and the integration gateway")
-    p.add_argument("action", choices=["list", "new", "test", "bench", "status", "promote"])
+    p.add_argument("action", choices=["list", "new", "test", "bench", "status", "promote", "install", "release"])
     p.add_argument("name", nargs="?")
+    p.add_argument("project", nargs="?", help="install: target Godot project (repo-relative), e.g. LABS/combat")
+    p.add_argument("--version", help="install: a released version (from its tag) instead of the current source")
+    p.add_argument("--force", action="store_true", help="install: overwrite a hand-edited copy")
     p.add_argument("--experiments", action="store_true")
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=cmd_room)
+
+    p = sub.add_parser("lab", help="laboratories: create, sync with main, validate, promote (LABORATORY-PIPELINE.md)")
+    p.add_argument("action", choices=["list", "create", "init", "sync", "validate", "promote"])
+    p.add_argument("name", nargs="?")
+    p.add_argument("--systems", action="append", help="create: approved package systems to pin, e.g. movement_core or movement_core@1.0.0")
+    p.add_argument("--base", default="main", help="create/sync/promote: the approved branch (default main); init: its commit")
+    p.add_argument("--path", help="create: worktree folder (default: a sibling folder <repo>-lab-<name>)")
+    p.add_argument("--update-systems", action="store_true", help="sync: also re-pin compatible (same major) system updates")
+    p.add_argument("--branch", help="promote: a branch that is not lab/<name> (e.g. a benchmark or task branch)")
+    p.add_argument("--merge", action="store_true", help="promote: fast-forward main to the validated merge (never pushes)")
+    p.add_argument("--gates", nargs="*", help="promote: suites to run on the integration branch (default: " + " ".join(["check", "tools", "import", "unit", "rooms", "utility", "labs"]) + ")")
+    p.set_defaults(func=cmd_lab)
 
     p = sub.add_parser("pipeline", help="asset pipeline (Blender -> GLB -> Godot)")
     p.add_argument("action", choices=["run", "check", "deploy"])
@@ -496,6 +559,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "lab" and args.action in ("create", "init") and not args.name:
+        print(f"lab {args.action}: a laboratory name is required")
+        return 2
+    if args.command == "lab" and args.action == "promote" and not (args.name or args.branch):
+        print("lab promote: a laboratory name or --branch is required")
+        return 2
     if args.command == "room" and args.action != "list" and not args.name:
         print("room: a room name is required")
         return 2
@@ -510,7 +579,7 @@ def main(argv: list[str]) -> int:
     except KeyboardInterrupt:
         return 130
     except Exception as exc:  # known tool errors print cleanly; unexpected ones keep the traceback
-        known = {"ToolchainError", "EnvError", "BuildError", "SnapshotError", "RoomError", "AssetError"}
+        known = {"ToolchainError", "EnvError", "BuildError", "SnapshotError", "RoomError", "AssetError", "PackageError", "LabError"}
         if type(exc).__name__ in known:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2

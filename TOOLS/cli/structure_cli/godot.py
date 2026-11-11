@@ -15,9 +15,14 @@ def utility_projects() -> list[Path]:
     return sorted(p.parent for p in paths.UTILITY.glob("*/*/project.godot"))
 
 
+def lab_projects() -> list[Path]:
+    """Laboratories: LABS/<name>/project.godot (ADR-0010); LABS/_TEMPLATE is the scaffold, not a lab."""
+    return sorted(p.parent for p in paths.LABS.glob("*/project.godot") if not p.parent.name.startswith("_"))
+
+
 def all_projects() -> list[Path]:
     rooms = sorted(p.parent for p in paths.SYSTEM_ROOMS.glob("*/project.godot") if not p.parent.name.startswith("_"))
-    return [paths.SANDBOX_PROJECT, *rooms, *utility_projects()]
+    return [paths.SANDBOX_PROJECT, *rooms, *utility_projects(), *lab_projects()]
 
 
 def base_cmd(project: Path) -> list[str]:

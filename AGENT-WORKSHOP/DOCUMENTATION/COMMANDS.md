@@ -52,11 +52,23 @@ Manual compose equivalent: see `INFRASTRUCTURE/docker/README.md`.
 
 | Command | What it does |
 |---|---|
-| `test [suites...] [--skip ...] [--with-blender]` | Suites: `check tools import unit rooms pipeline multiplayer docker` (default: all). See `TESTING.md` |
+| `test [suites...] [--skip ...] [--with-blender]` | Suites: `check tools import unit rooms utility labs pipeline multiplayer docker` (default: all). See `TESTING.md` |
 | `bench movement\|server\|client [--bots N] [--duration S] [--seed X] [--docker] [--record]` | Fixed-seed benchmarks; `--record` updates `TESTING/performance/baselines/` |
 | `room list` / `room new <name>` | List rooms / scaffold a room from `_TEMPLATE` |
 | `room test <name> [--experiments]` / `room bench <name>` | Isolated tests / benchmarks vs `room.json` targets |
-| `room status <name>` / `room promote <name> [--dry-run]` | Integration state (drift, pending) / integration gateway |
+| `room status <name>` / `room promote <name> [--dry-run]` | Integration state (drift, pending; a package room lists every consumer's pin) / integration gateway |
+| `room install <room> <project> [--version X.Y.Z] [--force]` | Install a package room (e.g. `movement_core`) into a Godot project at `res://systems/<room>/`, pinned and hash-recorded; `--version` installs a released tag |
+| `room release <room>` | Tag the current commit `<room>/v<version>` (from `room.json`; clean tree required; not pushed) |
+
+## Laboratories ([LABORATORY-PIPELINE.md](../PROTOCOLS/LABORATORY-PIPELINE.md))
+
+| Command | What it does |
+|---|---|
+| `lab create <name> [--systems room[@version]]... [--base main] [--path dir]` | Branch `lab/<name>` + worktree from main, `LABS/<name>/` from `LABS/_TEMPLATE`, systems pinned, one commit |
+| `lab list` | Laboratory branches, their worktrees and how far ahead of / behind main they are |
+| `lab sync [--update-systems]` | In a lab worktree: merge main in (no rebase; stops on conflicts), report pins; re-pin compatible updates |
+| `lab validate [name]` | Static checks, the lab's tests, its pins (a workbench: its suite) |
+| `lab promote <name> \| --branch <b> [--merge] [--gates ...]` | Merge into a fresh integration branch from main, run the gates there; `--merge` fast-forwards main to the validated merge (never pushes) |
 | `pipeline run [asset]` | Blender -> GLB -> validation -> library -> consumers -> Godot import (default asset `resource_stone`) |
 | `pipeline check` / `pipeline deploy [asset]` | Consistency check without Blender / re-deploy library copies |
 

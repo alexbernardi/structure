@@ -37,6 +37,16 @@ If any post-copy gate (3-5) fails, the tool restores the previous copy automatic
 - Experimental variants stay in `experiments/` until measured and promoted; stable and experimental code can coexist.
 - A promotion that changes network messages or saved data must also bump the protocol or world schema version.
 
+## Package rooms
+
+A room with a `"package"` section in `room.json` ([ADR-0010](../DECISIONS/ADR-0010-shared-systems-and-laboratories.md),
+first: `movement_core`) keeps its source in a workbench laboratory. The same checklist applies, with these
+differences: tests and benchmarks run in the workbench (`room test` / `room bench`); `room promote` installs the
+workbench version into every project in `room.json` `consumers` (backups in `.runtime/promotions/`, restored if a
+gate fails); any project can pin a version with `room install <room> <project> [--version X.Y.Z]`; releases are tags
+`<room>/v<version>` (`room release`). Laboratories reach `main` through
+[LABORATORY-PIPELINE.md](LABORATORY-PIPELINE.md).
+
 ## Rollback
 
 `git revert <promotion commit>` (preferred), or copy `.runtime/promotions/<system>-<stamp>/` back and re-run

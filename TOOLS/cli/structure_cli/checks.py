@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from . import assets, buildinfo, envs, paths, rooms, toolchain
+from . import assets, buildinfo, envs, packages, paths, rooms, toolchain
 
 REQUIRED_PATHS = [
     "AGENTS.md", "README.md", ".gitignore", "AGENT-WORKSHOP/START-HERE.md", "AGENT-WORKSHOP/PROTOCOLS",
@@ -55,7 +55,11 @@ def run() -> list[tuple[str, str, str]]:
     for problem in envs.validate_set(envs.all_envs()):
         err("environments", problem)
 
+    for level, detail in packages.problems():
+        out.append((level, "systems", detail))
     for name in rooms.list_rooms():
+        if packages.is_package(name):
+            continue
         try:
             st = rooms.integration_status(name)
         except (KeyError, FileNotFoundError) as exc:

@@ -1,0 +1,34 @@
+{
+  "name": "movement_core",
+  "version": "1.0.0",
+  "status": "stable",
+  "summary": "Approved movement character: locomotion, traversal (vault, mantle, catch/hang, shimmy, corners, slide, flip), capabilities, authored animation with hand/foot IK.",
+  "package": {
+    "source": "utility/movement/flat-plane/systems/movement_core",
+    "mount": "systems/movement_core",
+    "workbench": "utility/movement/flat-plane",
+    "tests": ["res://tests"],
+    "benchmarks": ["res://benchmarks/bench_movement_core.gd"]
+  },
+  "public_interface": [
+    "movement_character.gd",
+    "capability/movement_modifier.gd",
+    "capability/movement_attributes.gd",
+    "capability/movement_profiles.gd",
+    "movement/input_source.gd",
+    "movement/input_actions.gd"
+  ],
+  "dependencies": {
+    "engine": "Godot 4.7 (physics ticked at 120 Hz by the caller; collision: world on layer 1)",
+    "systems": [],
+    "assets": ["Quaternius Universal Animation Library 1 and 2 (CC0), bundled in assets/quaternius"]
+  },
+  "integration": {
+    "target": "SANDBOX/godot/systems/movement_core"
+  },
+  "consumers": ["SANDBOX/godot"],
+  "benchmarks": {
+    "movement_core.simulate_tick": {"max_us_per_op": 250.0},
+    "movement_core.present_frame": {"max_us_per_op": 700.0}
+  }
+}

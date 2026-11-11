@@ -7,16 +7,17 @@ import subprocess
 import sys
 import time
 
-from . import assets, buildinfo, checks, godot, paths, rooms
+from . import assets, buildinfo, checks, godot, packages, paths, rooms
 
-ORDER = ["check", "tools", "import", "unit", "rooms", "utility", "pipeline", "multiplayer", "docker"]
+ORDER = ["check", "tools", "import", "unit", "rooms", "utility", "labs", "pipeline", "multiplayer", "docker"]
 DESCRIPTIONS = {
     "check": "static repository checks (pins, envs, system drift, asset hashes, secrets)",
     "tools": "Python tooling unit tests (snapshots, compat rules, envs, GLB validator)",
     "import": "Godot import of every project + smoke-load of all sandbox scripts/scenes",
     "unit": "sandbox GDScript unit tests (rules, persistence, protocol, config, assets)",
     "rooms": "every system room in isolation + a room freshly scaffolded from _TEMPLATE",
-    "utility": "standalone utilities under utility/ (MIDI Movement Lab): headless GDScript tests",
+    "utility": "standalone utilities under utility/ (the movement laboratory / Movement Core workbench): headless tests",
+    "labs": "laboratories under LABS/ (ADR-0010): each lab's headless GDScript tests",
     "pipeline": "asset library/consumer consistency (+ Blender regeneration with --with-blender)",
     "multiplayer": "native server + bot clients: sync, authority, cheats, persistence, safety",
     "docker": "server image, container persistence, graceful stop, Scenario B isolation",
@@ -57,6 +58,9 @@ def suite_unit(_opts) -> bool:
 def suite_rooms(_opts) -> bool:
     ok = True
     for name in rooms.list_rooms():
+        if packages.is_package(name):
+            print(f"  room {name}: package room, tested in its workbench by the utility suite")
+            continue
         print(f"  room {name}")
         ok = rooms.test_room(name)[0] == 0 and ok
     scratch = paths.RUNTIME / "scratch-rooms"
@@ -80,6 +84,30 @@ def suite_utility(_opts) -> bool:
         code, _ = godot.run_gd_tests(project, "test", ["res://tests"], report)
         ok = code == 0 and ok
     return ok
+
+
+def suite_labs(_opts) -> bool:
+    ok = True
+    for project in godot.lab_projects():
+        print(f"  lab {project.relative_to(paths.REPO)}")
+        godot.import_project(project)
+        report = paths.RUNTIME / "test-results" / f"lab-{project.name}.json"
+        code, _ = godot.run_gd_tests(project, "test", ["res://tests"], report)
+        ok = code == 0 and ok
+    if not godot.lab_projects():
+        print("  no laboratories under LABS/ on this branch")
+    # The scaffold itself: a laboratory freshly made from LABS/_TEMPLATE with every package system installed.
+    from . import labs
+
+    scratch = paths.RUNTIME / "scratch-labs"
+    shutil.rmtree(scratch, ignore_errors=True)
+    scratch.mkdir(parents=True)
+    folder = scratch / "template_check"
+    labs.scaffold("template_check", packages.package_rooms(), folder)
+    print("  lab template_check (scaffolded from LABS/_TEMPLATE with " + (", ".join(packages.package_rooms()) or "no systems") + ")")
+    godot.import_project(folder)
+    code, _ = godot.run_gd_tests(folder, "test", ["res://tests"], paths.RUNTIME / "test-results" / "lab-template_check.json")
+    return code == 0 and ok
 
 
 def suite_pipeline(opts) -> bool:

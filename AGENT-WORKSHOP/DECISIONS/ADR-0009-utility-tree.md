@@ -1,6 +1,8 @@
 # ADR-0009: `utility/` tree for standalone development utilities
 
-Status: Accepted (2026-11-06, requested by the user in the "MIDI Movement Lab" brief)
+Status: Accepted (2026-11-06, requested by the user in the "MIDI Movement Lab" brief). Amended by
+[ADR-0010](ADR-0010-shared-systems-and-laboratories.md): a utility may be the workbench of a package room
+(`utility/movement/flat-plane` holds `movement_core`'s source), whose versions are installed into other projects.
 
 ## Context
 The MIDI Movement Lab (task [0003](../TASKS/0003-midi-movement-lab.md)) is a tuning tool, not gameplay and not a

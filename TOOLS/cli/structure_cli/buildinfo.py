@@ -75,7 +75,9 @@ def integrated_systems() -> dict:
     out = {}
     for record in sorted((paths.SANDBOX_PROJECT / "systems").glob("*/INTEGRATION.json")):
         data = json.loads(record.read_text(encoding="utf-8"))
-        out[record.parent.name] = {"version": data.get("room_version"), "source_sha256": data.get("source_sha256")}
+        # room promotions record room_version / source_sha256; package installs (ADR-0010) version / sha256
+        out[record.parent.name] = {"version": data.get("room_version") or data.get("version"),
+                                   "source_sha256": data.get("source_sha256") or data.get("sha256")}
     return out
 
 

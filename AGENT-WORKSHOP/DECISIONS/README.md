@@ -13,3 +13,5 @@ needs the user's approval (see `../PROTOCOLS/WORKSHOP-PROTOCOL.md`). Superseded 
 | [0006](ADR-0006-system-rooms-and-integration.md) | System rooms are standalone Godot projects promoted into the sandbox as hash-tracked copies | Accepted |
 | [0007](ADR-0007-asset-pipeline.md) | Blender (pinned 5.0.1) background scripts -> validated GLB; small runtime files committed, large sources in LFS | Accepted |
 | [0008](ADR-0008-testing-strategy.md) | Zero-dependency GDScript runner, stdlib Python orchestration, headless bot clients; engine errors fail tests | Accepted |
+| [0009](ADR-0009-utility-tree.md) | `utility/` tree for standalone development utilities (the movement laboratory) | Accepted; amended by 0010 |
+| [0010](ADR-0010-shared-systems-and-laboratories.md) | Package rooms installed pinned at `res://systems/<room>/`; release tags; laboratories as `lab/<name>` worktrees with `LABS/<name>/`; promotion through a validated integration branch | Accepted |

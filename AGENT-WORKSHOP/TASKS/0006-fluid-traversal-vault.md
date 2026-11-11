@@ -71,7 +71,7 @@ repository static checks. Human visual acceptance of the vault remains a separat
   Final camera-focused tests and the subsequent full regression pass.
 - Gate 7: the latest Playground was relaunched at `vault_a` as a persistent detached process. Native window
   responsiveness and error-free startup are verified in the
-  [readiness record](../../.runtime/movement-lab-4-verification/playtest-readiness.json).
+  `readiness record` (local evidence: `.runtime/movement-lab-4-verification/playtest-readiness.json`, git-ignored).
   Visual naturalness and physical MIDI approval remain the user's checkpoint, not an automated pass.
 
 Diagnosis, measurements, limitations and commands: [Movement Lab 4.0](../DOCUMENTATION/MOVEMENT-LAB-4.md).

@@ -8,7 +8,9 @@
 | `tools` | Python tooling: compat rules, snapshot safety, env validation, GLB validator, build tags, room hashing | Python | < 1 s |
 | `import` | Godot import of every project + smoke load of every sandbox script/scene | Godot | ~10 s |
 | `unit` | sandbox GDScript unit tests: world rules, persistence safety, protocol validation, config, world gen, asset import | Godot | ~5 s |
-| `rooms` | each room's tests in isolation + a room scaffolded from `_TEMPLATE` (tests + benchmark) | Godot | ~10 s |
+| `rooms` | each room's tests in isolation + a room scaffolded from `_TEMPLATE` (tests + benchmark); package rooms are tested in their workbench (`utility`) | Godot | ~10 s |
+| `utility` | standalone utilities: the movement laboratory, i.e. the `movement_core` workbench suite (about 550 tests) | Godot | ~4 min |
+| `labs` | every laboratory under `LABS/` + a laboratory scaffolded from `LABS/_TEMPLATE` with every package system installed | Godot | ~10 s |
 | `pipeline` | asset library/manifest/consumer hashes + GLB validation (`--with-blender`: regenerate and compare bytes) | Python (+Blender) | < 1 s |
 | `multiplayer` | native server + bot processes: two-client sync, cooperation, cheat suite, protocol mismatch, server full, graceful and crash persistence, data-dir lease, newer-schema refusal; the real client run headless (`--allow-headless`) following live events and exiting through the window-close path | Godot | ~50 s |
 | `docker` | builds `structure-server:test`; container serves native bots; persistence across re-creation; graceful `docker stop`; Scenario B isolation | Docker | ~1-2 min |
