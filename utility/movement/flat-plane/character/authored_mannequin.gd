@@ -23,6 +23,8 @@ var sole_points := {}
 var traversal_clips: Array[String] = []   ## authored traversal clips that loaded and retargeted (empty = traversal off)
 var traversal_source := TraversalSource
 var climb_source := ClimbSource
+var body_materials: Array[StandardMaterial3D] = []   ## every body part's material (the skeleton view fades them)
+var body_alpha := 1.0
 
 
 func _ready() -> void:
@@ -122,8 +124,18 @@ func _attach(bone: String, mesh: Mesh, world: Transform3D, colour: String) -> vo
 	material.albedo_color = LegacyVisual.COLOURS[colour]
 	material.roughness = 0.85
 	instance.material_override = material
+	body_materials.append(material)
 	instance.transform = _rest(bone).affine_inverse() * world
 	attach.add_child(instance)
+
+
+## The body at `alpha` opacity (1 = solid). Semi-transparent parts draw a depth pre-pass, so the silhouette stays one
+## clean shape instead of showing every overlapping part through the others.
+func set_body_alpha(alpha: float) -> void:
+	body_alpha = alpha
+	for material in body_materials:
+		material.albedo_color.a = alpha
+		material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED if alpha >= 1.0 else BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 
 
 func _segment(bone: String, end: String, radius: float, colour: String) -> void:

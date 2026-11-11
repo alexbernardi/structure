@@ -159,7 +159,7 @@ func test_hands_are_placed_on_the_lip(t) -> void:
 	t.ok(seen.wrist_out[0] > 0.02 and seen.wrist_out[1] < 0.08, "wrists just out from the face (%.3f .. %.3f m): the forearm clears the edge" % seen.wrist_out)
 	t.ok(seen.fingers > 0.95, "fingers over the top, into the wall (cos %.3f)" % seen.fingers)
 	t.ok(seen.palm > 0.95, "palms down on the top (cos %.3f)" % seen.palm)
-	t.ok(seen.arm > 0.9, "arms nearly straight: the body hangs from them (shoulder to wrist >= %.2f of the arm; the authored grip pose is a little asymmetric, so one arm is straighter)" % seen.arm)
+	t.ok(seen.arm > 0.85, "arms nearly straight: the body hangs from them (shoulder to wrist >= %.2f of the arm; one arm is straighter as the grip pose is a little asymmetric, and since 5.5 the braced feet hold the body out a little)" % seen.arm)
 	t.ok(seen.head < 0.0, "the head is off the wall (%.3f m)" % seen.head)
 	t.ok(seen.feet_into < -0.05, "the dangling feet stay off the wall (%.3f m)" % seen.feet_into)
 	t.ok(seen.feet_low > 0.0, "and off the ground (lowest ankle %.2f m)" % seen.feet_low)
@@ -194,7 +194,7 @@ func test_the_hang_swings_and_settles(t) -> void:
 
 
 ## Stick right shimmies along the 3.0 m wall at shimmy_speed, hand over hand (one hand at a time, both on the lip), and
-## stops where the wall ends instead of letting go; stick left comes back; one press then pulls up from the new place.
+## stops where the lip steps up to a flush 3.6 m block (no corner to turn) instead of letting go; stick left comes back; one press then pulls up from the new place.
 func test_shimmy_along_the_ledge_and_pull_up(t) -> void:
 	var scene = await _scene()
 	await _place(scene, Vector3(38.0, 0.05, -85.0))
@@ -224,7 +224,7 @@ func test_shimmy_along_the_ledge_and_pull_up(t) -> void:
 	t.ok(absf(trace.speed - speed) < 0.01, "shimmies at shimmy_speed (%.2f m/s)" % trace.speed)
 	var stop := -81.0 - MantleAction.HAND_SPAN - MantleAction.SHIMMY_LEAD
 	t.ok(absf(trace.end_z - stop) < 0.05, "stops where the wall ends, both hands still on it (z %.2f, expected %.2f)" % [trace.end_z, stop])
-	t.eq(trace.end_block, "end", "and says why")
+	t.ok(trace.end_block in ["end", "corner_ledge", "corner_blocked"] and mantle.corners == 0, "and says why, without turning (%s; since 5.5 a flush 3.6 m block ends this wall)" % trace.end_block)
 	t.ok(trace.back_z < trace.end_z - 0.8, "stick left comes back (z %.2f -> %.2f)" % [trace.end_z, trace.back_z])
 	t.ok(anim.hand_steps - trace.steps0 >= 6, "hand over hand (%d hand moves)" % (anim.hand_steps - trace.steps0))
 	t.eq(anim.two_hands_moving, 0, "never both hands off the ledge")

@@ -69,6 +69,8 @@ var _side_offset := Vector3.RIGHT * 7.5
 var _side_focus_y := NAN
 const SIDE_FOLLOW_RATE := 5.0   ## 1/s: how quickly a side view's height follows the character
 const PROFILE_KEYS := {KEY_1: "human", KEY_2: "cyber", KEY_3: "magic", KEY_4: "injury"}
+const SkeletonOverlay = preload("res://animation/skeleton_overlay.gd")
+const SKELETON_VIEW_ALPHA := 0.4   ## body opacity while the skeleton view is on
 
 
 func _ready() -> void:
@@ -140,6 +142,9 @@ func _ready() -> void:
 	_vault_debug.name = "TraversalDebug"
 	add_child(_vault_debug)
 	_vault_debug.setup(vault, body, traversal)
+	_vault_debug.animation = authored_animation
+	if _args.has("skeleton-view"):
+		toggle_skeleton_view.call_deferred()
 	if _args.has("traversal-debug"):
 		traversal_params.set_value("debug_overlay", 1.0)
 	if _args.has("no-traversal"):
@@ -302,6 +307,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		toggle_body_dynamics()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F10:
 		traversal_params.set_value("debug_overlay", 0.0 if traversal_params.is_on("debug_overlay") else 1.0)
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_K and not (tuning != null and tuning.editor != null and tuning.editor.visible):
+		toggle_skeleton_view()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_V and not (tuning != null and tuning.editor != null and tuning.editor.visible):
 		toggle_side_view()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_T and not (tuning != null and tuning.editor != null and tuning.editor.visible):
@@ -334,6 +341,23 @@ func toggle_body_dynamics() -> void:
 
 
 ## V: a side view square to the current camera heading (fixed while it is on), for inspecting the vault silhouette.
+## K: the biomechanical skeleton view - the real runtime skeleton as joints and rods, through the body at 40 % opacity.
+var skeleton_overlay
+
+
+func toggle_skeleton_view() -> void:
+	if authored_visual == null:
+		return
+	if skeleton_overlay == null:
+		skeleton_overlay = SkeletonOverlay.new()
+		skeleton_overlay.name = "SkeletonOverlay"
+		authored_visual.add_child(skeleton_overlay)
+		skeleton_overlay.setup(authored_visual.skeleton, authored_visual.bone_index)
+		skeleton_overlay.visible = false
+	skeleton_overlay.visible = not skeleton_overlay.visible
+	authored_visual.set_body_alpha(SKELETON_VIEW_ALPHA if skeleton_overlay.visible else 1.0)
+
+
 func toggle_side_view() -> void:
 	if _side_cam.current:
 		cam.camera.current = true
@@ -463,7 +487,7 @@ func _process(delta: float) -> void:
 		_vault_debug.redraw(Engine.get_physics_interpolation_fraction())
 	if _side_cam.current:
 		_update_side_view(0.0 if teleported else delta)
-	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s   [%s]\n%s\n%s\nWASD run   Mouse look   Space jump   Hold Shift to sprint (2x by default)   Ctrl/C crouch   R respawn   T/Shift+T landmarks (vault_a/b/c, lane_d..g)   Space: vault in the window / climb; in the air: catch; jump into a high wall to hang, Space pulls up; Ctrl at speed: slide\nEsc frees mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset   F6/F7/F8 window   F9 A/B   F10 traversal debug   V side view   F11 fullscreen" % [
+	_readout.text = "speed %.2f m/s   vy %+.2f   %s%s   [%s]\n%s\n%s\nWASD run   Mouse look   Space jump   Hold Shift to sprint (2x by default)   Ctrl/C crouch   R respawn   T/Shift+T landmarks (vault_a/b/c, lane_d..g)   Space: vault in the window / climb; in the air: catch; jump into a high wall to hang, Space pulls up; Ctrl at speed: slide\nEsc frees mouse   F3 HUD   F4 bindings   PgUp/PgDn bank   [ ] preset   F5 save   Home reset   F6/F7/F8 window   F9 A/B   F10 traversal debug   K skeleton view   V side view   F11 fullscreen" % [
 		speed, v.y, "grounded" if body.core.grounded else "airborne", "  crouching" if body.core.crouching and not vault.active() else "",
 		"LEGACY" if locomotion_params.is_on("legacy") else "AUTHORED " + authored_animation.model.state, traversal_status(), capability_status()]
 	if _args.has("screenshot") and _frames == int(_args.get("screenshot-frame", 90)):

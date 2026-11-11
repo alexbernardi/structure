@@ -40,6 +40,16 @@ const LEG_DAMP := 5.0
 const FOOT_WALL_CLEAR := 0.12      ## m the dangling feet stay off the wall
 const FOOT_GROUND_CLEAR := 0.06    ## m above the ground (a low hang braces the legs instead)
 const HANG_BLEND := 0.15           ## s the drawn body takes to settle into the hang and to leave it
+const FOOT_BRACE_OFF := 0.08      ## m from the wall to the braced ankle (the ball of the foot presses on the wall)
+const BRACE_BELOW_HIP := 0.65     ## m below the hip the braced feet press on the wall (knees up and bent: a climber's brace)
+const FOOT_STEP_TRIGGER := 0.16    ## m a braced foot trails its place before it moves (shimmying, corners)
+const FOOT_STEP_TIME := 0.2        ## s per foot move
+const BRACE_RATE := 6.0            ## 1/s the feet come up onto the wall after a catch (and leave it where it ends)
+const BRACE_SHOULDER_OFF := 0.08   ## m further out the shoulders hang when the feet push off the wall
+const TERRAIN_REACH := 0.45        ## m of ground height difference under a foot that the foot IK follows
+const TERRAIN_RATE := 25.0         ## 1/s the ground under each foot is followed (no pops on step edges)
+const PELVIS_RATE := 12.0          ## 1/s the pelvis drops to let the lower foot reach its ground
+const FOOT_TILT_MAX := deg_to_rad(35.0)   ## steepest surface a planted foot tilts to
 const ROLL_TILT := 0.35            ## share of the sideways swing the torso tilts (two hands make it a parallelogram: the arms
                                    ## swing sideways together and the shoulders stay nearly level)
 
@@ -86,6 +96,7 @@ var _have_position := false
 var measured_speed := 0.0
 var _heading := 0.0
 var final_feet := {}
+var final_knees := {}               ## side -> world knee position after every correction (tests)
 var final_hands := {}               ## side -> world transform of the hand after every correction (tests)
 var _orientation := FootOrientation.new()
 var ray_exclude: Array[RID] = []   ## the character's own collider (hang probes)
@@ -105,6 +116,19 @@ var _hang_legs := false
 var _plants := {}                  ## side -> world wrist target while the hand is on the ledge
 var _step := {}                    ## side -> {from, to, t} while that hand moves
 var _prev_shimmy := 0.0
+var _plant_d := {}                 ## side -> the wall direction under that hand (a corner grip has two)
+var _brace := 0.0                  ## 0 dangling .. 1 both feet pushing on the wall
+var _foot_plants := {}             ## side -> {at: world ankle target on the wall, n: wall normal}
+var _foot_step := {}               ## side -> {from, to, t} while that foot moves along the wall
+var foot_steps := 0                ## braced foot moves (telemetry)
+var braced_feet := 0               ## feet on the wall this frame (telemetry)
+var debug_contacts := {}           ## hand / foot IK targets, wall normals, the lip path (debug overlay, tests)
+var _ground := {"Left": 0.0, "Right": 0.0}       ## ground height under each foot relative to the drawn floor (smoothed)
+var _ground_normal := {"Left": Vector3.UP, "Right": Vector3.UP}
+var _pelvis := 0.0                 ## m the drawn body is lowered so the lower foot reaches its ground
+var mantle_hand_error := 0.0       ## m between the mantle's planted hand and its contact after correction (telemetry)
+var _mantle_plant := {}            ## the quick mantle's planted left hand: {at, wrist_y, target}
+var terrain_correction := 0.0      ## m largest terrain offset applied to a foot this frame (telemetry)
 
 
 func setup(target: Node3D, parameters) -> void:
@@ -123,6 +147,7 @@ func _capture_final_feet() -> void:
 	for side in ["Left", "Right"]:
 		final_feet[side] = visual.skeleton.get_bone_global_pose(visual.bone_index[side + "Foot"])
 		final_hands[side] = visual.skeleton.global_transform * visual.skeleton.get_bone_global_pose(visual.bone_index[side + "Hand"])
+		final_knees[side] = visual.skeleton.global_transform * visual.skeleton.get_bone_global_pose(visual.bone_index[side + "LowerLeg"]).origin
 	hand_error = 0.0
 	grip_error = 0.0
 	if _gripping:
@@ -131,6 +156,9 @@ func _capture_final_feet() -> void:
 			if chain.active and chain.influence > 0.99:
 				var final: Vector3 = visual.skeleton.global_transform * visual.skeleton.get_bone_global_pose(visual.bone_index[side + "Hand"]).origin
 				grip_error = maxf(grip_error, final.distance_to(_grip_targets[side]))
+	if not _mantle_plant.is_empty() and _arm_left.active and _arm_left.influence > 0.99:
+		var planted: Vector3 = visual.skeleton.global_transform * visual.skeleton.get_bone_global_pose(visual.bone_index.LeftHand).origin
+		mantle_hand_error = maxf(mantle_hand_error, planted.distance_to(_mantle_plant.target))
 	if _arm.active and not _gripping:
 		var wrist: Vector3 = visual.skeleton.get_bone_global_pose(visual.bone_index.LeftHand if vault_mirrored else visual.bone_index.RightHand).origin
 		hand_error = (visual.skeleton.global_transform * wrist).distance_to(_hand_world)
@@ -391,6 +419,7 @@ func update(dt: float, state: Dictionary) -> void:
 	_support(vault)
 	_hang(climb if mantling and climb.get("hang", false) else {}, dt)
 	_grip(climb if mantling and pulling else {})
+	_mantle_hand(climb if mantling and not pulling and not climb.get("hang", false) else {})
 	_correct_feet(state.grounded and not vaulting and not mantling and not sliding and not flipping, dt)
 
 
@@ -624,6 +653,9 @@ func _hang(climb: Dictionary, dt: float) -> void:
 		else:
 			_plants.clear()
 			_step.clear()
+			_foot_plants.clear()
+			_foot_step.clear()
+		debug_contacts = {}
 		return
 	var d: Vector3 = climb.direction
 	var r: Vector3 = climb.right
@@ -635,10 +667,11 @@ func _hang(climb: Dictionary, dt: float) -> void:
 	var space: PhysicsDirectSpaceState3D = visual.get_world_3d().direct_space_state
 	_move_hands(climb, space, dt)
 	var grip_mid := (_hand_target("Left", d) + _hand_target("Right", d)) * 0.5
-	# Pendulum about the hands: x = out from the wall (it cannot swing into it), y = toward the right.
+	# Pendulum about the hands: x = out from the wall (it cannot swing into it), y = toward the right. Feet pushing on
+	# the wall stiffen and damp the swing out from it.
 	var accel := (float(climb.shimmy) - _prev_shimmy) / maxf(dt, 1e-4)
 	_prev_shimmy = climb.shimmy
-	_swing_v.x += (-SWING_OMEGA2 * hang_swing.x - SWING_DAMP * _swing_v.x) * dt
+	_swing_v.x += (-(SWING_OMEGA2 + 25.0 * _brace) * hang_swing.x - (SWING_DAMP + 4.0 * _brace) * _swing_v.x) * dt
 	_swing_v.y += (-SWING_OMEGA2 * hang_swing.y - SWING_DAMP * _swing_v.y - accel / SWING_LENGTH) * dt
 	hang_swing += _swing_v * dt
 	if hang_swing.x < 0.0:
@@ -655,8 +688,9 @@ func _hang(climb: Dictionary, dt: float) -> void:
 	var local: Transform3D = visual.global_transform.affine_inverse() * skeleton.global_transform
 	var shoulders: Vector3 = (skeleton.get_bone_global_pose(bones.LeftUpperArm).origin + skeleton.get_bone_global_pose(bones.RightUpperArm).origin) * 0.5
 	var arm := HANG_ARM * _arm_length()
-	var down := sqrt(maxf(arm * arm - HANG_SHOULDER_OFF * HANG_SHOULDER_OFF, 0.01))
-	var desired := grip_mid + swing * (Vector3.DOWN * down - d * HANG_SHOULDER_OFF)
+	var off := HANG_SHOULDER_OFF + BRACE_SHOULDER_OFF * _brace
+	var down := sqrt(maxf(arm * arm - off * off, 0.01))
+	var desired := grip_mid + swing * (Vector3.DOWN * down - d * off)
 	var target_origin: Vector3 = desired - basis * (local * shoulders)
 	# The authored grip frame leans the upper body into the wall: pitch the drawn body out about the hands until the
 	# head and the chest clear the face (a fixed rest angle for this pose, applied under the swing).
@@ -673,25 +707,28 @@ func _hang(climb: Dictionary, dt: float) -> void:
 	visual.global_transform = Transform3D(now.basis.slerp(placed.basis, w), now.origin.lerp(placed.origin, w))
 	_hang_shift = visual.global_transform.origin - now.origin
 	_hang_basis = visual.global_transform.basis
-	# Hands spread apart (one trailing during a shimmy, the sideways swing) pull the body up: it rises just enough that
-	# each planted wrist stays within its nearly straight arm.
-	var lift := 0.0
+	# A planted hand further than its nearly straight arm reaches (hands spread during a shimmy, the sideways swing, the
+	# trailing hand on the old wall round a corner) pulls the body toward it: up where it can, sideways where it must.
+	var pull := Vector3.ZERO
 	var reach_limit := _arm_length() * 0.985
 	for side in ["Left", "Right"]:
 		if _step.has(side):
 			continue
 		var gap: Vector3 = _hand_target(side, d) - skeleton.global_transform * skeleton.get_bone_global_pose(bones[side + "UpperArm"]).origin
 		var across := Vector2(gap.x, gap.z).length()
-		if gap.length() > reach_limit and across < reach_limit:
-			lift = maxf(lift, gap.y - sqrt(reach_limit * reach_limit - across * across))
-	if lift > 0.0:
-		visual.global_position += Vector3.UP * lift * w
-		_hang_shift += Vector3.UP * lift * w
-	hang_lift = lift
+		if gap.length() <= reach_limit:
+			continue
+		if across < reach_limit:
+			pull.y = maxf(pull.y, gap.y - sqrt(reach_limit * reach_limit - across * across))
+		else:
+			pull += gap.normalized() * (gap.length() - reach_limit)
+	if pull != Vector3.ZERO:
+		visual.global_position += pull * w
+		_hang_shift += pull * w
+	hang_lift = pull.length()
 	var to_skeleton := skeleton.global_transform.affine_inverse()
 	# Arms: wrists on their grip points, elbows out to the sides and back from the wall; hands palm-down on the top.
 	_gripping = true
-	var grip := _grip_basis(d, skeleton)
 	var full_arm := _arm_length()
 	for side in ["Left", "Right"]:
 		var chain = _arm_left if side == "Left" else _arm_right
@@ -708,14 +745,21 @@ func _hang(climb: Dictionary, dt: float) -> void:
 		chain.pole = shoulder + to_skeleton.basis * (out * 0.4 - d * 0.3 + Vector3.DOWN * 0.1)
 		_grip_targets[side] = wrist
 		var hand: int = bones[side + "Hand"]
-		_orientation.orientations[hand] = skeleton.get_bone_global_pose(hand).basis.slerp(grip, w)
-	# Legs: dangling from the hips along the lagging swing, off the wall and the ground (a low hang bends the knees).
+		var hand_d: Vector3 = _step[side].get("d", d) if _step.has(side) else _plant_d.get(side, d)
+		_orientation.orientations[hand] = skeleton.get_bone_global_pose(hand).basis.slerp(_grip_basis(hand_d, skeleton), w)
+	# Legs: braced on the wall like a climber where there is wall within reach (the authored grip frame's bent legs, each
+	# foot on a real contact found at its own height), else dangling from the hips along the lagging swing.
 	_hang_legs = true
 	var ground := -INF
 	var below := _probe(space, grip_mid, grip_mid + Vector3.DOWN * 6.0)
 	if not below.is_empty():
 		ground = (below.position as Vector3).y
 	var hang_dir := Basis(d, -_legs.y) * Basis(r, -_legs.x) * Vector3.DOWN
+	var contacts := _brace_feet(climb, space, d, r, dt)
+	braced_feet = contacts.size()
+	var settled := float(climb.get("hang_time", 1.0)) > 0.08
+	_brace = move_toward(_brace, 1.0 if settled and contacts.size() == 2 else 0.0, BRACE_RATE * dt)
+	var feet_debug := []
 	for index in 2:
 		var side := "Left" if index == 0 else "Right"
 		var hip: Vector3 = skeleton.global_transform * skeleton.get_bone_global_pose(bones[side + "UpperLeg"]).origin
@@ -725,12 +769,86 @@ func _hang(climb: Dictionary, dt: float) -> void:
 		if into > -FOOT_WALL_CLEAR:
 			foot -= d * (into + FOOT_WALL_CLEAR)
 		foot.y = maxf(foot.y, ground + FOOT_GROUND_CLEAR)
+		if contacts.has(side):
+			foot = foot.lerp(contacts[side], _brace)
+			feet_debug.append([contacts[side], _foot_plants[side].n])
 		_feet[index].target = to_skeleton * foot
-		_feet[index].pole = to_skeleton * (knee + d * 0.4 + Vector3.UP * 0.1)
+		# Braced, the knees come up toward the chest (a climber's brace, feet below them on the wall); dangling, they bend
+		# slightly toward the wall.
+		_feet[index].pole = to_skeleton * (knee + (d * 0.4 + Vector3.UP * 0.1).lerp(Vector3.UP * 0.6 + d * 0.1, _brace))
 		_feet[index].influence = w
 		_feet[index].active = true
 		var foot_bone: int = bones[side + "Foot"]
 		_orientation.orientations[foot_bone] = skeleton.get_bone_global_pose(foot_bone).basis
+	var hands_debug := []
+	for side in ["Left", "Right"]:
+		hands_debug.append([_hand_target(side, d), _plant_d.get(side, d)])
+	debug_contacts = {"hands": hands_debug, "feet": feet_debug, "path": _lip_path(climb), "brace": _brace}
+
+
+## Braced feet: each foot's place on the wall, found by a ray at the authored foot's height (the grip frame is a braced
+## pose); kept while the body moves, moved one at a time once it trails by FOOT_STEP_TRIGGER or the wall turns (a
+## corner). A foot with no wall within its leg's reach is not braced. Returns side -> ankle target (world).
+func _brace_feet(climb: Dictionary, space: PhysicsDirectSpaceState3D, d: Vector3, r: Vector3, dt: float) -> Dictionary:
+	var skeleton: Skeleton3D = visual.skeleton
+	var bones: Dictionary = visual.bone_index
+	var wanted := {}
+	for side in ["Left", "Right"]:
+		var foot: Vector3 = skeleton.global_transform * skeleton.get_bone_global_pose(bones[side + "Foot"]).origin
+		var hip: Vector3 = skeleton.global_transform * skeleton.get_bone_global_pose(bones[side + "UpperLeg"]).origin
+		# Feet come up toward the hips: the contact is at least BRACE_BELOW_HIP above the authored foot's drop.
+		var probe := Vector3(foot.x, maxf(foot.y, hip.y - BRACE_BELOW_HIP), foot.z)
+		var hit := _probe(space, probe - d * 0.3, probe + d * 1.0)
+		if hit.is_empty() or absf((hit.normal as Vector3).y) > 0.35:
+			continue
+		var n := Vector3((hit.normal as Vector3).x, 0.0, (hit.normal as Vector3).z).normalized()
+		var at: Vector3 = (hit.position as Vector3) + n * FOOT_BRACE_OFF
+		if at.distance_to(hip) > _leg_length(side) * 0.97:
+			continue
+		wanted[side] = {"at": at, "n": n}
+	for side in _foot_step.keys():
+		var step: Dictionary = _foot_step[side]
+		step.t = float(step.t) + dt / FOOT_STEP_TIME
+		if step.t >= 1.0:
+			_foot_plants[side] = {"at": step.to, "n": step.n}
+			_foot_step.erase(side)
+			foot_steps += 1
+	for side in _foot_plants.keys():
+		if not wanted.has(side) and not _foot_step.has(side):
+			_foot_plants.erase(side)
+	if _foot_step.is_empty():
+		for side in wanted:
+			if not _foot_plants.has(side):
+				_foot_plants[side] = wanted[side]
+				continue
+			var plant: Dictionary = _foot_plants[side]
+			var trail: float = absf(((wanted[side].at as Vector3) - (plant.at as Vector3)).dot(r))
+			if trail > FOOT_STEP_TRIGGER or (plant.n as Vector3).dot(wanted[side].n) < 0.9:
+				_foot_step[side] = {"from": plant.at, "to": wanted[side].at, "n": wanted[side].n, "t": 0.0}
+				break
+	var out := {}
+	for side in _foot_plants:
+		var plant: Dictionary = _foot_plants[side]
+		var at: Vector3 = plant.at
+		if _foot_step.has(side):
+			var step: Dictionary = _foot_step[side]
+			var u := clampf(float(step.t), 0.0, 1.0)
+			at = (step.from as Vector3).lerp(step.to, smoothstep(0.0, 1.0, u)) + (plant.n as Vector3) * 0.1 * sin(PI * u)
+		out[side] = at
+	return out
+
+
+## The lip the hands work along, as points for the debug overlay: one segment, or two meeting at a corner.
+func _lip_path(climb: Dictionary) -> Array:
+	var c: Dictionary = climb.get("corner", {})
+	if c.is_empty():
+		var e: Vector3 = climb.edge
+		return [e - (climb.right as Vector3) * 0.6, e + (climb.right as Vector3) * 0.6]
+	var r_old: Vector3 = (c.d_old as Vector3).cross(Vector3.UP)
+	var r_new: Vector3 = (c.d_new as Vector3).cross(Vector3.UP)
+	var at: Vector3 = c.at
+	var side: float = c.side
+	return [at - r_old * side * 0.6, at, at + r_new * side * 0.6]
 
 
 ## A new hang: the hands start on the authored grip places, and the catch sets the body swinging (moving into the wall
@@ -738,6 +856,10 @@ func _hang(climb: Dictionary, dt: float) -> void:
 func _start_hang(climb: Dictionary) -> void:
 	_plants.clear()
 	_step.clear()
+	_plant_d.clear()
+	_foot_plants.clear()
+	_foot_step.clear()
+	_brace = 0.0
 	_hang_weight = 0.0
 	hang_swing = Vector2.ZERO
 	_legs = Vector2.ZERO
@@ -752,14 +874,13 @@ func _start_hang(climb: Dictionary) -> void:
 ## Each hand's place on the ledge follows the hang point; one hand moves at a time (the one furthest behind, which is
 ## the leading hand when the shimmy sets off), lifting off and reaching a little past its place.
 func _move_hands(climb: Dictionary, space: PhysicsDirectSpaceState3D, dt: float) -> void:
-	var d: Vector3 = climb.direction
-	var r: Vector3 = climb.right
 	var lip: float = climb.lip_y
 	var slots := {}
 	for side in ["Left", "Right"]:
 		slots[side] = _hand_slot(climb, side)
 		if not _plants.has(side):
-			_plants[side] = _snap_hand(space, slots[side], d, lip)
+			_plants[side] = _snap_hand(space, slots[side].at, slots[side].d, lip)
+			_plant_d[side] = slots[side].d
 	if _step.size() > 1:
 		two_hands_moving += 1
 	for side in _step.keys():
@@ -767,27 +888,64 @@ func _move_hands(climb: Dictionary, space: PhysicsDirectSpaceState3D, dt: float)
 		step.t = float(step.t) + dt / STEP_TIME
 		if step.t >= 1.0:
 			_plants[side] = step.to
+			_plant_d[side] = step.d
 			_step.erase(side)
 			hand_steps += 1
 	if not _step.is_empty():
 		return
-	var shimmying := absf(float(climb.shimmy)) > 0.05
+	var shimmying := absf(float(climb.shimmy)) > 0.05 or float(climb.get("turning", -1.0)) >= 0.0
 	var best := ""
 	var worst := 0.0
 	for side in ["Left", "Right"]:
-		var drift: float = (slots[side] - _plants[side]).dot(r)
+		var drift: float = float(slots[side].x) - _path_x(climb, _plants[side])
 		if absf(drift) > (STEP_TRIGGER if shimmying else STEP_SETTLE) and absf(drift) > worst:
 			best = side
 			worst = absf(drift)
 	if best != "":
-		var ahead: float = signf((slots[best] - _plants[best]).dot(r)) * (STEP_OVERSHOOT if shimmying else 0.0)
-		_step[best] = {"from": _plants[best], "to": _snap_hand(space, slots[best] + r * ahead, d, lip), "t": 0.0}
+		var ahead: float = signf(float(slots[best].x) - _path_x(climb, _plants[best])) * (STEP_OVERSHOOT if shimmying else 0.0)
+		var to := _path_point(climb, float(slots[best].x) + ahead)
+		_step[best] = {"from": _plants[best], "to": _snap_hand(space, to.at, to.d, lip), "d": to.d, "t": 0.0}
 
 
-## Where a hand belongs on the ledge now: the authored grip's sideways place either side of the hang point.
-func _hand_slot(climb: Dictionary, side: String) -> Vector3:
+## Where a hand belongs on the ledge now: the authored grip's sideways place either side of the hang point, along the
+## lip - straight, or around a corner (then each hand has its own wall: an asymmetric grip). {at, d, x}.
+func _hand_slot(climb: Dictionary, side: String) -> Dictionary:
 	var scale: float = visual.skeleton.global_transform.basis.get_scale().x
-	return (climb.edge as Vector3) - (climb.right as Vector3) * _grip_hand_x(side) * scale
+	var c: Dictionary = climb.get("corner", {})
+	var x: float = (float(c.x) if not c.is_empty() else 0.0) - _grip_hand_x(side) * scale
+	var p := _path_point(climb, x)
+	p["x"] = x
+	return p
+
+
+## A point of the lip at path coordinate `x` (metres toward the character's right): {at, d}. Around a corner the path
+## is the old wall up to the corner, then the new wall.
+func _path_point(climb: Dictionary, x: float) -> Dictionary:
+	var c: Dictionary = climb.get("corner", {})
+	if c.is_empty():
+		return {"at": (climb.edge as Vector3) + (climb.right as Vector3) * x, "d": climb.direction}
+	var on_new: bool = x * float(c.side) > 0.0
+	var d: Vector3 = c.d_new if on_new else c.d_old
+	return {"at": (c.at as Vector3) + d.cross(Vector3.UP) * x, "d": d}
+
+
+## Path coordinate of a point near the lip (the inverse of _path_point; the nearer wall around a corner).
+func _path_x(climb: Dictionary, point: Vector3) -> float:
+	var c: Dictionary = climb.get("corner", {})
+	if c.is_empty():
+		return (point - (climb.edge as Vector3)).dot(climb.right)
+	var side: float = c.side
+	var x_old: float = (point - (c.at as Vector3)).dot((c.d_old as Vector3).cross(Vector3.UP))
+	var x_new: float = (point - (c.at as Vector3)).dot((c.d_new as Vector3).cross(Vector3.UP))
+	var old_ok: bool = x_old * side <= 0.0
+	var new_ok: bool = x_new * side > 0.0
+	if old_ok and not new_ok:
+		return x_old
+	if new_ok and not old_ok:
+		return x_new
+	var at_old: Vector3 = (c.at as Vector3) + (c.d_old as Vector3).cross(Vector3.UP) * x_old
+	var at_new: Vector3 = (c.at as Vector3) + (c.d_new as Vector3).cross(Vector3.UP) * x_new
+	return x_old if Vector2(point.x - at_old.x, point.z - at_old.z).length() <= Vector2(point.x - at_new.x, point.z - at_new.z).length() else x_new
 
 
 ## The wrist's grip point for a hand at `at` (on the face, at the lip): the real top just past the face and the real
@@ -847,6 +1005,42 @@ func _leg_length(side: String) -> float:
 	return (hip.distance_to(knee) + knee.distance_to(ankle)) * sk.global_transform.basis.get_scale().x
 
 
+## The quick mantle (ClimbUp_1m): its left hand plants on the top. From the clip's planted frame the hand is held where
+## it landed along the ledge, with the palm on the real top surface; the authored wrist rise as the arm pushes is kept.
+func _mantle_hand(climb: Dictionary) -> void:
+	var t: float = climb.get("time", -1.0)
+	var w := smoothstep(MantleClip.HAND_PLANTED - 0.02, MantleClip.HAND_PLANTED, t) * (1.0 - smoothstep(MantleClip.HAND_OFF, MantleClip.HAND_OFF + 0.03, t))
+	if climb.is_empty() or w <= 0.0:
+		if not _mantle_plant.is_empty():
+			_arm_left.active = false
+			_mantle_plant = {}
+		return
+	var skeleton: Skeleton3D = visual.skeleton
+	var bones: Dictionary = visual.bone_index
+	var wrist: Vector3 = skeleton.global_transform * skeleton.get_bone_global_pose(bones.LeftHand).origin
+	if _mantle_plant.is_empty():
+		var top := wrist.y
+		var space: PhysicsDirectSpaceState3D = visual.get_world_3d().direct_space_state
+		var hit := _probe(space, wrist + Vector3.UP * 0.3, wrist + Vector3.DOWN * 0.4)
+		if not hit.is_empty() and (hit.normal as Vector3).y > 0.7:
+			top = (hit.position as Vector3).y
+		_mantle_plant = {"at": Vector3(wrist.x, top + WRIST_UP, wrist.z), "wrist_y": wrist.y, "target": wrist, "top": top}
+		mantle_hand_error = 0.0
+	var target: Vector3 = (_mantle_plant.at as Vector3) + Vector3.UP * (wrist.y - float(_mantle_plant.wrist_y))
+	_mantle_plant.target = target
+	# A hand stays planted only while its arm reaches it: as the body rises past, the straightening arm lets it go.
+	var shoulder_world: Vector3 = skeleton.global_transform * skeleton.get_bone_global_pose(bones.LeftUpperArm).origin
+	w *= 1.0 - smoothstep(0.97, 1.0, shoulder_world.distance_to(target) / _arm_length())
+	var to_skeleton := skeleton.global_transform.affine_inverse()
+	var elbow := skeleton.get_bone_global_pose(bones.LeftLowerArm).origin
+	var shoulder := skeleton.get_bone_global_pose(bones.LeftUpperArm).origin
+	_arm_left.active = true
+	_arm_left.influence = w
+	_arm_left.target = to_skeleton * target
+	_arm_left.pole = elbow + (elbow - (shoulder + skeleton.get_bone_global_pose(bones.LeftHand).origin) * 0.5).normalized() * 0.5
+	_orientation.orientations[bones.LeftHand] = skeleton.get_bone_global_pose(bones.LeftHand).basis
+
+
 ## Sideways (clip x) position of a hand in the authored pull-up's grip frame, sampled from the clip once.
 func _grip_hand_x(side: String) -> float:
 	if _grip_hand.is_empty():
@@ -887,9 +1081,12 @@ func _support(vault: Dictionary) -> void:
 
 func _correct_feet(grounded: bool, dt: float) -> void:
 	max_correction = 0.0
+	terrain_correction = 0.0
+	var skeleton: Skeleton3D = visual.skeleton
+	var terrain: bool = grounded and params.is_on("foot_ik") and not _hang_legs and visual.is_inside_tree()
+	_terrain(terrain, dt)
 	for index in (0 if _hang_legs else 2):   # hanging: the legs are the hang's (_hang)
 		var side := "Left" if index == 0 else "Right"
-		var skeleton: Skeleton3D = visual.skeleton
 		var foot := skeleton.get_bone_global_pose(visual.bone_index[side + "Foot"])
 		var knee := skeleton.get_bone_global_pose(visual.bone_index[side + "LowerLeg"]).origin
 		var hip := skeleton.get_bone_global_pose(visual.bone_index[side + "UpperLeg"]).origin
@@ -897,6 +1094,7 @@ func _correct_feet(grounded: bool, dt: float) -> void:
 		desired.z = hip.z + (desired.z - hip.z) * model.stride
 		var correction := desired - foot.origin
 		_orientation.orientations[visual.bone_index[side + "Foot"]] = foot.basis
+		var lift := 0.0
 		if grounded and params.is_on("foot_ik"):
 			var sole := Vector3(0, INF, 0)
 			for point in visual.sole_points[side]:
@@ -907,15 +1105,83 @@ func _correct_feet(grounded: bool, dt: float) -> void:
 			var horizontal := Vector2(correction.x, correction.z).limit_length(sqrt(maxf(0.0, MAX_FOOT_CORRECTION ** 2 - correction.y ** 2)))
 			correction.x = horizontal.x
 			correction.z = horizontal.y
+			lift = sole.y
 		correction = correction.limit_length(MAX_FOOT_CORRECTION)
+		if terrain:
+			# The real ground under this foot (relative to the drawn floor, less the pelvis drop): the authored swing height
+			# is kept above it, and a planted foot tilts to the surface (stance-weighted).
+			var offset: float = clampf(float(_ground[side]) - _pelvis, -TERRAIN_REACH, TERRAIN_REACH)
+			correction.y += offset
+			# No sole corner below its own ground: where the sole straddles a step edge, the higher tread holds it.
+			var sink := 0.0
+			var space: PhysicsDirectSpaceState3D = visual.get_world_3d().direct_space_state
+			for point in visual.sole_points[side]:
+				var corner: Vector3 = skeleton.global_transform * (foot * point + correction)
+				var hit := _probe(space, corner + Vector3.UP * 0.4, corner + Vector3.DOWN * 0.1)
+				if not hit.is_empty() and (hit.normal as Vector3).y > 0.5:
+					sink = maxf(sink, (hit.position as Vector3).y - corner.y)
+			correction.y += minf(sink, TERRAIN_REACH)
+			offset += minf(sink, TERRAIN_REACH)
+			terrain_correction = maxf(terrain_correction, absf(offset))
+			var stance := 1.0 - smoothstep(0.02, 0.10, lift)
+			var n: Vector3 = (skeleton.global_transform.basis.inverse() * (_ground_normal[side] as Vector3)).normalized()
+			var tilt := Quaternion(Vector3.UP, n)
+			var angle := tilt.get_angle()
+			if angle > 0.001:
+				tilt = Quaternion.IDENTITY.slerp(tilt, minf(1.0, FOOT_TILT_MAX / angle) * stance)
+				_orientation.orientations[visual.bone_index[side + "Foot"]] = Basis(tilt) * foot.basis
 		# A stride-stretched foot near full extension stays within the leg's reach (as far as the authored foot at least).
 		var reach := maxf((hip.distance_to(knee) + knee.distance_to(foot.origin)) * LEG_REACH, hip.distance_to(foot.origin))
 		correction = hip + (foot.origin + correction - hip).limit_length(reach) - foot.origin
-		max_correction = maxf(max_correction, correction.length())
+		max_correction = maxf(max_correction, (correction - Vector3.UP * (float(_ground[side]) - _pelvis if terrain else 0.0)).length())
 		_feet[index].target = foot.origin + correction
 		_feet[index].pole = knee + (knee - (hip + foot.origin) * 0.5).normalized() * 0.5
 		_feet[index].active = grounded and correction.length() > 0.0001
 	visual.skeleton.advance(dt)
+
+
+## Ground under each foot: a ray from above the foot finds the real surface (steps, slopes, uneven ground); heights are
+## relative to the drawn floor and followed smoothly; the pelvis drops so the lower foot can reach its ground (the body
+## stands on its higher support). Off the ground everything eases back to the flat floor.
+func _terrain(active: bool, dt: float) -> void:
+	var skeleton: Skeleton3D = visual.skeleton
+	var floor_y: float = skeleton.global_transform.origin.y
+	var space: PhysicsDirectSpaceState3D = visual.get_world_3d().direct_space_state if active else null
+	var lowest := 0.0
+	var marks := []
+	for side in ["Left", "Right"]:
+		var target := 0.0
+		var normal := Vector3.UP
+		if active:
+			# Under the heel and under the toes: the higher ground holds the foot (a toe over the next tread lifts it).
+			var foot_pose: Transform3D = skeleton.global_transform * skeleton.get_bone_global_pose(visual.bone_index[side + "Foot"])
+			var toe: Vector3 = skeleton.global_transform * skeleton.get_bone_global_pose(visual.bone_index[side + "Toes"]).origin
+			var best := -INF
+			var forward := Vector3(toe.x - foot_pose.origin.x, 0.0, toe.z - foot_pose.origin.z).normalized()
+			var lift := INF
+			for point in visual.sole_points[side]:
+				lift = minf(lift, (skeleton.get_bone_global_pose(visual.bone_index[side + "Foot"]) * point).y)
+			var samples := [foot_pose.origin, toe + forward * 0.05]
+			if lift > 0.03:
+				samples.append(toe + forward * 0.18)   # a swinging foot clears the ground just ahead of its toes (a riser)
+			for at in samples:
+				var hit := _probe(space, Vector3(at.x, floor_y + TERRAIN_REACH, at.z), Vector3(at.x, floor_y - TERRAIN_REACH - 0.1, at.z))
+				if not hit.is_empty() and (hit.normal as Vector3).y > 0.5 and (hit.position as Vector3).y > best:
+					best = (hit.position as Vector3).y
+					normal = hit.normal
+					marks.append([hit.position, normal])
+			if best > -INF:
+				target = clampf(best - floor_y, -TERRAIN_REACH, TERRAIN_REACH)
+		# Rising ground is taken quickly (a foot must not sink into a step), falling ground eased.
+		var k := 1.0 - exp(-(TERRAIN_RATE * 3.0 if target > float(_ground[side]) else TERRAIN_RATE) * dt)
+		_ground[side] = lerpf(float(_ground[side]), target, k)
+		_ground_normal[side] = (_ground_normal[side] as Vector3).lerp(normal, k).normalized()
+		lowest = minf(lowest, float(_ground[side]))
+	_pelvis = lerpf(_pelvis, lowest if active else 0.0, 1.0 - exp(-PELVIS_RATE * dt))
+	if absf(_pelvis) > 1e-5:
+		visual.global_position += Vector3.UP * _pelvis
+	if active:
+		debug_contacts = {"ground": marks, "pelvis": _pelvis}
 
 
 func set_enabled(enabled: bool) -> void:

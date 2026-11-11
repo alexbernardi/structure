@@ -71,6 +71,7 @@ var _flip_prev_height := 0.0
 var _flip_pending := false
 var _flip_velocity := Vector3.ZERO
 var _yaw := 0.0
+var _shimmy_right := Vector3.ZERO    ## the ledge direction the stick was first pushed along (latched until released)
 
 
 func setup(traversal_params, vault_profile, movement_params, exclude: Array[RID] = []) -> void:
@@ -315,9 +316,17 @@ func _end_slide(body, standing: bool) -> void:
 ## While hanging: a new press pulls up and over (the whole climb, no further input); crouch or pulling the stick away
 ## from the wall lets go. A press whose climb is not possible (no room on top, blocked) keeps the hang and says why.
 func _hang_input(body, input: Dictionary, pressed: bool, crouch_edge: bool) -> Dictionary:
-	var away := _wish.length_squared() > 0.01 and _wish.normalized().dot(mantle.plan.direction) < -0.5
-	# The stick along the ledge shimmies (hand over hand), with a dead zone so a stick held toward the wall does not drift.
-	var along: float = _wish.dot(mantle.plan.direction.cross(Vector3.UP)) if _wish.length_squared() > 0.01 else 0.0
+	# The stick is read in the ledge frame it was first pushed in, until it is released: holding "right" keeps going
+	# round a corner and on along the next wall, even though the camera-relative stick now points elsewhere.
+	if _wish.length_squared() < 0.01:
+		_shimmy_right = Vector3.ZERO
+	elif _shimmy_right == Vector3.ZERO:
+		_shimmy_right = mantle.plan.direction.cross(Vector3.UP)
+	var right: Vector3 = _shimmy_right if _shimmy_right != Vector3.ZERO else mantle.plan.direction.cross(Vector3.UP)
+	var wall: Vector3 = Vector3.UP.cross(right)            # into the wall in that frame
+	var away := _wish.length_squared() > 0.01 and _wish.normalized().dot(wall) < -0.5
+	# Along the ledge it shimmies (hand over hand), with a dead zone so a stick held toward the wall does not drift.
+	var along: float = _wish.dot(right) if _wish.length_squared() > 0.01 else 0.0
 	mantle.shimmy_wish = 0.0 if absf(along) < 0.35 else signf(along) * minf(1.0, absf(along))
 	if crouch_edge or away:
 		mantle.drop(body)

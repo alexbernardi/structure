@@ -2,8 +2,44 @@
 
 Branch: `benchmark/opus-traversal`. Tasks: [0007](../TASKS/0007-unified-traversal.md) (5.0),
 [0008](../TASKS/0008-traversal-refinement.md) (5.1), [0009](../TASKS/0009-hang-angles-slide.md) (5.2),
-[0010](../TASKS/0010-crouch-flip.md) (5.3), [0011](../TASKS/0011-hang-reach-shimmy.md) (5.4). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
+[0010](../TASKS/0010-crouch-flip.md) (5.3), [0011](../TASKS/0011-hang-reach-shimmy.md) (5.4), [0012](../TASKS/0012-skeleton-ik-corners.md) (5.5). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
 [3.0 authored locomotion](MOVEMENT-LAB-3.md); both are preserved.
+
+## 5.5: skeleton view, foot IK on real ground, braced hang, corners
+
+Task [0012](../TASKS/0012-skeleton-ik-corners.md).
+
+- **Skeleton view (K, `--skeleton-view`).** The real runtime skeleton drawn from its final pose on every skeleton
+  update (after the clips, the IK and every correction - a test checks the drawn hands against the IK result):
+  joints as spheres, bones as rods, left limbs orange, right cyan, pelvis / spine / head white, hands and feet larger
+  with a finger pointer; drawn through the body, which switches to 40 % opacity (depth pre-pass, so the silhouette
+  stays one clean shape). F10 adds the contact markers: hand IK targets with the wall each hand grips (yellow), braced
+  foot contacts with the wall normal (green), the lip path (magenta), the arc round a corner (purple), the ground under
+  each foot with its normal (blue); the label says braced / dangling, turning a corner, or why a shimmy stopped.
+- **Foot IK on real ground.** Under each foot a ray finds the real surface under the heel, the toes and (for a swinging
+  foot) just ahead of the toes; the authored swing height is kept above it; rising ground is taken quickly and
+  falling ground eased; the pelvis drops so the lower foot reaches (standing across a 0.2 m step: both soles on their
+  own level, pelvis -0.20 m); planted feet tilt to the surface (stance-weighted, up to 35 degrees); finally no sole
+  corner may sit below its own ground (a sole across a step edge is held by the higher tread). On flat ground it
+  changes nothing.
+- **Braced hang.** The feet come up onto the wall like a climber's: each foot on a real wall contact found by a ray
+  0.65 m below its hip, ankle 8 cm off the wall, knees up toward the chest; the brace comes in just after the catch,
+  steadies the swing out from the wall and holds the shoulders 8 cm further out; feet move one at a time along the
+  wall while shimmying and re-plant on the new wall round a corner. Where there is no wall within a leg's reach
+  (under a shelf) the body dangles as in 5.4.
+- **Corners.** When the ledge does not go on straight under the leading hand, the shimmy looks for an inside corner
+  (a wall across the path) or an outside corner (the face's end face); the new wall must be turned 25-135 degrees, its
+  top must go on at the same height past the leading hand, and the collider must fit at eight points along the arc.
+  The hang point then travels that arc while the body turns to the new wall (no teleport); the hands follow a two-wall
+  lip path, so for a moment each grips a different wall (asymmetric grip, each hand oriented to its own wall); a hand
+  left behind pulls the body toward it. Refused corners keep the hang (`corner_angle`, `corner_ledge`,
+  `corner_blocked`). The stick is read in the ledge frame it was first pushed in until released, so holding "right"
+  goes round the corner and on along the next wall.
+- **Mantle hand.** The quick mantle's planted left hand is held where it landed along the ledge, palm on the real top,
+  keeping the authored wrist rise, and lets go as its arm straightens.
+- Lanes: N (its +z end now meets a flush 3.6 m block: the lip steps up and the shimmy stops), O (`lane_o`,
+  `lane_o_inside`, `lane_o_thin`, `lane_o_shelf`: a free-standing block, an inside L, a thin wall whose end refuses, a
+  shelf over a recessed wall), P (`lane_p`, `lane_p_step`: uneven pads, a 0.2 m step, 0.15 m stairs, a 15 degree slope).
 
 ## 5.4: reach from the body, hands on the lip, dangling hang, shimmy
 

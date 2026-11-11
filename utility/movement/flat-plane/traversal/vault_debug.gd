@@ -15,6 +15,7 @@ const PATH_SAMPLES := 24
 var action
 var body
 var traversal                    ## traversal_controller.gd: interaction region, mantle and candidates
+var animation                    ## authored_animation.gd: IK targets and contacts (Movement Lab 5.5)
 var _label := Label3D.new()      ## above the character: what Space does now, and what the last press did
 var _mesh := ImmediateMesh.new()
 
@@ -52,6 +53,7 @@ func redraw(fraction: float) -> void:
 	var feet: Vector3 = body.get_global_transform_interpolated().origin
 	var velocity: Vector3 = body.core.velocity
 	_line(feet + Vector3.UP * 0.05, feet + Vector3.UP * 0.05 + velocity * 0.25, Color.ORANGE)
+	_draw_contacts()
 	var root: Vector3 = feet + action.offset(fraction)
 	_line(feet, root, Color.RED)
 	_cross(root, 0.06, Color.RED)
@@ -88,12 +90,47 @@ func redraw(fraction: float) -> void:
 
 
 ## One line on what a press of Space would do now, and one on the latest press (and why the preferred move was refused).
+## Movement Lab 5.5 contacts: hand IK targets (yellow, with the wall direction each hand grips), braced foot contacts
+## (green, with the wall normal pushed on), the lip path the hands follow (magenta, two segments round a corner), the
+## arc the hang point takes round a corner (purple), and the ground under each foot (blue, with its normal).
+func _draw_contacts() -> void:
+	if animation == null:
+		return
+	var c: Dictionary = animation.debug_contacts
+	for hand in c.get("hands", []):
+		_cross(hand[0], 0.05, Color(1.0, 0.9, 0.2))
+		_line(hand[0], hand[0] + (hand[1] as Vector3) * 0.15, Color(1.0, 0.9, 0.2))
+	for foot in c.get("feet", []):
+		_cross(foot[0], 0.05, Color(0.3, 1.0, 0.4))
+		_line(foot[0], foot[0] + (foot[1] as Vector3) * 0.25, Color(0.3, 1.0, 0.4))
+	var path: Array = c.get("path", [])
+	for i in range(path.size() - 1):
+		_line(path[i], path[i + 1], Color(1.0, 0.35, 1.0))
+	for ground in c.get("ground", []):
+		_cross(ground[0], 0.04, Color(0.4, 0.75, 1.0))
+		_line(ground[0], ground[0] + (ground[1] as Vector3) * 0.2, Color(0.4, 0.75, 1.0))
+	if traversal != null and not traversal.mantle._turn.is_empty():
+		var turn: Dictionary = traversal.mantle._turn
+		var previous := Vector3.INF
+		for k in 13:
+			var p: Vector3 = traversal.mantle._arc(turn.pivot, turn.r0, turn.r1, turn.sweep, k / 12.0) + Vector3.UP * 0.05
+			if previous != Vector3.INF:
+				_line(previous, p, Color(0.6, 0.3, 1.0))
+			previous = p
+
+
 func space_hint() -> String:
 	if traversal == null:
 		return ""
 	var now := "Space: jump"
 	if traversal.mantle.hanging():
-		now = "HANGING  Space: pull up   Ctrl / stick back: let go"
+		var m = traversal.mantle
+		var stance: String = ("braced" if animation != null and animation.braced_feet == 2 else "dangling") if animation != null else ""
+		now = "HANGING %s  Space: pull up   A/D shimmy   Ctrl / stick back: let go" % stance
+		if not m._turn.is_empty():
+			now += "   (turning a corner)"
+		elif m.shimmy_block != "":
+			now += "   (shimmy stopped: %s)" % m.shimmy_block.replace("_", " ")
 	elif traversal.flipping:
 		now = "FLIP  (presses wait for the landing)"
 	elif traversal.sliding:

@@ -306,8 +306,14 @@ func _irregular_lane(x0: float) -> void:
 ##                       slide under a 1.0 m bar
 ##   M (z -79) flip    - (5.3) open ground for standing and slide flips, a 1.0 m deck to flip off (a longer fall),
 ##                       a 0.5 m box to flip onto (a shorter one), a bar with 1.0 m clearance (no room: refused)
-##   N (z -85) hang    - (5.4) a 3.0 m wall 8 m long to catch and shimmy along (it ends: the shimmy stops), then a
-##                       0.6 m gap and a 3.0 m wall 4 m long, and a 2.6 m wall 6 m long (hangs closer to the ground)
+##   N (z -85) hang    - (5.4) a 3.0 m wall 8 m long to catch and shimmy along; at its +z end a 3.6 m block flush with
+##                       it (the lip steps up: the shimmy stops); at its -z end its 2 m end face (an outside corner, 5.5),
+##                       a 0.6 m gap and a 3.0 m wall 4 m long; a 2.6 m wall 6 m long (hangs closer to the ground)
+##   O (z -97) corners - (5.5) a free-standing 3.0 m block 4 x 4 m (four outside corners), an inside corner (two 3.0 m
+##                       walls in an L), a 0.25 m thick 2.4 m wall (its end face is too narrow to hang on: refused), and
+##                       a 3.0 m shelf over a recessed wall (no wall within the feet's reach: the hang dangles)
+##   P (z -105) feet   - (5.5) uneven ground (pads 0.03-0.15 m), a 0.2 m step to stand across, 0.15 m stairs, a 15
+##                       degree slope
 func _lanes_52(x0: float) -> void:
 	var fence := _tint(Color(0.55, 0.45, 0.30))
 	var block := _tint(Color(0.36, 0.55, 0.80))
@@ -378,7 +384,42 @@ func _lanes_52(x0: float) -> void:
 	_course_wall(Vector3(x0 + 4.0, 0.0, zn), 3.0, 2.0, 0.0, block, "LaneNLong", "3.0 m: catch, stick left / right", 8.0)
 	_course_wall(Vector3(x0 + 4.0, 0.0, zn - 6.6), 3.0, 2.0, 0.0, block, "LaneNShort", "gap 0.6 m", 4.0)
 	_course_wall(Vector3(x0 + 16.0, 0.0, zn), 2.6, 2.0, 0.0, wall, "LaneNLow", "2.6 m", 6.0)
+	_box(Vector3(x0 + 4.0, 1.8, zn + 5.0), Vector3(2.0, 3.6, 2.0), Vector3.ZERO, wall, "LaneNStep")
+	_label(Vector3(x0 + 4.0, 4.0, zn + 5.0), "lip steps up: stop")
 	landmarks["lane_n"] = Vector3(x0 - 4.0, 0.0, zn)
+	# O: corners
+	var zo := -97.0
+	_box(Vector3(x0 + 6.0, 1.5, zo), Vector3(4.0, 3.0, 4.0), Vector3.ZERO, block, "LaneOBlock")
+	_label(Vector3(x0 + 6.0, 3.5, zo), "outside corners")
+	_box(Vector3(x0 + 21.0, 1.5, zo - 0.5), Vector3(2.0, 3.0, 5.0), Vector3.ZERO, block, "LaneOWallA")
+	_box(Vector3(x0 + 19.0, 1.5, zo + 3.0), Vector3(6.0, 3.0, 2.0), Vector3.ZERO, block, "LaneOWallB")
+	_label(Vector3(x0 + 19.0, 3.5, zo + 1.0), "inside corner")
+	_box(Vector3(x0 + 32.0, 1.2, zo), Vector3(0.25, 2.4, 4.0), Vector3.ZERO, wall, "LaneOThin")
+	_label(Vector3(x0 + 32.0, 2.9, zo), "0.25 m wall: corner refused")
+	_box(Vector3(x0 + 43.0, 1.2, zo), Vector3(2.0, 2.4, 4.0), Vector3.ZERO, wall, "LaneOShelfWall")
+	_box(Vector3(x0 + 42.4, 2.7, zo), Vector3(3.2, 0.6, 4.0), Vector3.ZERO, block, "LaneOShelf")
+	_label(Vector3(x0 + 42.4, 3.4, zo), "shelf: nothing for the feet")
+	landmarks["lane_o"] = Vector3(x0 - 3.0, 0.0, zo)
+	landmarks["lane_o_inside"] = Vector3(x0 + 15.0, 0.0, zo - 1.0)
+	landmarks["lane_o_thin"] = Vector3(x0 + 27.0, 0.0, zo)
+	landmarks["lane_o_shelf"] = Vector3(x0 + 36.0, 0.0, zo)
+	# P: feet on uneven ground, a step, stairs and a slope
+	var zp := -105.0
+	var pads := [0.06, 0.12, 0.03, 0.15, 0.09, 0.05, 0.13, 0.08]
+	for i in pads.size():
+		var h: float = pads[i]
+		_box(Vector3(x0 + 2.0 + (i % 4) * 0.8, h * 0.5, zp - 0.4 + (i / 4) * 0.8), Vector3(0.8, h, 0.8), Vector3.ZERO, deck, "LanePPad%d" % i)
+	_label(Vector3(x0 + 3.2, 0.8, zp), "uneven ground")
+	_box(Vector3(x0 + 10.0, 0.1, zp), Vector3(2.0, 0.2, 3.0), Vector3.ZERO, deck, "LanePStep")
+	_label(Vector3(x0 + 9.0, 0.8, zp), "0.2 m step")
+	for k in 6:
+		_box(Vector3(x0 + 15.0 + k * 0.3 + 0.15, (k + 1) * 0.075, zp), Vector3(0.3, (k + 1) * 0.15, 3.0), Vector3.ZERO, deck, "LanePStair%d" % k)
+	_label(Vector3(x0 + 15.9, 1.4, zp), "0.15 m stairs")
+	var slope_p := deg_to_rad(15.0)
+	_box(Vector3(x0 + 25.0, 1.0 * tan(slope_p) * 2.0 - 0.15, zp), Vector3(4.0 / cos(slope_p), 0.3, 3.0), Vector3(0.0, 0.0, 15.0), deck, "LanePSlope")
+	_label(Vector3(x0 + 25.0, 1.8, zp), "15 deg slope")
+	landmarks["lane_p"] = Vector3(x0 - 3.0, 0.0, zp)
+	landmarks["lane_p_step"] = Vector3(x0 + 9.0, 0.2, zp)
 
 
 func _label(position: Vector3, caption: String) -> void:

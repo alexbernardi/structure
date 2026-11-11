@@ -12,6 +12,8 @@ const EDGE := RISE             ## the same, under the name the pull-up clip uses
 const FORWARD := 1.8466        ## m: authored root travel over the clip
 const FACE := 0.75             ## m: authored face ahead of the clip root at t = 0 (hand at 0.86 m, planted foot at 0.885 m)
 const HAND_ON := 0.15          ## s: left hand reaches the top
+const HAND_PLANTED := 0.167    ## s: the left hand stops moving along travel (planted on the top) ...
+const HAND_OFF := 0.333        ## s: ... until here, while the wrist rises 0.14 m as the arm pushes (audit)
 const FOOT_ON := 0.22          ## s: right foot set on the top (stays until about 0.5 s)
 const CONTACT := 0.15          ## s: by now the warp has aligned the authored contacts with the actual ledge
 const RELEASE := 0.62          ## s: both feet on top; control returns to the movement core

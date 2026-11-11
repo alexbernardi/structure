@@ -37,6 +37,10 @@ const GROUND_CLEAR := 0.05      ## m kept between the hanging soles and the grou
 const HAND_SPAN := 0.24         ## m from the hang point to each hand along the ledge (the authored grip is shoulder-wide)
 const SHIMMY_ACCEL := 5.0       ## m/s^2 the shimmy speeds up and slows down
 const SHIMMY_LEAD := 0.08       ## m beyond the leading hand the ledge must continue
+const CORNER_MIN := deg_to_rad(25.0)    ## a smaller change of wall direction is not a corner (the ledge just bends)
+const CORNER_MAX := deg_to_rad(135.0)   ## a sharper one cannot be hung around
+const CORNER_SAMPLES := 8               ## collider checks along the arc around a corner
+const CORNER_MIN_TIME := 0.35           ## s for the shortest corner
 const TOP_INSET := 0.04          ## m past the face the top is probed (a fence is 0.08 m thick)
 const TOP_FLAT := 0.75          ## normal.y of a top that can be climbed onto (about 41 degrees: irregular rubble, slopes)
 const LATERAL := 0.25           ## m either side the top must also be there (no climbing onto a pole)
@@ -78,6 +82,9 @@ var shimmy_block := ""          ## why the shimmy stopped: "end" (no ledge / wal
 var shimmy_distance := 0.0      ## m shimmied in all (telemetry, tests)
 var _top_y := 0.0
 var _catch_velocity := Vector3.ZERO
+var corners := 0                ## corners hung around (telemetry, tests)
+var corner := {}                ## the corner the hands are working around: {at, d_old, d_new, side, kind, x}
+var _turn := {}                 ## the arc in progress around `corner`
 var _time_prev := 0.0
 var _offset := Vector3.ZERO
 var _offset_prev := Vector3.ZERO
@@ -457,6 +464,9 @@ func drive(body, dt: float) -> bool:
 ## Hand over hand along the ledge: moves the hang point sideways while the top and the face continue under the leading
 ## hand (and a little beyond) at the same height, and the body has room; otherwise stops there (shimmy_block says why).
 func _shimmy(body, dt: float) -> void:
+	if not _turn.is_empty():
+		_advance_turn(dt)
+		return
 	shimmy_velocity = move_toward(shimmy_velocity, shimmy_wish * _attr("shimmy_speed", 0.9), SHIMMY_ACCEL * dt)
 	if absf(shimmy_velocity) < 1e-4:
 		return
@@ -466,15 +476,17 @@ func _shimmy(body, dt: float) -> void:
 	var lead: Vector3 = right * signf(shimmy_velocity) * (HAND_SPAN + SHIMMY_LEAD)
 	var top := ledge_top(space, _hang_to + step + lead)
 	var centre := ledge_top(space, _hang_to + step)
-	if is_nan(top) or is_nan(centre):
+	var blocked: bool = body.test_move(Transform3D(Basis.IDENTITY, _hang_to), step)
+	if is_nan(top) or is_nan(centre) or blocked:
+		# The ledge does not go on straight: around a corner if the geometry allows it, otherwise stop here.
+		var why := _try_corner(body, space, signf(shimmy_velocity))
+		if why == "":
+			return
 		shimmy_velocity = 0.0
-		shimmy_block = "end"
-		return
-	if body.test_move(Transform3D(Basis.IDENTITY, _hang_to), step):
-		shimmy_velocity = 0.0
-		shimmy_block = "blocked"
+		shimmy_block = why if why != "no_corner" else ("blocked" if blocked else "end")
 		return
 	shimmy_block = ""
+	_forget_corner_behind()
 	var depth: float = _top_y - _hang_to.y
 	_top_y = centre
 	_hang_to += step
@@ -484,10 +496,103 @@ func _shimmy(body, dt: float) -> void:
 	shimmy_distance += step.length()
 
 
+## Around a corner while hanging: an inside corner (a wall across the path, facing back along it) or an outside corner
+## (the face ends and its end face looks along the path). The new face must be a wall turned 25-135 degrees, its top
+## must go on at the hang's height past the leading hand, and the collider must fit all along the arc the hang point
+## takes around the corner. Returns "" when the turn has started, else why not ("no_corner", "corner_angle",
+## "corner_ledge", "corner_blocked").
+func _try_corner(body, space: PhysicsDirectSpaceState3D, s: float) -> String:
+	var d: Vector3 = plan.direction
+	var along: Vector3 = d.cross(Vector3.UP) * s
+	var face: Vector3 = _hang_to + d * (RADIUS + SKIN)
+	var f := Vector3(face.x, _top_y - 0.3, face.z)
+	var found := {}
+	var ahead := _cast(space, f - d * 0.05, f - d * 0.05 + along * (HAND_SPAN + SHIMMY_LEAD + RADIUS + 0.3))
+	if not ahead.is_empty() and absf((ahead.normal as Vector3).y) < MAX_TILT and (ahead.normal as Vector3).dot(along) < -0.3:
+		found = {"kind": "inside", "hit": ahead.position, "n": ahead.normal}
+	else:
+		var beyond: Vector3 = f + along * (HAND_SPAN + SHIMMY_LEAD + 0.25) + d * 0.06   # within even a thin wall's end face
+		var back := _cast(space, beyond, beyond - along * (HAND_SPAN + SHIMMY_LEAD + 0.35))
+		if not back.is_empty() and absf((back.normal as Vector3).y) < MAX_TILT and (back.normal as Vector3).dot(along) > 0.3:
+			found = {"kind": "outside", "hit": back.position, "n": back.normal}
+	if found.is_empty():
+		return "no_corner"
+	var n := Vector3((found.n as Vector3).x, 0.0, (found.n as Vector3).z).normalized()
+	var d_new := -n
+	var turn := d.signed_angle_to(d_new, Vector3.UP)
+	if absf(turn) < CORNER_MIN or absf(turn) > CORNER_MAX:
+		return "corner_angle"
+	# The corner on the lip: where the old face's line meets the new face's plane.
+	var t: float = ((found.hit as Vector3) - f).dot(n) / along.dot(n)
+	var at := f + along * t
+	at.y = _top_y
+	var along_new: Vector3 = d_new.cross(Vector3.UP) * s
+	var e0: float = maxf(t, 0.0)
+	var e1: float = e0 if found.kind == "outside" else maxf(e0, RADIUS + SKIN + 0.02)
+	var start := _hang_to
+	var finish: Vector3 = at - d_new * (RADIUS + SKIN) + along_new * e1
+	finish.y = _hang_to.y
+	if is_nan(ledge_top(space, finish, d_new)) or is_nan(ledge_top(space, finish + along_new * (HAND_SPAN + SHIMMY_LEAD), d_new)):
+		return "corner_ledge"
+	var pivot := Vector3(at.x, _hang_to.y, at.z)
+	var r0 := Vector2(start.x - pivot.x, start.z - pivot.z)
+	var r1 := Vector2(finish.x - pivot.x, finish.z - pivot.z)
+	var sweep := wrapf(r1.angle() - r0.angle(), -PI, PI)
+	var crouch: float = body.params.get_value("crouch_height")
+	for k in range(1, CORNER_SAMPLES + 1):
+		var p := _arc(pivot, r0, r1, sweep, float(k) / CORNER_SAMPLES)
+		if not _fits(space, p, crouch):
+			return "corner_blocked"
+	var length: float = absf(sweep) * (r0.length() + r1.length()) * 0.5
+	_turn = {"pivot": pivot, "r0": r0, "r1": r1, "sweep": sweep, "d0": d, "d1": d_new, "u": 0.0,
+		"time": maxf(CORNER_MIN_TIME, length / maxf(_attr("shimmy_speed", 0.9), 0.3)), "e0": e0, "e1": e1}
+	corner = {"at": at, "d_old": d, "d_new": d_new, "side": s, "kind": found.kind, "x": -s * e0}
+	shimmy_block = ""
+	return ""
+
+
+static func _arc(pivot: Vector3, r0: Vector2, r1: Vector2, sweep: float, u: float) -> Vector3:
+	var radius := lerpf(r0.length(), r1.length(), u)
+	var v := r0.normalized().rotated(sweep * u) * radius
+	return Vector3(pivot.x + v.x, pivot.y, pivot.z + v.y)
+
+
+## One tick around a corner: the hang point travels its arc while the body turns to the new wall (committed once started).
+func _advance_turn(dt: float) -> void:
+	_turn.u = minf(1.0, float(_turn.u) + dt / float(_turn.time))
+	var u: float = _turn.u
+	var previous := _hang_to
+	_hang_to = _arc(_turn.pivot, _turn.r0, _turn.r1, _turn.sweep, u)
+	_hang_from += _hang_to - previous
+	shimmy_distance += previous.distance_to(_hang_to)
+	var w := smoothstep(0.0, 1.0, u)
+	var d0: Vector3 = _turn.d0
+	plan["direction"] = d0.rotated(Vector3.UP, d0.signed_angle_to(_turn.d1, Vector3.UP) * w).normalized()
+	plan["origin"] = _hang_to
+	corner.x = lerpf(-float(corner.side) * float(_turn.e0), float(corner.side) * float(_turn.e1), w)
+	shimmy_velocity = float(corner.side) * _attr("shimmy_speed", 0.9) * 0.5
+	if u >= 1.0:
+		plan["direction"] = _turn.d1
+		_turn = {}
+		corners += 1
+
+
+## Once both hands are well past the corner (or back on the old wall), the hands no longer need the two-faced path.
+func _forget_corner_behind() -> void:
+	if corner.is_empty():
+		return
+	var face: Vector3 = _hang_to + plan.direction * (RADIUS + SKIN)
+	var r: Vector3 = plan.direction.cross(Vector3.UP)
+	var x: float = (face - (corner.at as Vector3)).dot(r)
+	corner.x = x
+	if absf(x) > HAND_SPAN + 0.2:
+		corner = {}
+
+
 ## The top of the ledge in front of a hanging body at `hang_point` (its collider bottom), or NAN where the top or the
 ## wall-like face under it does not continue at the hang's height (the end of the wall, a gap, a step).
-func ledge_top(space: PhysicsDirectSpaceState3D, hang_point: Vector3) -> float:
-	var d: Vector3 = plan.direction
+func ledge_top(space: PhysicsDirectSpaceState3D, hang_point: Vector3, toward := Vector3.ZERO) -> float:
+	var d: Vector3 = plan.direction if toward == Vector3.ZERO else toward
 	var face: Vector3 = hang_point + d * (RADIUS + SKIN)
 	var column: Vector3 = face + d * TOP_INSET
 	var top := _cast(space, Vector3(column.x, _top_y + 0.3, column.z), Vector3(column.x, _top_y - 0.3, column.z))
@@ -522,6 +627,8 @@ func begin_hang(body, p: Dictionary, grant := {}) -> bool:
 	shimmy_velocity = 0.0
 	shimmy_wish = 0.0
 	shimmy_block = ""
+	corner = {}
+	_turn = {}
 	plan = p.duplicate()
 	plan["clip"] = "pullup"
 	plan["start"] = Pullup.GRIP
@@ -591,6 +698,7 @@ func presentation(fraction: float) -> Dictionary:
 	return {"mantle": true, "time": lerpf(_time_prev, time, fraction), "rate": plan.rate, "clip": plan.get("clip", "climb"),
 		"hang": phase == Phase.HANG, "length": plan.get("length", Clip.LENGTH),
 		"right": plan.direction.cross(Vector3.UP), "lip_y": top_y, "shimmy": shimmy_velocity, "hang_time": _hang_time,
-		"catch_velocity": _catch_velocity,
+		"catch_velocity": _catch_velocity, "corner": corner.duplicate() if phase == Phase.HANG else {},
+		"turning": float(_turn.get("u", -1.0)),
 		"heading": atan2(-plan.direction.x, -plan.direction.z),
 		"edge": Vector3(edge.x, top_y, edge.z), "direction": plan.direction}

@@ -4,7 +4,8 @@
 ## Cases: mantle (lane E 2.5 m block), grab (lane E 1.9 m ledge, jump + hold), vault (lane A first wall),
 ##        late (lane A, late press), cyber (lane A 1.6 m wall with the cybernetic legs), ... hang, fence, slide (5.2),
 ##        flip (lane M: a standing crouch flip), slideflip (lane K: a flip out of a sprint slide) (5.3),
-##        hang3 (lane N: catch the 3.0 m wall, hang, shimmy right to its end) (5.4); --view=back|side|close
+##        hang3 (lane N: catch the 3.0 m wall, hang, shimmy right to its end) (5.4); --view=back|side|close|profile;
+##        --skeleton: the 5.5 skeleton view (stick skeleton through the body at 40 % opacity)
 extends SceneTree
 
 const Scene = preload("res://scenes/flat_plane.tscn")
@@ -22,6 +23,7 @@ var done_at := -1
 var shot_vault := -1
 var view := "side"
 var hang_cam: Camera3D
+var skeleton_view := false
 
 
 func _initialize() -> void:
@@ -33,15 +35,17 @@ func _initialize() -> void:
 			out_dir = a.substr(6)
 		elif a.begins_with("--view="):
 			view = a.substr(7)
+		elif a == "--skeleton":
+			skeleton_view = true
 	scene = Scene.instantiate()
 	scene.options = {"no-capture": "true", "no-hardware": "true", "no-window-state": "true", "tuning-state": "", "traversal-debug": "true", "no-tuning": "true",
 		"landmark": {"mantle": "lane_e", "grab": "lane_e_ledge", "vault": "vault_a", "late": "vault_a", "cyber": "vault_a",
 			"rhythm": "lane_d", "angled": "lane_h_walls", "bar": "lane_f_bar", "catch": "lane_e_ledge",
-			"hang": "lane_j", "fence": "lane_i", "slide": "lane_k", "flip": "lane_m", "slideflip": "lane_k", "hang3": "lane_n"}.get(case_name, "lane_e")}
+			"hang": "lane_j", "fence": "lane_i", "slide": "lane_k", "flip": "lane_m", "slideflip": "lane_k", "hang3": "lane_n", "corner": "lane_o", "stairs": "lane_p", "step": "lane_p_step"}.get(case_name, "lane_e")}
 	if case_name == "cyber":
 		scene.options["profile"] = "cyber"
-	if case_name == "hang3":
-		scene.options.erase("traversal-debug")   # the overlay's labels would cover the hands
+	if case_name in ["hang3", "corner", "stairs", "step"] and not OS.get_cmdline_user_args().has("--debug"):
+		scene.options.erase("traversal-debug")   # the overlay's labels would cover the hands (--debug keeps it)
 	root.add_child(scene)
 	scene.live = Feed.new(self)   # the scene ticks itself exactly as in play; only the input source is scripted
 	process_frame.connect(_frame)
@@ -69,13 +73,19 @@ func _next_input() -> Dictionary:
 			scene.body.teleport(Vector3(52.0, 0.05, -55.0))
 		if case_name == "hang3":
 			scene.body.teleport(Vector3(38.0, 0.05, -84.0))
+		if case_name == "corner":
+			scene.body.teleport(Vector3(39.0, 0.05, -96.2))
+		if case_name == "stairs":
+			scene.body.teleport(Vector3(52.0, 0.05, -105.0))
 		if case_name == "slideflip":
 			scene.body.teleport(Vector3(14.0, 0.05, -67.0))   # the open run-out before the bars
+		if skeleton_view:
+			scene.toggle_skeleton_view()
 		scene.toggle_side_view()
 		# A close outside view between the lanes (lanes are 6 m apart), like the 4.0 lane C view.
 		scene._side_offset = Vector3(0.0, 0.0, -3.4) if case_name in ["mantle", "grab"] else Vector3(0.0, 0.0, 4.0)
 		scene._side_cam.fov = 60.0
-		if case_name == "hang3":
+		if case_name in ["hang3", "corner"]:
 			scene.toggle_side_view()   # off again: this case has its own camera aimed at the hands
 			hang_cam = Camera3D.new()
 			hang_cam.fov = 50.0
@@ -139,6 +149,19 @@ func _next_input() -> Dictionary:
 				input["crouch"] = true
 				input.jump_pressed = true
 			return input
+		"corner":
+			# lane O block (west face x 44): jump, hang, then stick right round its north-west corner
+			if not pressed and x > 42.4:
+				pressed = true
+				input.jump_pressed = true
+				return input
+			if scene.traversal.mantle.hanging() and scene.traversal.mantle._hang_time > 0.8:
+				input.move = Vector2(1.0, 0.3)
+			return input
+		"stairs", "step":
+			input.move = Vector2(0, 0.45) if case_name == "stairs" and ticks > 20 else Vector2.ZERO
+			pressed = true
+			return input
 		"hang3":
 			# run, jump at the 3.0 m wall (face x 43), hang 1.2 s, then stick right (along the wall, toward +z)
 			if not pressed and x > 41.4:
@@ -181,6 +204,9 @@ func _frame() -> void:
 			var p: Dictionary = scene.traversal.mantle.presentation(1.0)
 			focus = (p.edge as Vector3) + Vector3.DOWN * {"close": 0.25, "side": 0.75, "profile": 0.15}.get(view, 0.9)
 		var offset: Vector3 = {"profile": Vector3(-0.15, 0.05, 1.1), "side": Vector3(-0.35, 0.15, 2.4), "back": Vector3(-3.6, 0.4, 0.6), "close": Vector3(-0.75, 0.55, 0.85)}.get(view, Vector3(-0.35, 0.15, 2.4))
+		if scene.traversal.mantle.hanging():
+			# offsets are given for a wall facing +X; they turn with the wall (round a corner)
+			offset = Basis(Vector3.UP, Vector3.RIGHT.signed_angle_to(scene.traversal.mantle.plan.direction, Vector3.UP)) * offset
 		hang_cam.global_position = focus + offset
 		hang_cam.look_at(focus, Vector3.UP)
 	var t := -1.0
@@ -199,9 +225,12 @@ func _frame() -> void:
 			quit(0)
 		return
 	var gap := 0.08
-	if case_name == "hang3":
-		gap = 0.25
+	if case_name in ["hang3", "corner"]:
+		gap = 0.25 if case_name == "hang3" else 0.2
 		t = scene.traversal.mantle._hang_time if scene.traversal.mantle.hanging() else -1.0
+	if case_name in ["stairs", "step"]:
+		gap = 0.12
+		t = ticks / 120.0 if ticks > 30 else -1.0
 	if case_name in ["flip", "slideflip"]:
 		gap = 0.06
 		if scene.traversal.flipping:
@@ -213,9 +242,9 @@ func _frame() -> void:
 			t = 0.2 + scene.traversal.mantle._hang_time * 0.1
 		elif scene.traversal.sliding:
 			t = scene.traversal.slide_time
-	if t >= 0.0 and t - last_shot >= gap and shots < (16 if case_name == "hang3" else 14) and out_dir != "":
+	if t >= 0.0 and t - last_shot >= gap and shots < (16 if case_name in ["hang3", "corner", "stairs"] else 14) and out_dir != "":
 		last_shot = t
-		var path := "%s/%s_%s_%02d_t%.2f.png" % [out_dir, case_name, view, shots, t] if case_name == "hang3" else "%s/%s_%02d_t%.2f.png" % [out_dir, case_name, shots, t]
+		var path := "%s/%s_%s_%02d_t%.2f.png" % [out_dir, case_name, view, shots, t] if case_name in ["hang3", "corner"] else "%s/%s_%02d_t%.2f.png" % [out_dir, case_name, shots, t]
 		root.get_texture().get_image().save_png(path)
 		shots += 1
 	if pressed and t < 0.0 and shots > 0 and done_at < 0:
