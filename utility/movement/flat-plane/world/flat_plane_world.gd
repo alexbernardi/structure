@@ -303,6 +303,8 @@ func _irregular_lane(x0: float) -> void:
 ##                       under), then a 12 degree ramp up, a plateau and a 12 degree ramp down
 ##   L (z -73) combo   - vault a 1.0 m wall, mantle a 1.2 m block, drop off, catch and pull up a 2.4 m wall, run off it,
 ##                       slide under a 1.0 m bar
+##   M (z -79) flip    - (5.3) open ground for standing and slide flips, a 1.0 m deck to flip off (a longer fall),
+##                       a 0.5 m box to flip onto (a shorter one), a bar with 1.0 m clearance (no room: refused)
 func _lanes_52(x0: float) -> void:
 	var fence := _tint(Color(0.55, 0.45, 0.30))
 	var block := _tint(Color(0.36, 0.55, 0.80))
@@ -356,6 +358,17 @@ func _lanes_52(x0: float) -> void:
 	_box(Vector3(x0 + 26.0, 1.15, zl), Vector3(0.3, 0.3, 3.0), Vector3.ZERO, bar, "LaneLBar")
 	_label(Vector3(x0 + 26.0, 1.8, zl), "slide")
 	landmarks["lane_l"] = Vector3(x0 - 7.0, 0.0, zl)
+	# M: crouch flip
+	var zm := -79.0
+	_label(Vector3(x0 + 2.0, 1.4, zm), "Ctrl + Space: flip")
+	_box(Vector3(x0 + 16.0, 0.5, zm), Vector3(6.0, 1.0, 3.0), Vector3.ZERO, deck, "LaneMDeck")
+	_label(Vector3(x0 + 18.5, 1.9, zm), "flip off: 1.0 m")
+	_box(Vector3(x0 + 26.0, 0.25, zm), Vector3(3.0, 0.5, 3.0), Vector3.ZERO, block, "LaneMBox")
+	_label(Vector3(x0 + 26.0, 1.3, zm), "flip onto: 0.5 m")
+	_box(Vector3(x0 + 34.0, 1.15, zm), Vector3(0.3, 0.3, 3.0), Vector3.ZERO, bar, "LaneMBar")
+	_label(Vector3(x0 + 34.0, 1.8, zm), "no room to flip")
+	landmarks["lane_m"] = Vector3(x0 - 7.0, 0.0, zm)
+	landmarks["lane_m_deck"] = Vector3(x0 + 14.0, 1.0, zm)
 
 
 func _label(position: Vector3, caption: String) -> void:

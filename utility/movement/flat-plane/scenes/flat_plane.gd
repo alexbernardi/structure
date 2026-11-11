@@ -26,6 +26,7 @@ const TraversalParams = preload("res://traversal/traversal_params.gd")
 const VaultProfile = preload("res://traversal/vault_profile.gd")
 const VaultAction = preload("res://traversal/vault_action.gd")
 const VaultDebug = preload("res://traversal/vault_debug.gd")
+const FlipClip = preload("res://traversal/flip_clip.gd")
 const VaultClip = preload("res://traversal/vault_clip.gd")
 const TraversalController = preload("res://traversal/traversal_controller.gd")
 const Profiles = preload("res://capability/movement_profiles.gd")
@@ -375,8 +376,11 @@ func traversal_status() -> String:
 			plan.height, plan.depth, plan.stretch, rad_to_deg(plan.lean), authored_animation.hand_error]
 	if traversal.mantle.hanging():
 		return "HANGING on a %.2f m edge - Space: pull up, Ctrl or stick back: let go" % (traversal.mantle.plan.origin.y + traversal.mantle.plan.height)
+	if traversal.flipping or traversal.flip_land >= 0.0:
+		return "FLIP %s  clip %.2f s  %.1f m/s  flips %d" % ["(landing)" if not traversal.flipping else "", traversal.flip_phase if traversal.flipping else FlipClip.LAND + traversal.flip_land,
+			Vector2(body.velocity.x, body.velocity.z).length(), traversal.flips]
 	if traversal.sliding:
-		return "SLIDE %.1f m/s  %.2f s  (hold Ctrl; Space: slide jump)" % [traversal.slide_velocity.length(), traversal.slide_time]
+		return "SLIDE %.1f m/s  %.2f s  (hold Ctrl; Space: %s)" % [traversal.slide_velocity.length(), traversal.slide_time, "flip" if traversal.capabilities.can("flip") else "slide jump"]
 	if traversal.mantle.presenting:
 		return "MANTLE %s  clip %.2f s  top %.2f m above  inset %.2f m%s" % ["(grab)" if traversal.mantle.plan.airborne else "", traversal.mantle.time,
 			traversal.mantle.plan.height, traversal.mantle.plan.inset, "  POWERED" if traversal.mantle.plan.get("powered", false) else ""]

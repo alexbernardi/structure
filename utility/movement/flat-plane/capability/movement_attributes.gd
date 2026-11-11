@@ -71,6 +71,12 @@ const DEFS: Array[Dictionary] = [
 		"meaning": "Fastest a slide can go, downhill included"},
 	{"id": "slide_height", "unit": "m", "min": 0.5, "max": 1.4, "default": 0.8,
 		"meaning": "Collider height while sliding: what a slide fits under"},
+	# Crouch flip (Movement Lab 5.3): Space while crouched or sliding; a physics jump with the authored JogToFlip turn
+	{"id": "flip_impulse", "unit": "m/s", "min": 3.0, "max": 15.0, "default": 6.5,
+		"meaning": "Vertical speed of a crouch flip (6.5 m/s: about 1.1 m of rise and 0.66 s in the air at 19.6 m/s^2)"},
+	{"id": "flip_forward", "unit": "m/s", "min": 0.0, "max": 10.0, "default": 2.0,
+		"meaning": "Least speed along the facing a flip leaves with (a standing flip still travels; faster motion is kept)"},
+	{"id": "stamina_cost_flip", "unit": "pt", "min": 0.0, "max": 100.0, "default": 6.0, "meaning": "Stamina per flip"},
 	{"id": "energy_max", "unit": "pt", "min": 0.0, "max": 1000.0, "default": 0.0, "meaning": "Battery capacity (cybernetics)"},
 	{"id": "energy_regen", "unit": "pt/s", "min": 0.0, "max": 200.0, "default": 0.0, "meaning": "Battery recharge per second"},
 	{"id": "energy_cost_assist", "unit": "pt", "min": 0.0, "max": 200.0, "default": 0.0,
@@ -84,7 +90,7 @@ const DEFS: Array[Dictionary] = [
 ]
 
 ## The moves a baseline human has. Modifiers grant or revoke further capabilities (air_jump, powered_traversal ...).
-const BASE_CAPABILITIES := ["jump", "vault", "mantle", "slide"]
+const BASE_CAPABILITIES := ["jump", "vault", "mantle", "slide", "flip"]
 
 static var _index := {}
 

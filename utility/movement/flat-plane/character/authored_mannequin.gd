@@ -9,7 +9,7 @@ const ClipMirror = preload("res://traversal/clip_mirror.gd")
 const MIRROR_VAULT := "SafetyVault_Mirror"   ## left-hand support, right-foot entry: the exact mirror of the authored vault
 const CLIPS := ["Idle", "Jog_Fwd", "Sprint", "Jump_Start", "Jump", "Jump_Land", "Crouch_Idle", "Crouch_Fwd"]
 const TRAVERSAL_CLIPS := ["SafetyVault"]
-const CLIMB_CLIPS := ["ClimbUp_1m", "DoubleJump", "ClimbUp_2m", "Slide_Start", "Slide", "Slide_Exit"]   # the importer names Slide_Loop "Slide" (loop suffix)   ## Movement Lab 5.0: authored mantle and air jump (same CC0 package)
+const CLIMB_CLIPS := ["ClimbUp_1m", "DoubleJump", "ClimbUp_2m", "Slide_Start", "Slide", "Slide_Exit", "JogToFlip"]   # the importer names Slide_Loop "Slide" (loop suffix)   ## Movement Lab 5.0: authored mantle and air jump (same CC0 package)
 const BONES := ["Root", "Hips", "Spine", "Chest", "UpperChest", "Neck", "Head",
 	"LeftShoulder", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightShoulder", "RightUpperArm", "RightLowerArm", "RightHand",
 	"LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "LeftToes", "RightUpperLeg", "RightLowerLeg", "RightFoot", "RightToes"]

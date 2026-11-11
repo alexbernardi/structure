@@ -329,7 +329,9 @@ func test_crouch_slide_momentum_and_clearance(t) -> void:
 	t.ok(plan.worst > limit * 0.5, "and does turn toward the stick (%.4f rad)" % plan.worst)
 
 
-## Slopes: uphill a slide dies sooner than on the flat, downhill it speeds up. A slide jump keeps the slide's speed.
+## Slopes: uphill a slide dies sooner than on the flat, downhill it speeds up. A slide jump keeps the slide's speed
+## (since 5.3 a press while sliding is the slide flip, which keeps it too; the flip-less slide jump is in
+## test_traversal_flip.gd).
 func test_slide_slopes_and_slide_jump(t) -> void:
 	var scene = await _scene()
 	var flat_ticks := 0

@@ -19,6 +19,7 @@ static func cybernetic_legs():
 		["max_ground_speed", "add", 1.0],
 		["ground_accel", "mul", 1.3],
 		["jump_impulse", "mul", 1.25],
+		["flip_impulse", "add", 1.5],
 		["vault_max_height", "add", 0.45],
 		["vault_lift", "add", 0.55],
 		["vault_max_depth", "add", 0.3],
@@ -51,11 +52,11 @@ static func zephyr_step():
 	], ["air_jump"], MAGIC_DURATION)
 
 
-## An impairment, to show modifiers that cap and revoke: slower, weaker jump, no vaulting until it heals.
+## An impairment, to show modifiers that cap and revoke: slower, weaker jump, no vaulting or flips until it heals.
 static func sprained_ankle():
 	return Modifier.make(INJURY, "Sprained ankle", "injury", [
 		["max_ground_speed", "cap", 4.0],
 		["sprint_multiplier", "cap", 1.2],
 		["jump_impulse", "mul", 0.8],
 		["mantle_strength", "mul", 0.7],
-	], [], INF, ["vault"])
+	], [], INF, ["vault", "flip"])

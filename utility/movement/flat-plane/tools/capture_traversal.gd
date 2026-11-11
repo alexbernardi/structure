@@ -2,7 +2,8 @@
 ## frames while the move presents. Needs a rendering window (not --headless).
 ##   godot --path utility/movement/flat-plane --script res://tools/capture_traversal.gd -- --case=mantle --out=<dir>
 ## Cases: mantle (lane E 2.5 m block), grab (lane E 1.9 m ledge, jump + hold), vault (lane A first wall),
-##        late (lane A, late press), cyber (lane A 1.6 m wall with the cybernetic legs)
+##        late (lane A, late press), cyber (lane A 1.6 m wall with the cybernetic legs), ... hang, fence, slide (5.2),
+##        flip (lane M: a standing crouch flip), slideflip (lane K: a flip out of a sprint slide) (5.3)
 extends SceneTree
 
 const Scene = preload("res://scenes/flat_plane.tscn")
@@ -31,7 +32,7 @@ func _initialize() -> void:
 	scene.options = {"no-capture": "true", "no-hardware": "true", "no-window-state": "true", "tuning-state": "", "traversal-debug": "true", "no-tuning": "true",
 		"landmark": {"mantle": "lane_e", "grab": "lane_e_ledge", "vault": "vault_a", "late": "vault_a", "cyber": "vault_a",
 			"rhythm": "lane_d", "angled": "lane_h_walls", "bar": "lane_f_bar", "catch": "lane_e_ledge",
-			"hang": "lane_j", "fence": "lane_i", "slide": "lane_k"}.get(case_name, "lane_e")}
+			"hang": "lane_j", "fence": "lane_i", "slide": "lane_k", "flip": "lane_m", "slideflip": "lane_k"}.get(case_name, "lane_e")}
 	if case_name == "cyber":
 		scene.options["profile"] = "cyber"
 	root.add_child(scene)
@@ -59,6 +60,8 @@ func _next_input() -> Dictionary:
 			scene.body.teleport(Vector3(45.0, 0.05, -61.0))
 		if case_name == "fence":
 			scene.body.teleport(Vector3(52.0, 0.05, -55.0))
+		if case_name == "slideflip":
+			scene.body.teleport(Vector3(14.0, 0.05, -67.0))   # the open run-out before the bars
 		scene.toggle_side_view()
 		# A close outside view between the lanes (lanes are 6 m apart), like the 4.0 lane C view.
 		scene._side_offset = Vector3(0.0, 0.0, -3.4) if case_name in ["mantle", "grab"] else Vector3(0.0, 0.0, 4.0)
@@ -106,6 +109,21 @@ func _next_input() -> Dictionary:
 				pressed = true
 				input.jump_pressed = true
 			return input
+		"flip":
+			input.move = Vector2.ZERO
+			input["crouch"] = ticks > 20
+			if not pressed and ticks > 90:
+				pressed = true
+				input.jump_pressed = true
+			return input
+		"slideflip":
+			input.sprint = true
+			input["crouch"] = ticks > 110 and not pressed
+			if not pressed and scene.traversal.sliding and scene.traversal.slide_time > 0.3:
+				pressed = true
+				input["crouch"] = true
+				input.jump_pressed = true
+			return input
 		"slide":
 			input.sprint = true
 			input["crouch"] = x > 44.0
@@ -147,12 +165,19 @@ func _frame() -> void:
 			print("CAPTURE %s: %d frames, vaults %d, variants %s, sides %s" % [case_name, shots, scene.vault.vaults, scene.authored_animation.vault_variants, scene.vault.sides])
 			quit(0)
 		return
+	var gap := 0.08
+	if case_name in ["flip", "slideflip"]:
+		gap = 0.06
+		if scene.traversal.flipping:
+			t = scene.traversal.flip_phase
+		elif scene.traversal.flip_land >= 0.0:
+			t = 0.8 + scene.traversal.flip_land
 	if case_name in ["hang", "slide"] and t < 0.0:
 		if scene.traversal.mantle.hanging():
 			t = 0.2 + scene.traversal.mantle._hang_time * 0.1
 		elif scene.traversal.sliding:
 			t = scene.traversal.slide_time
-	if t >= 0.0 and t - last_shot >= 0.08 and shots < 10 and out_dir != "":
+	if t >= 0.0 and t - last_shot >= gap and shots < 14 and out_dir != "":
 		last_shot = t
 		var path := "%s/%s_%02d_t%.2f.png" % [out_dir, case_name, shots, t]
 		root.get_texture().get_image().save_png(path)

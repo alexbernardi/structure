@@ -11,6 +11,8 @@
 ##   presses while a move is committed are swallowed; in its second half they buffer and chain into the next move
 ##   airborne contact with a high edge (no press needed): catch it and hang; one press then pulls up and over (5.2);
 ##                   crouch, or pulling the stick away from the wall, lets go
+##   crouched press  (crouch held on the ground, or sliding) a front flip (5.3): a physics jump that keeps the
+##                   momentum; presses while upside down buffer for the landing
 ##
 ## Authorization is central: every move start goes through _authorize(), which requires a press no older than
 ## MAX_PRESS_AGE, the capability and the resources, and returns the grant that vault_action.commit() and
@@ -21,6 +23,7 @@ extends RefCounted
 
 const VaultAction = preload("res://traversal/vault_action.gd")
 const MantleAction = preload("res://traversal/mantle_action.gd")
+const FlipClip = preload("res://traversal/flip_clip.gd")
 const Capabilities = preload("res://capability/movement_capabilities.gd")
 const Resources = preload("res://capability/movement_resources.gd")
 
@@ -55,6 +58,19 @@ var slide_velocity := Vector3.ZERO   ## the slide's own horizontal velocity (car
 var _slide_crouch := false
 var _slide_pending := false      ## crouch pressed in the air: slide on touching down at speed
 var _was_on_floor := false
+var flipping := false            ## airborne in a crouch flip (Movement Lab 5.3)
+var flip_phase := 0.0            ## clip time of JogToFlip shown now (FlipClip.START .. LAND while airborne)
+var flip_land := -1.0            ## s since the flip landed (presentation of its landing; -1 = none)
+var flip_time := 0.0             ## s since the flip took off
+var flips := 0
+var flip_direction := Vector3.ZERO
+var flip_rates: Array[float] = []    ## clip seconds per second used each airborne tick (tests: the turn tracks the airtime)
+var _flip_prev_phase := 0.0
+var _flip_height := 0.0          ## m from the body to the ground under it (presentation: the drawn feet never go below it)
+var _flip_prev_height := 0.0
+var _flip_pending := false
+var _flip_velocity := Vector3.ZERO
+var _yaw := 0.0
 
 
 func setup(traversal_params, vault_profile, movement_params, exclude: Array[RID] = []) -> void:
@@ -82,7 +98,8 @@ func wish_direction() -> Vector3:
 ## Before the movement core: interprets Space. Returns the input the core will see.
 func filter_input(input: Dictionary, body = null, dt := 1.0 / 120.0) -> Dictionary:
 	var move: Vector2 = input.get("move", Vector2.ZERO)
-	_wish = Basis(Vector3.UP, float(input.get("yaw", 0.0))) * Vector3(move.x, 0.0, -move.y)
+	_yaw = float(input.get("yaw", 0.0))
+	_wish = Basis(Vector3.UP, _yaw) * Vector3(move.x, 0.0, -move.y)
 	var pressed: bool = input.get("jump_pressed", false)
 	var crouch: bool = input.get("crouch", false)
 	var crouch_edge := crouch and not _crouch_prev
@@ -115,9 +132,17 @@ func filter_input(input: Dictionary, body = null, dt := 1.0 / 120.0) -> Dictiona
 	if body.is_on_floor():
 		catch_left = 0.0
 		if intent_left > 0.0 and press_age <= MAX_PRESS_AGE:
+			if crouch or sliding:
+				var flip := _try_flip(body, input, pressed)
+				if not flip.is_empty():
+					return flip
 			return _ground_press(body, input, pressed)
 		intent_left = 0.0
 		return input
+	if flipping and flip_phase < FlipClip.UPRIGHT:
+		if pressed:
+			_record("buffered")      # upside down: no catch, no air jump; the press waits for the landing buffer
+		return _without_jump(input)
 	if pressed and body.core.coyote_left > 0.0:
 		intent_left = 0.0
 		catch_left = 0.0
@@ -150,6 +175,89 @@ func _try_slide(body) -> bool:
 	vault.cancel()
 	_record("slide")
 	return true
+
+
+## Crouched press on the ground: a front flip. A physics jump (flip_impulse) that keeps every bit of horizontal
+## momentum, a slide's included, and leaves with at least flip_forward along the facing; gravity, air control and
+## collisions stay the movement core's. Returns the input for the core, or {} when the flip is not available (no
+## capability, no stamina: the press is then the ordinary jump or slide jump). Without standing room above (under a
+## bar) the press is refused and nothing jumps.
+func _try_flip(body, input: Dictionary, pressed: bool) -> Dictionary:
+	var grant := _authorize("flip", {})
+	if grant.has("refusal"):
+		last_refusal = grant.refusal
+		return {}
+	if not body.can_rise_to(body.params.get_value("stand_height")):
+		last_refusal = "flip: no_headroom"
+		_finish_press("flip_refused")
+		return _without_jump(input)
+	resources.spend(grant.cost)
+	var flat: Vector3 = slide_velocity if sliding else Vector3(body.velocity.x, 0.0, body.velocity.z)
+	var dir: Vector3
+	if flat.length() > 0.5:
+		dir = flat.normalized()
+	elif _wish.length_squared() > 0.01:
+		dir = _wish.normalized()
+	else:
+		dir = Basis(Vector3.UP, _yaw) * Vector3.FORWARD
+	var along := flat.dot(dir)
+	var least: float = capabilities.get_value("flip_forward")
+	if along < least:
+		flat += dir * (least - along)
+	_flip_velocity = flat
+	flip_direction = dir
+	if sliding:
+		_end_slide(body, false)
+	vault.cancel()
+	_flip_pending = true
+	_finish_press("flip")
+	if pressed:
+		return input
+	input = input.duplicate()
+	input.jump_pressed = true
+	return input
+
+
+## The flip's clock, after the body moved: the airborne turn is spread over the real airtime, predicted each tick from
+## the ground below (a flip off a ledge turns slower, onto a box faster), so it lands upright wherever it lands.
+func _flip_observe(body, dt: float) -> void:
+	if flip_land >= 0.0:
+		flip_land += dt
+		if flip_land > FlipClip.END - FlipClip.LAND:
+			flip_land = -1.0
+	if not flipping:
+		return
+	flip_time += dt
+	_flip_prev_phase = flip_phase
+	_flip_prev_height = _flip_height
+	if flip_time > 0.05 and body.is_on_floor():
+		flipping = false
+		flip_land = 0.0
+		return
+	var remaining := _time_to_ground(body)
+	var rate := 1.0 if not is_finite(remaining) else (FlipClip.LAND - flip_phase) / maxf(remaining, dt)
+	rate = clampf(rate, 0.6, 3.0)
+	flip_rates.append(rate)
+	flip_phase = minf(flip_phase + rate * dt, FlipClip.LAND)
+	if flip_phase >= FlipClip.LAND:
+		flipping = false             # turned and still falling (a long drop): the ordinary fall and landing take over
+		flip_land = -1.0
+
+
+## Seconds until the body's ballistic path meets the ground under it (INF without ground within 30 m).
+func _time_to_ground(body) -> float:
+	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
+	var from: Vector3 = body.global_position + Vector3.UP * 0.05
+	var query := PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * 30.0, body.collision_mask, [body.get_rid()])
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		_flip_height = 30.0
+		return INF
+	var h: float = maxf(0.0, body.global_position.y - (hit.position as Vector3).y)
+	_flip_height = h
+	var vy: float = body.core.velocity.y
+	var g: float = maxf(0.1, float(body.core.p.gravity))
+	return (vy + sqrt(vy * vy + 2.0 * g * h)) / g
 
 
 ## One tick of slide momentum, after the movement core (whose crouch walk it replaces while sliding): proportional and
@@ -423,6 +531,8 @@ func _cost(move: String, powered: bool) -> Dictionary:
 		return {}
 	if move == "slide":
 		return {"stamina": capabilities.get_value("stamina_cost_slide")}
+	if move == "flip":
+		return {"stamina": capabilities.get_value("stamina_cost_flip")}
 	if move == "air_jump":
 		return {"mana": capabilities.get_value("mana_cost_air_jump")}
 	var cost := {"stamina": capabilities.get_value("stamina_cost_" + move)}
@@ -447,6 +557,21 @@ func adjust(body, dt: float) -> void:
 	if _air_jump_pending:
 		_air_jump_pending = false
 		body.core.velocity.y = maxf(body.core.velocity.y, capabilities.get_value("air_jump_impulse"))
+	if _flip_pending:
+		_flip_pending = false
+		if body.core.just_jumped:
+			flipping = true
+			flip_time = 0.0
+			flip_phase = FlipClip.START
+			_flip_prev_phase = flip_phase
+			_flip_height = 0.0
+			_flip_prev_height = 0.0
+			flip_land = -1.0
+			flips += 1
+			flip_rates.clear()
+			body.core.velocity = Vector3(_flip_velocity.x, capabilities.get_value("flip_impulse"), _flip_velocity.z)
+	if flipping:
+		body.core.crouching = true   # the crouch collider stands in for the tucked body (as in every traversal move)
 
 
 func observe(body, dt: float) -> void:
@@ -454,6 +579,7 @@ func observe(body, dt: float) -> void:
 	if body.core.just_jumped:
 		resources.spend({"stamina": capabilities.get_value("stamina_cost_jump")})
 	vault.observe(body, dt)
+	_flip_observe(body, dt)
 	if grounded:
 		air_jumps_used = 0
 	catch_preview = {}
@@ -495,6 +621,9 @@ func cancel() -> void:
 	air_jumps_used = 0
 	sliding = false
 	slide_exit = -1.0
+	flipping = false
+	flip_land = -1.0
+	_flip_pending = false
 
 
 func offset(fraction: float) -> Vector3:
@@ -517,4 +646,13 @@ func presentation(fraction: float) -> Dictionary:
 		result["air_jump"] = air_jump_time
 	if sliding or (slide_exit >= 0.0 and slide_exit < 0.5):
 		result["slide"] = {"time": slide_time, "speed": slide_velocity.length(), "exit": slide_exit}
+	if flipping or flip_land >= 0.0:
+		var shown := lerpf(_flip_prev_phase, flip_phase, fraction) if flipping else FlipClip.LAND + flip_land
+		# drop: while airborne the body's arc is the flip's height, so the clip's own hip rise is taken off the drawn
+		# character (never below the ground under it). The animation applies it by the flip pose's blend weight, since a
+		# pose still fading out (crouch, slide) has its feet at the root.
+		var height := lerpf(_flip_prev_height, _flip_height, fraction) if flipping else 0.0
+		var drop := FlipClip.drawn_drop(shown, height) if flipping else 0.0
+		result["flip"] = {"time": shown, "airborne": flipping, "heading": atan2(-flip_direction.x, -flip_direction.z), "drop": drop,
+			"height": height}
 	return result

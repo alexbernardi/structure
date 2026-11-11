@@ -7,6 +7,7 @@ const TwoBoneCorrection = preload("res://animation/two_bone_correction.gd")
 const VaultClip = preload("res://traversal/vault_clip.gd")
 const MantleClip = preload("res://traversal/mantle_clip.gd")
 const PullupClip = preload("res://traversal/pullup_clip.gd")
+const FlipClip = preload("res://traversal/flip_clip.gd")
 const ClipPose = preload("res://traversal/clip_pose.gd")
 const SLIDE_START_SHOWN := 0.55    ## s of Slide_Start (the drop into the slide) before the slide loop
 const SLIDE_LOOP_LENGTH := 2.0
@@ -48,6 +49,8 @@ var _arm_left
 var has_vault_mirror := false
 var has_pullup := false
 var has_slide := false
+var has_flip := false
+var flip_drop := 0.0            ## m the drawn character is lowered this frame during a flip (telemetry)
 var grip_error := 0.0           ## m: the larger hand distance from its edge target while both hands grip (telemetry)
 var _gripping := false
 var _grip_targets := {}
@@ -183,8 +186,10 @@ func _build_graph() -> void:
 	has_air_jump = visual.traversal_clips.has(AIR_JUMP_CLIP)
 	has_pullup = visual.traversal_clips.has(PullupClip.CLIP)
 	has_slide = visual.traversal_clips.has("Slide") and visual.traversal_clips.has("Slide_Start") and visual.traversal_clips.has("Slide_Exit")
+	has_flip = visual.traversal_clips.has(FlipClip.CLIP)
 	for entry in [["Mantle", MantleClip.CLIP, has_mantle], ["AirJump", AIR_JUMP_CLIP, has_air_jump], ["Pullup", PullupClip.CLIP, has_pullup],
-			["SlideStart", "Slide_Start", has_slide], ["SlideLoop", "Slide", has_slide], ["SlideExit", "Slide_Exit", has_slide]]:
+			["SlideStart", "Slide_Start", has_slide], ["SlideLoop", "Slide", has_slide], ["SlideExit", "Slide_Exit", has_slide],
+			["Flip", FlipClip.CLIP, has_flip]]:
 		if not entry[2]:
 			continue
 		var node := AnimationNodeBlendTree.new()
@@ -194,7 +199,7 @@ func _build_graph() -> void:
 		node.connect_node("output", 0, "Seek")
 		machine.add_node(entry[0], node)
 	var names: Array = STATES.duplicate()
-	for extra in ["Vault", "VaultMirror", "Mantle", "AirJump", "Pullup", "SlideStart", "SlideLoop", "SlideExit"]:
+	for extra in ["Vault", "VaultMirror", "Mantle", "AirJump", "Pullup", "SlideStart", "SlideLoop", "SlideExit", "Flip"]:
 		if machine.has_node(extra):
 			names.append(extra)
 	for a in names:
@@ -268,18 +273,25 @@ func update(dt: float, state: Dictionary) -> void:
 	var mantling: bool = (has_mantle or pulling) and not climb.is_empty() and (climb.get("hang", false) or climb.time < float(climb.get("length", MantleClip.LENGTH)) - response * float(climb.rate))
 	var slide: Dictionary = vault.get("slide", {})
 	var sliding: bool = has_slide and not slide.is_empty() and not mantling and not vaulting
+	var flip: Dictionary = vault.get("flip", {})
+	var flipping: bool = has_flip and not flip.is_empty() and not mantling and not vaulting
+	if flipping:
+		sliding = false
+		heading = flip.heading       # the flip keeps the direction it was taken in (air control steers the body, not the turn)
 	if mantling:
 		heading = climb.heading
-	var air_jumping: bool = has_air_jump and not mantling and not vaulting and not state.grounded and float(vault.get("air_jump", INF)) < AIR_JUMP_SHOWN
+	var air_jumping: bool = has_air_jump and not mantling and not vaulting and not flipping and not state.grounded and float(vault.get("air_jump", INF)) < AIR_JUMP_SHOWN
 	if is_finite(heading):
 		var turn := 20.0 if vaulting else 12.0
 		_heading = heading if teleported else lerp_angle(_heading, heading, 1.0 - exp(-turn * dt))
 	visual.rotation.y = _heading + PI
 	model.steer = phase_steer
 	var was_running: bool = model.state == "Run"
-	model.update(dt, speed, state.grounded, state.vy, state.get("accel_forward", 0.0), teleported, state.get("crouching", false), vaulting or mantling)
+	model.update(dt, speed, state.grounded, state.vy, state.get("accel_forward", 0.0), teleported, state.get("crouching", false), vaulting or mantling or flipping)
 	if mantling:
 		model.state = "Pullup" if pulling else "Mantle"
+	elif flipping:
+		model.state = "Flip"
 	elif sliding:
 		model.state = _slide_state(slide)
 	elif air_jumping:
@@ -313,6 +325,8 @@ func update(dt: float, state: Dictionary) -> void:
 		_seek_slide(slide)
 	if air_jumping:
 		tree.set("parameters/AirJump/Seek/seek_request", clampf(float(vault.air_jump), 0.0, AIR_JUMP_SHOWN))
+	if flipping:
+		tree.set("parameters/Flip/Seek/seek_request", clampf(float(flip.time), 0.0, FlipClip.END))
 	_advance_run_phase(vault, vaulting, starting_run, dt)
 	_was_vaulting = vaulting
 	if String(playback.get_current_node()) != model.state:
@@ -321,13 +335,23 @@ func update(dt: float, state: Dictionary) -> void:
 	visual.skeleton.set_bone_pose_rotation(spine, _spine_base)   # undo last frame's support lean before mixing
 	tree.advance(dt)
 	_spine_base = visual.skeleton.get_bone_pose_rotation(spine)
+	flip_drop = 0.0
+	if flipping and flip.airborne:
+		# The clip's own rise, by the flip pose's blend weight, and never so low that the pose actually drawn (a crouch or
+		# slide still fading out, or the blend between them) puts a foot, hand or the head below the ground under the body.
+		var lowest := INF
+		for bone in ["LeftToes", "RightToes", "LeftFoot", "RightFoot", "Head", "LeftHand", "RightHand"]:
+			var p: Vector3 = visual.skeleton.global_transform * visual.skeleton.get_bone_global_pose(visual.bone_index[bone]).origin
+			lowest = minf(lowest, p.y - visual.global_position.y)
+		flip_drop = minf(float(flip.get("drop", 0.0)) * _state_weight("Flip"), float(flip.get("height", 0.0)) + lowest)
+	visual.global_position.y -= flip_drop
 	var chest: int = visual.bone_index.Chest
 	# A fast vault is taken leaning into it, a slow one upright (speed-linked pitch while over the obstacle).
 	vault_pitch = clampf((float(vault.get("speed", 0.0)) - 4.0) / 5.0, 0.0, 1.0) * SPEED_PITCH * shape if vaulting else 0.0
 	visual.skeleton.set_bone_pose_rotation(chest, Quaternion(Vector3.RIGHT, model.lean + vault_pitch) * visual.skeleton.get_bone_pose_rotation(chest))
 	_support(vault)
 	_grip(climb if mantling and pulling else {})
-	_correct_feet(state.grounded and not vaulting and not mantling and not sliding, dt)
+	_correct_feet(state.grounded and not vaulting and not mantling and not sliding and not flipping, dt)
 
 
 ## The vault shows until the crossfade back to running would finish with the clip, so the run picks up mid-landing
@@ -464,6 +488,17 @@ func _start_vault_variant(vault: Dictionary) -> void:
 	_orientation.orientations.erase(visual.bone_index.LeftHand)
 	_arm = _arm_left if vault_mirrored else _arm_right
 	vault_variants["left" if vault_mirrored else "right"] += 1
+
+
+## Blend weight of a state machine node after this frame's advance (1 when it is the settled current node).
+func _state_weight(node: String) -> float:
+	var current := String(playback.get_current_node())
+	var from := String(playback.get_fading_from_node())
+	var length := playback.get_fading_length()
+	var progress := clampf(playback.get_fading_position() / length, 0.0, 1.0) if from != "" and length > 0.0 else 1.0
+	if current == node:
+		return progress
+	return 1.0 - progress if from == node else 0.0
 
 
 ## The slide's authored states: the drop into it, the loop while momentum lasts, the recovery.

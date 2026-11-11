@@ -94,8 +94,12 @@ func space_hint() -> String:
 	var now := "Space: jump"
 	if traversal.mantle.hanging():
 		now = "HANGING  Space: pull up   Ctrl / stick back: let go"
+	elif traversal.flipping:
+		now = "FLIP  (presses wait for the landing)"
 	elif traversal.sliding:
-		now = "SLIDE %.1f m/s  Space: slide jump" % traversal.slide_velocity.length()
+		now = "SLIDE %.1f m/s  Space: %s" % [traversal.slide_velocity.length(), "FLIP" if traversal.capabilities.can("flip") else "slide jump"]
+	elif body.core.grounded and body.core.crouching and traversal.capabilities.can("flip"):
+		now = "CROUCH  Space: FLIP"
 	elif traversal.busy() or action.armed():
 		now = "committed (%s)" % ("vault" if action.active() or action.armed() else "climb")
 	elif not action.opportunity.is_empty():

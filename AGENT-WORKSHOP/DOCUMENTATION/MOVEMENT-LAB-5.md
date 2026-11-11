@@ -1,8 +1,33 @@
 # Movement Lab 5.0 - unified, intentional, upgradeable traversal
 
 Branch: `benchmark/opus-traversal`. Tasks: [0007](../TASKS/0007-unified-traversal.md) (5.0),
-[0008](../TASKS/0008-traversal-refinement.md) (5.1). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
+[0008](../TASKS/0008-traversal-refinement.md) (5.1), [0009](../TASKS/0009-hang-angles-slide.md) (5.2),
+[0010](../TASKS/0010-crouch-flip.md) (5.3). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
 [3.0 authored locomotion](MOVEMENT-LAB-3.md); both are preserved.
+
+## 5.3: crouch flip
+
+Task [0010](../TASKS/0010-crouch-flip.md). **Space while crouched** - Ctrl held on the ground (standing still or
+crouch-walking), or during a slide - is a front flip (authored UAL2 `JogToFlip`). Space standing up is still the
+ordinary jump; without the `flip` capability (the sprained ankle revokes it) a crouched press is the ordinary jump or
+slide jump, as before.
+
+- **Physics, not a scripted path:** a jump at `flip_impulse` (6.5 m/s: about 1.05 m of rise and 0.66 s in the air)
+  that keeps all horizontal momentum (a sprint slide flips at 11.8 m/s) and leaves with at least `flip_forward`
+  (2 m/s) along the facing - the motion, or the stick, or the view when standing still. Gravity, air control and
+  collisions stay the movement core's.
+- **The turn follows the airtime:** each tick the time to the ground below is predicted and the clip's airborne part
+  (0.10-0.80 s) is spread over it, so a flip off the 1.0 m deck turns slower (0.78 s) and one onto the 0.5 m box faster
+  (0.58 s), both upright on landing. Turned and still falling (a long drop): the ordinary fall and landing take over.
+- **Height belongs to the body:** the in-place clip lifts its own hips 1.2 m; the drawn character is lowered by that
+  rise (by the flip pose's blend weight), never so far that the pose actually drawn puts a foot, hand or the head
+  below the ground under the body - during the push-off the feet stay down while the legs extend.
+- **Rules:** central authorization (recent press, capability, stamina 6, standing room: under the 1.0 m bars the press
+  is refused and the slide goes on); presses while upside down are buffered (no catch or air jump) and one inside the
+  jump buffer before the landing chains the next flip (crouch still held); crouch held through a fast landing slides.
+- New attributes `flip_impulse`, `flip_forward`, `stamina_cost_flip`, capability `flip`; the cybernetic legs add 1.5 m/s
+  of flip impulse. Lane `lane_m` (also `lane_m_deck`): open ground, a 1.0 m deck to flip off, a 0.5 m box to flip
+  onto, a 1.0 m bar (no room).
 
 ## 5.2: catch-and-hang, sharp angles, two-handed pull-up, crouch slide
 
@@ -14,7 +39,7 @@ Task [0009](../TASKS/0009-hang-angles-slide.md). How to use each move:
 | Pull up | Space once while hanging | `ClimbUp_2m` pull-up and step over onto the top, or over a thin top and down the far side; refused climbs keep the hang and say why |
 | Early catch | Space in the air as the body reaches the edge | climbs at once (no hang), the press is never lost |
 | Fence / sharp angle | Space near it, or in the air near it | vault up to 35 degrees; beyond, climb over square to the face keeping the speed along it |
-| Slide | Ctrl while running at 4.5 m/s or more (or Ctrl held through a landing) | runs on momentum: drag, slope gravity, limited steering; 0.8 m collider; Space: slide jump; release Ctrl to stand where there is room |
+| Slide | Ctrl while running at 4.5 m/s or more (or Ctrl held through a landing) | runs on momentum: drag, slope gravity, limited steering; 0.8 m collider; Space: slide jump (5.3: a slide flip); release Ctrl to stand where there is room |
 
 New attributes: `slide_min_speed`, `slide_boost`, `slide_friction`, `slide_drag`, `slide_steer`, `slide_slope_gain`,
 `slide_end_speed`, `slide_max_speed`, `slide_height`, `stamina_cost_slide`; capability `slide`. Pull strength and
