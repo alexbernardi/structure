@@ -26,9 +26,17 @@ const AIR_FACE_LOW := 0.1
 const MAX_TILT := 0.25          ## |normal.y| of a climbable face
 const MIN_TOWARD := 0.2         ## wished direction . face direction (about 78 degrees): sharper approaches still climb
 const FAN := [0.0, -0.45, 0.45, -0.9, 0.9, -1.3, 1.3]   ## rad: probe directions around the intent (sharp approaches, fences)
+const REACH_RATIO := 1.306       ## hand reach above the soles per metre of standing height: the 1.8 m mannequin's wrist
+                                 ## reaches 2.19 m with the arm straight up, + 0.08 m of fingers over the lip + 0.08 m of
+                                 ## shoulder stretch = 2.35 m (tools/audit_hand_reach.gd; checked by test_traversal_hang)
 const PULLUP_MIN := 1.5         ## m of top above the feet from which a catch is a two-handed pull-up (ClimbUp_2m)
 const HANG_CONTACT := 0.2       ## m from the body's surface to the face for a ledge to be caught on contact
 const HANG_SETTLE := 0.15       ## s to settle from the contact position into the hang
+const DANGLE_SLACK := 0.12      ## m short of the full reach the soles hang at (arms straight but not locked)
+const GROUND_CLEAR := 0.05      ## m kept between the hanging soles and the ground (else the body hangs higher, legs braced)
+const HAND_SPAN := 0.24         ## m from the hang point to each hand along the ledge (the authored grip is shoulder-wide)
+const SHIMMY_ACCEL := 5.0       ## m/s^2 the shimmy speeds up and slows down
+const SHIMMY_LEAD := 0.08       ## m beyond the leading hand the ledge must continue
 const TOP_INSET := 0.04          ## m past the face the top is probed (a fence is 0.08 m thick)
 const TOP_FLAT := 0.75          ## normal.y of a top that can be climbed onto (about 41 degrees: irregular rubble, slopes)
 const LATERAL := 0.25           ## m either side the top must also be there (no climbing onto a pole)
@@ -64,6 +72,12 @@ var hangs := 0
 var _hang_from := Vector3.ZERO
 var _hang_to := Vector3.ZERO
 var _hang_time := 0.0
+var shimmy_wish := 0.0          ## -1..1: the stick along the ledge (+ = the character's right), set each tick while hanging
+var shimmy_velocity := 0.0      ## m/s along the ledge (+ = right)
+var shimmy_block := ""          ## why the shimmy stopped: "end" (no ledge / wall beyond the leading hand), "blocked"
+var shimmy_distance := 0.0      ## m shimmied in all (telemetry, tests)
+var _top_y := 0.0
+var _catch_velocity := Vector3.ZERO
 var _time_prev := 0.0
 var _offset := Vector3.ZERO
 var _offset_prev := Vector3.ZERO
@@ -96,6 +110,18 @@ func _attr(id: String, fallback: float) -> float:
 	return capabilities.get_value(id) if capabilities != null else fallback
 
 
+## Highest top above the soles the hands can catch: the body's own overhead reach (its height) plus any extra reach.
+## Evaluated from where the body is, so the jump (impulse, gravity) decides how high a ledge can be caught.
+func hand_reach(body) -> float:
+	return float(body.params.get_value("stand_height")) * REACH_RATIO + _attr("grip_reach", 0.0)
+
+
+## The same for the unaugmented body (base attributes): beyond it a catch is powered.
+func base_hand_reach(body) -> float:
+	var extra: float = capabilities.base_value("grip_reach") if capabilities != null else 0.0
+	return float(body.params.get_value("stand_height")) * REACH_RATIO + extra
+
+
 ## Horizontal reach from the collider surface to a face this move can use.
 func reach(airborne: bool) -> float:
 	return _attr("catch_distance", 0.45) if airborne else _attr("mantle_reach", 0.8)
@@ -106,7 +132,7 @@ func reach(airborne: bool) -> float:
 func evaluate(body, direction: Vector3, airborne: bool, from_hang := false) -> Dictionary:
 	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
 	var feet: Vector3 = body.global_position
-	var max_top := _attr("grip_reach", 2.1) if airborne else _attr("mantle_max_height", 1.45)
+	var max_top := hand_reach(body) if airborne else _attr("mantle_max_height", 1.45)
 	var min_top := AIR_MIN if airborne else GROUND_MIN
 	var limit := RADIUS + reach(airborne)
 	var heights: Array = GROUND_FACE_RAYS
@@ -221,7 +247,9 @@ func _evaluate_face(body, space: PhysicsDirectSpaceState3D, feet: Vector3, hit: 
 	built.merge(result, false)
 	built.ok = true
 	built.reason = "ok"
-	built["powered"] = capabilities != null and highest > capabilities.base_value("grip_reach" if airborne else "mantle_max_height") + 1e-4
+	var unaided: float = base_hand_reach(body) if airborne else (capabilities.base_value("mantle_max_height") if capabilities != null else INF)
+	# Reaching beyond the unaugmented body is powered; pulling up from a hang already held is not (the catch was the reach).
+	built["powered"] = capabilities != null and not from_hang and highest > unaided + 1e-4
 	# Sideways momentum along the wall survives the climb (a fence taken at a sharp angle).
 	var flat_velocity := Vector3(body.velocity.x, 0.0, body.velocity.z)
 	built["tangent"] = (flat_velocity - direction * flat_velocity.dot(direction)) * _attr("momentum_conservation", 0.6)
@@ -304,7 +332,9 @@ func _build(feet: Vector3, direction: Vector3, distance: float, height: float, h
 	var rate := clampf(strength / sqrt(clampf(height / Clip.RISE, 0.6, 2.5)), MIN_RATE, MAX_RATE)
 	if pullup:
 		start = Pullup.GRIP if from_hang else Pullup.REACH - 0.03
-		contact = start + 0.1
+		# From a hang at arm's length (deeper than the authored grip) the arms first pull the body up to the grip: the
+		# warp onto the edge is spread over a longer start.
+		contact = start + 0.1 + (0.6 * maxf(0.0, height - Pullup.hang_drop()) if from_hang else 0.0)
 		rate = clampf(strength / sqrt(clampf(height / Pullup.EDGE, 0.75, 1.6)), MIN_RATE, MAX_RATE)
 	elif airborne and height < Clip.RISE:
 		start = minf(Clip.LENGTH * (1.0 - height / Clip.RISE), 0.4)   # join the clip where the climb left matches
@@ -383,6 +413,8 @@ func drive(body, dt: float) -> bool:
 	_offset_prev = _offset
 	if phase == Phase.HANG:
 		_hang_time += dt
+		if _hang_time > HANG_SETTLE:
+			_shimmy(body, dt)
 		var hold: Vector3 = _hang_from.lerp(_hang_to, smoothstep(0.0, HANG_SETTLE, _hang_time))
 		body.drive_to(hold, dt)
 		# The drawn body eases from where the catch happened onto the authored grip as the collider settles.
@@ -422,8 +454,56 @@ func drive(body, dt: float) -> bool:
 	return true
 
 
-## Catches the ledge on contact and hangs from it (both hands on the lip, feet braced on the wall), until a press climbs
-## (climb_plan_from_hang + start) or the player lets go (drop). `p` is an airborne plan whose top is high enough to hang.
+## Hand over hand along the ledge: moves the hang point sideways while the top and the face continue under the leading
+## hand (and a little beyond) at the same height, and the body has room; otherwise stops there (shimmy_block says why).
+func _shimmy(body, dt: float) -> void:
+	shimmy_velocity = move_toward(shimmy_velocity, shimmy_wish * _attr("shimmy_speed", 0.9), SHIMMY_ACCEL * dt)
+	if absf(shimmy_velocity) < 1e-4:
+		return
+	var right: Vector3 = plan.direction.cross(Vector3.UP)
+	var step: Vector3 = right * shimmy_velocity * dt
+	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
+	var lead: Vector3 = right * signf(shimmy_velocity) * (HAND_SPAN + SHIMMY_LEAD)
+	var top := ledge_top(space, _hang_to + step + lead)
+	var centre := ledge_top(space, _hang_to + step)
+	if is_nan(top) or is_nan(centre):
+		shimmy_velocity = 0.0
+		shimmy_block = "end"
+		return
+	if body.test_move(Transform3D(Basis.IDENTITY, _hang_to), step):
+		shimmy_velocity = 0.0
+		shimmy_block = "blocked"
+		return
+	shimmy_block = ""
+	var depth: float = _top_y - _hang_to.y
+	_top_y = centre
+	_hang_to += step
+	_hang_to.y = _top_y - depth
+	_hang_from += step
+	plan["origin"] = _hang_to
+	shimmy_distance += step.length()
+
+
+## The top of the ledge in front of a hanging body at `hang_point` (its collider bottom), or NAN where the top or the
+## wall-like face under it does not continue at the hang's height (the end of the wall, a gap, a step).
+func ledge_top(space: PhysicsDirectSpaceState3D, hang_point: Vector3) -> float:
+	var d: Vector3 = plan.direction
+	var face: Vector3 = hang_point + d * (RADIUS + SKIN)
+	var column: Vector3 = face + d * TOP_INSET
+	var top := _cast(space, Vector3(column.x, _top_y + 0.3, column.z), Vector3(column.x, _top_y - 0.3, column.z))
+	if top.is_empty() or (top.normal as Vector3).y < TOP_FLAT or absf((top.position as Vector3).y - _top_y) > AGREE * 0.5:
+		return NAN
+	var from: Vector3 = Vector3(hang_point.x, _top_y - 0.3, hang_point.z)
+	var wall := _cast(space, from, from + d * (RADIUS + SKIN + 0.15))
+	if wall.is_empty() or absf((wall.normal as Vector3).y) > MAX_TILT:
+		return NAN
+	return (top.position as Vector3).y
+
+
+## Catches the ledge on contact and hangs from it until a press climbs (evaluate from the hang + start) or the player
+## lets go (drop). The body hangs at arm's length (its reach less DANGLE_SLACK below the top) where there is room below,
+## else as low as the ground allows with the legs braced (never higher than the authored grip). `p` is an airborne plan
+## whose top is high enough to hang.
 func begin_hang(body, p: Dictionary, grant := {}) -> bool:
 	if grant.get("move", "") != "hang" or grant.get("plan", null) != p:
 		push_warning("Hang refused: not authorized by the traversal controller")
@@ -432,7 +512,16 @@ func begin_hang(body, p: Dictionary, grant := {}) -> bool:
 	var top_y: float = feet.y + p.height
 	_hang_from = feet
 	_hang_to = feet + p.direction * p.wait
-	_hang_to.y = top_y - Pullup.hang_drop()
+	var space: PhysicsDirectSpaceState3D = body.get_world_3d().direct_space_state
+	var below := _cast(space, Vector3(_hang_to.x, top_y - 0.5, _hang_to.z), Vector3(_hang_to.x, top_y - 6.0, _hang_to.z))
+	var room: float = top_y - (below.position as Vector3).y - GROUND_CLEAR if not below.is_empty() else INF
+	var depth: float = clampf(room, Pullup.hang_drop(), maxf(Pullup.hang_drop(), hand_reach(body) - DANGLE_SLACK))
+	_hang_to.y = top_y - depth
+	_top_y = top_y
+	_catch_velocity = body.velocity
+	shimmy_velocity = 0.0
+	shimmy_wish = 0.0
+	shimmy_block = ""
 	plan = p.duplicate()
 	plan["clip"] = "pullup"
 	plan["start"] = Pullup.GRIP
@@ -440,9 +529,9 @@ func begin_hang(body, p: Dictionary, grant := {}) -> bool:
 	plan["release"] = Pullup.RELEASE
 	plan["origin"] = _hang_to
 	plan["distance"] = RADIUS + SKIN          # the edge relative to the hanging body
-	plan["height"] = Pullup.hang_drop()
-	plan["delta"] = Vector2(RADIUS + SKIN - (Pullup.FACE - Pullup.forward(Pullup.GRIP)), 0.0)
-	plan["contact"] = Pullup.GRIP + 0.1
+	plan["height"] = depth
+	plan["delta"] = Vector2(RADIUS + SKIN - (Pullup.FACE - Pullup.forward(Pullup.GRIP)), depth - Pullup.hang_drop())
+	plan["contact"] = Pullup.GRIP + 0.1 + 0.6 * (depth - Pullup.hang_drop())
 	_hang_time = 0.0
 	time = Pullup.GRIP
 	_time_prev = time
@@ -501,5 +590,7 @@ func presentation(fraction: float) -> Dictionary:
 	var edge: Vector3 = plan.origin + plan.direction * plan.distance
 	return {"mantle": true, "time": lerpf(_time_prev, time, fraction), "rate": plan.rate, "clip": plan.get("clip", "climb"),
 		"hang": phase == Phase.HANG, "length": plan.get("length", Clip.LENGTH),
+		"right": plan.direction.cross(Vector3.UP), "lip_y": top_y, "shimmy": shimmy_velocity, "hang_time": _hang_time,
+		"catch_velocity": _catch_velocity,
 		"heading": atan2(-plan.direction.x, -plan.direction.z),
 		"edge": Vector3(edge.x, top_y, edge.z), "direction": plan.direction}

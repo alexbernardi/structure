@@ -181,8 +181,8 @@ func test_early_press_drop_and_refusal(t) -> void:
 	t.ok(stats.refusal.contains("headroom"), "the press is refused for headroom (%s)" % stats.refusal)
 
 
-## The thin 2.4 m wall: catch, hang, one press pulls up and over and drops to the far side. The 3.0 m wall is out of a
-## human's reach and caught with the cybernetic legs.
+## The thin 2.4 m wall: catch, hang, one press pulls up and over and drops to the far side. Since 5.4 the 3.0 m wall
+## is within a human's jump and reach; the 3.6 m wall is out of it and caught with the cybernetic legs.
 func test_pull_up_over_and_upgrade_reach(t) -> void:
 	var scene = await _scene()
 	await _place(scene, "lane_j_thin")
@@ -199,25 +199,27 @@ func test_pull_up_over_and_upgrade_reach(t) -> void:
 	t.eq(stats.overs, 1, "one press climbs over it (%s, %s)" % [stats.choices, stats.refusal])
 	t.ok(scene.body.global_position.x > 60.2, "landing beyond it (x %.2f)" % scene.body.global_position.x)
 	t.eq(stats.overlap_ticks, 0, "no penetration")
-	for profile in ["human", "cyber"]:
+	for profile in ["human 3.0", "human 3.6", "cyber 3.6"]:
 		scene.capabilities.clear()
-		if profile == "cyber":
+		if profile == "cyber 3.6":
 			scene.apply_profile("cyber")
-		await _place(scene, "lane_j", Vector3(73.0, 0.05, -61.0))
+		var face: float = 78.0 if profile == "human 3.0" else 87.0
+		await _place(scene, "lane_j", Vector3(face - 5.0, 0.05, -61.0))
 		plan = {"step": 0}
 		stats = await _run(scene, 500, func(s, _i):
-			if plan.step == 0 and s.body.global_position.x > 76.6:
+			if plan.step == 0 and s.body.global_position.x > face - 1.4:
 				plan.step = 1
 				return _input(true)
 			if plan.step == 1 and s.traversal.mantle.hanging() and s.traversal.mantle._hang_time > 0.2:
 				plan.step = 2
 				return _input(true)
 			return _input())
-		if profile == "human":
-			t.eq(stats.hangs + stats.mantles, 0, "human: the 3.0 m edge is out of reach")
+		if profile == "human 3.6":
+			t.eq(stats.hangs + stats.mantles, 0, "human: the 3.6 m edge is out of reach")
 		else:
-			t.eq(stats.hangs, 1, "cyber: the 3.0 m edge is caught (%s)" % [stats.choices])
-			t.ok(stats.max_y > 2.99, "cyber: and pulled up onto (%.2f m)" % stats.max_y)
+			var top: float = 3.0 if profile == "human 3.0" else 3.6
+			t.eq(stats.hangs, 1, "%s: the edge is caught (%s)" % [profile, stats.choices])
+			t.ok(stats.max_y > top - 0.01, "%s: and pulled up onto (%.2f m)" % [profile, stats.max_y])
 	scene.capabilities.clear()
 
 

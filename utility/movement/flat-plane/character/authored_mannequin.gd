@@ -157,7 +157,11 @@ func _build_meshes() -> void:
 		_segment(side + "Shoulder", side + "UpperArm", 0.055, "shirt")
 		_segment(side + "UpperArm", side + "LowerArm", 0.055, "shirt")
 		_segment(side + "LowerArm", side + "Hand", 0.042, "skin")
-		_ellipsoid(side + "Hand", _rest(side + "Hand").origin, Vector3(0.05, 0.025, 0.075), "skin")
+		# The hand runs on from the wrist along the forearm (palm-down rest pose): long toward the fingers, wide front to
+		# back, thin top to bottom. (Before 5.4 it was centred on the wrist with its long axis across the arm.)
+		var wrist := _rest(side + "Hand").origin
+		var along := (wrist - _rest(side + "LowerArm").origin).normalized()
+		_ellipsoid(side + "Hand", wrist + along * 0.085, Vector3(0.095, 0.022, 0.046), "skin")
 		_segment(side + "UpperLeg", side + "LowerLeg", 0.075, "pants")
 		_segment(side + "LowerLeg", side + "Foot", 0.058, "pants")
 		var foot := _rest(side + "Foot").origin

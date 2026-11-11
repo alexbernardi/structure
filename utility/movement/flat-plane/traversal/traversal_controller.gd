@@ -316,6 +316,9 @@ func _end_slide(body, standing: bool) -> void:
 ## from the wall lets go. A press whose climb is not possible (no room on top, blocked) keeps the hang and says why.
 func _hang_input(body, input: Dictionary, pressed: bool, crouch_edge: bool) -> Dictionary:
 	var away := _wish.length_squared() > 0.01 and _wish.normalized().dot(mantle.plan.direction) < -0.5
+	# The stick along the ledge shimmies (hand over hand), with a dead zone so a stick held toward the wall does not drift.
+	var along: float = _wish.dot(mantle.plan.direction.cross(Vector3.UP)) if _wish.length_squared() > 0.01 else 0.0
+	mantle.shimmy_wish = 0.0 if absf(along) < 0.35 else signf(along) * minf(1.0, absf(along))
 	if crouch_edge or away:
 		mantle.drop(body)
 		_record("let_go")

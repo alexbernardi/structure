@@ -136,7 +136,7 @@ func _draw_reach_and_contacts(feet: Vector3) -> void:
 		var edge: Vector3 = feet + forward * (MantleAction.RADIUS + caps.get_value("catch_distance"))
 		var colour := Color(0.3, 0.6, 1.0) if traversal.catch_preview.get("ok", false) else Color(0.6, 0.6, 0.6)
 		var low: Vector3 = edge + Vector3.UP * MantleAction.AIR_MIN
-		var high: Vector3 = edge + Vector3.UP * caps.get_value("grip_reach")
+		var high: Vector3 = edge + Vector3.UP * traversal.mantle.hand_reach(body)
 		_line(low, high, colour)
 		_line(low, low - forward * 0.15, colour)
 		_line(high, high - forward * 0.15, colour)

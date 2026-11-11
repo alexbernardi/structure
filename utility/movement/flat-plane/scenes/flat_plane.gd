@@ -120,6 +120,7 @@ func _ready() -> void:
 	body.core.p = capabilities.core   # the movement core reads the effective (upgraded) parameters; baselines stay tuned
 	body.action = traversal
 	authored_animation.setup_traversal(traversal_params, vault_profile)
+	authored_animation.ray_exclude.append(body.get_rid())   # hang hand and leg probes never hit the character itself
 
 	cam = OrbitCamera.new()
 	cam.name = "OrbitCamera"

@@ -22,6 +22,26 @@ const STATES := ["Idle", "Run", "Jump", "Fall", "Land", "Crouch"]
 const MAX_FOOT_CORRECTION := 0.10
 const LEG_REACH := 0.995           ## share of the leg's length a corrected foot may be from the hip (never locks the knee)
 const PHASE_STEER := [0.8, 1.25]   ## cadence multiplier range used to arrive at the vault on its authored foot
+# Movement Lab 5.4: the hang (no authored hang exists: the pull-up's grip frame, placed and corrected procedurally)
+const HANG_ARM := 0.97             ## share of the arm's length from shoulder to wrist while hanging (straight, not locked)
+const HANG_SHOULDER_OFF := 0.22    ## m the shoulders hang out from the wall (the head and chest clear the face)
+const WRIST_OUT := 0.045           ## m the wrist sits out from the face: the forearm clears the edge
+const WRIST_UP := 0.024            ## m the wrist sits above the top: the palm rests on it, the fingers lie over it
+const STEP_TRIGGER := 0.10         ## m a hand trails its place before it moves (shimmying)
+const STEP_SETTLE := 0.03          ## m left over once the shimmy stops: the hands re-centre
+const STEP_TIME := 0.22            ## s per hand move
+const STEP_LIFT := 0.07            ## m a moving hand lifts off the top
+const STEP_OVERSHOOT := 0.05       ## m a moving hand reaches past its place in the direction of travel
+const SWING_LENGTH := 1.3          ## m from the hands to the body's centre of mass (pendulum)
+const SWING_OMEGA2 := 7.5          ## (rad/s)^2: g / L for a compound pendulum hanging from the hands (about 0.37 Hz)
+const SWING_DAMP := 1.4            ## 1/s
+const LEG_STIFF := 60.0            ## the legs follow the body's swing through a soft hip (secondary motion)
+const LEG_DAMP := 5.0
+const FOOT_WALL_CLEAR := 0.12      ## m the dangling feet stay off the wall
+const FOOT_GROUND_CLEAR := 0.06    ## m above the ground (a low hang braces the legs instead)
+const HANG_BLEND := 0.15           ## s the drawn body takes to settle into the hang and to leave it
+const ROLL_TILT := 0.35            ## share of the sideways swing the torso tilts (two hands make it a parallelogram: the arms
+                                   ## swing sideways together and the shoulders stay nearly level)
 
 var visual
 var params
@@ -66,7 +86,25 @@ var _have_position := false
 var measured_speed := 0.0
 var _heading := 0.0
 var final_feet := {}
+var final_hands := {}               ## side -> world transform of the hand after every correction (tests)
 var _orientation := FootOrientation.new()
+var ray_exclude: Array[RID] = []   ## the character's own collider (hang probes)
+var hanging_shown := false
+var hang_swing := Vector2.ZERO     ## rad: (pitch of the body out from the wall, roll toward its right) (telemetry)
+var hand_steps := 0                ## hand moves made while shimmying (telemetry)
+var two_hands_moving := 0          ## frames with both hands off the ledge (telemetry: must stay 0)
+var hang_lift := 0.0               ## m the drawn body is pulled up by spread hands this frame (telemetry)
+var head_clearance := 0.0          ## m the drawn head and chest would clear the face before the lean (telemetry)
+var _swing_v := Vector2.ZERO
+var _legs := Vector2.ZERO
+var _legs_v := Vector2.ZERO
+var _hang_weight := 0.0
+var _hang_shift := Vector3.ZERO
+var _hang_basis := Basis.IDENTITY
+var _hang_legs := false
+var _plants := {}                  ## side -> world wrist target while the hand is on the ledge
+var _step := {}                    ## side -> {from, to, t} while that hand moves
+var _prev_shimmy := 0.0
 
 
 func setup(target: Node3D, parameters) -> void:
@@ -84,6 +122,7 @@ func setup(target: Node3D, parameters) -> void:
 func _capture_final_feet() -> void:
 	for side in ["Left", "Right"]:
 		final_feet[side] = visual.skeleton.get_bone_global_pose(visual.bone_index[side + "Foot"])
+		final_hands[side] = visual.skeleton.global_transform * visual.skeleton.get_bone_global_pose(visual.bone_index[side + "Hand"])
 	hand_error = 0.0
 	grip_error = 0.0
 	if _gripping:
@@ -284,7 +323,7 @@ func update(dt: float, state: Dictionary) -> void:
 	if is_finite(heading):
 		var turn := 20.0 if vaulting else 12.0
 		_heading = heading if teleported else lerp_angle(_heading, heading, 1.0 - exp(-turn * dt))
-	visual.rotation.y = _heading + PI
+	visual.rotation = Vector3(0.0, _heading + PI, 0.0)   # a hang's swing tilts the drawn body; anything else is upright
 	model.steer = phase_steer
 	var was_running: bool = model.state == "Run"
 	model.update(dt, speed, state.grounded, state.vy, state.get("accel_forward", 0.0), teleported, state.get("crouching", false), vaulting or mantling or flipping)
@@ -350,6 +389,7 @@ func update(dt: float, state: Dictionary) -> void:
 	vault_pitch = clampf((float(vault.get("speed", 0.0)) - 4.0) / 5.0, 0.0, 1.0) * SPEED_PITCH * shape if vaulting else 0.0
 	visual.skeleton.set_bone_pose_rotation(chest, Quaternion(Vector3.RIGHT, model.lean + vault_pitch) * visual.skeleton.get_bone_pose_rotation(chest))
 	_support(vault)
+	_hang(climb if mantling and climb.get("hang", false) else {}, dt)
 	_grip(climb if mantling and pulling else {})
 	_correct_feet(state.grounded and not vaulting and not mantling and not sliding and not flipping, dt)
 
@@ -527,6 +567,8 @@ func _seek_slide(slide: Dictionary) -> void:
 ## the edge, on the lip (LIP below the top, at the face), until the authored release of that hand. Keeps the hands on
 ## the wall while the body hangs and the root motion's linear approximation drifts during the pull.
 func _grip(climb: Dictionary) -> void:
+	if climb.get("hang", false):
+		return                     # the hang places the hands itself (_hang)
 	var skeleton: Skeleton3D = visual.skeleton
 	var active := not climb.is_empty() and climb.has("edge") and float(climb.time) < PullupClip.LEFT_RELEASE + 0.06
 	if not active:
@@ -560,7 +602,249 @@ func _grip(climb: Dictionary) -> void:
 		chain.influence = weight
 		chain.target = to_skeleton * target
 		chain.pole = elbow + (elbow - (shoulder + hand.origin) * 0.5).normalized() * 0.5
-		_orientation.orientations[hand_bone] = hand.basis
+		# Hands still on the edge keep the grip's orientation (palm on the top, fingers over it) as the pull-up begins.
+		_orientation.orientations[hand_bone] = hand.basis.slerp(_grip_basis(d, skeleton), weight) if _plants.size() > 0 else hand.basis
+
+
+## The hang, drawn: both hands on the lip (each found by rays at that hand: the top just past the face and the face),
+## the body hanging from them at arm's length, swinging as a damped pendulum (out from the wall and back, bouncing off
+## it; rolling sideways as the shimmy speeds up and slows down; set going by the catch), and the legs following through
+## a soft hip, kept off the wall and the ground. Procedural secondary motion on the authored grip frame, not a physics
+## ragdoll: presentation only. While shimmying the hands move one at a time, the leading hand first.
+func _hang(climb: Dictionary, dt: float) -> void:
+	var skeleton: Skeleton3D = visual.skeleton
+	if climb.is_empty():
+		hanging_shown = false
+		_hang_legs = false
+		if _hang_weight > 0.0:
+			_hang_weight = maxf(0.0, _hang_weight - dt / HANG_BLEND)
+			var w := smoothstep(0.0, 1.0, _hang_weight)
+			var now: Transform3D = visual.global_transform
+			visual.global_transform = Transform3D(now.basis.slerp(_hang_basis, w), now.origin + _hang_shift * w)
+		else:
+			_plants.clear()
+			_step.clear()
+		return
+	var d: Vector3 = climb.direction
+	var r: Vector3 = climb.right
+	if not hanging_shown:
+		_start_hang(climb)
+	hanging_shown = true
+	_hang_weight = minf(1.0, _hang_weight + dt / HANG_BLEND)
+	var w := smoothstep(0.0, 1.0, _hang_weight)
+	var space: PhysicsDirectSpaceState3D = visual.get_world_3d().direct_space_state
+	_move_hands(climb, space, dt)
+	var grip_mid := (_hand_target("Left", d) + _hand_target("Right", d)) * 0.5
+	# Pendulum about the hands: x = out from the wall (it cannot swing into it), y = toward the right.
+	var accel := (float(climb.shimmy) - _prev_shimmy) / maxf(dt, 1e-4)
+	_prev_shimmy = climb.shimmy
+	_swing_v.x += (-SWING_OMEGA2 * hang_swing.x - SWING_DAMP * _swing_v.x) * dt
+	_swing_v.y += (-SWING_OMEGA2 * hang_swing.y - SWING_DAMP * _swing_v.y - accel / SWING_LENGTH) * dt
+	hang_swing += _swing_v * dt
+	if hang_swing.x < 0.0:
+		hang_swing.x = 0.0
+		_swing_v.x = -_swing_v.x * 0.3        # the body meets the wall and bounces off it a little
+	_legs_v += (LEG_STIFF * (hang_swing - _legs) - LEG_DAMP * _legs_v) * dt
+	_legs += _legs_v * dt
+	# Place the drawn body: shoulders below the hands at arm's length, out from the wall, swung about the hands (out from
+	# the wall the whole body pitches; sideways both arms swing together and the torso tilts only a little).
+	var pitch := Basis(r, -hang_swing.x)
+	var swing := Basis(d, -hang_swing.y) * pitch
+	var basis := Basis(d, -hang_swing.y * ROLL_TILT) * pitch * Basis(Vector3.UP, atan2(-d.x, -d.z) + PI)
+	var bones: Dictionary = visual.bone_index
+	var local: Transform3D = visual.global_transform.affine_inverse() * skeleton.global_transform
+	var shoulders: Vector3 = (skeleton.get_bone_global_pose(bones.LeftUpperArm).origin + skeleton.get_bone_global_pose(bones.RightUpperArm).origin) * 0.5
+	var arm := HANG_ARM * _arm_length()
+	var down := sqrt(maxf(arm * arm - HANG_SHOULDER_OFF * HANG_SHOULDER_OFF, 0.01))
+	var desired := grip_mid + swing * (Vector3.DOWN * down - d * HANG_SHOULDER_OFF)
+	var target_origin: Vector3 = desired - basis * (local * shoulders)
+	# The authored grip frame leans the upper body into the wall: pitch the drawn body out about the hands until the
+	# head and the chest clear the face (a fixed rest angle for this pose, applied under the swing).
+	var placed := Transform3D(basis, target_origin)
+	var lean_into := -INF
+	for part in [["Head", 0.07, 0.14], ["UpperChest", 0.06, 0.13]]:
+		var centre: Vector3 = placed * local * (skeleton.get_bone_global_pose(bones[part[0]]).origin + Vector3.UP * float(part[1]))
+		lean_into = maxf(lean_into, (centre - (climb.edge as Vector3)).dot(d) + float(part[2]))
+	if lean_into > 0.0:
+		var lean := Basis(r, -lean_into / maxf(0.3, grip_mid.distance_to(placed * local * skeleton.get_bone_global_pose(bones.Head).origin)))
+		placed = Transform3D(lean * placed.basis, grip_mid + lean * (placed.origin - grip_mid))
+	head_clearance = -lean_into
+	var now: Transform3D = visual.global_transform
+	visual.global_transform = Transform3D(now.basis.slerp(placed.basis, w), now.origin.lerp(placed.origin, w))
+	_hang_shift = visual.global_transform.origin - now.origin
+	_hang_basis = visual.global_transform.basis
+	# Hands spread apart (one trailing during a shimmy, the sideways swing) pull the body up: it rises just enough that
+	# each planted wrist stays within its nearly straight arm.
+	var lift := 0.0
+	var reach_limit := _arm_length() * 0.985
+	for side in ["Left", "Right"]:
+		if _step.has(side):
+			continue
+		var gap: Vector3 = _hand_target(side, d) - skeleton.global_transform * skeleton.get_bone_global_pose(bones[side + "UpperArm"]).origin
+		var across := Vector2(gap.x, gap.z).length()
+		if gap.length() > reach_limit and across < reach_limit:
+			lift = maxf(lift, gap.y - sqrt(reach_limit * reach_limit - across * across))
+	if lift > 0.0:
+		visual.global_position += Vector3.UP * lift * w
+		_hang_shift += Vector3.UP * lift * w
+	hang_lift = lift
+	var to_skeleton := skeleton.global_transform.affine_inverse()
+	# Arms: wrists on their grip points, elbows out to the sides and back from the wall; hands palm-down on the top.
+	_gripping = true
+	var grip := _grip_basis(d, skeleton)
+	var full_arm := _arm_length()
+	for side in ["Left", "Right"]:
+		var chain = _arm_left if side == "Left" else _arm_right
+		var wrist := _hand_target(side, d)
+		var shoulder := skeleton.get_bone_global_pose(bones[side + "UpperArm"]).origin
+		# A moving hand lifts off and reaches ahead only as far as its (nearly straight) arm allows.
+		var shoulder_world: Vector3 = skeleton.global_transform * shoulder
+		if _step.has(side) and wrist.distance_to(shoulder_world) > full_arm * 0.985:
+			wrist = shoulder_world + (wrist - shoulder_world).normalized() * full_arm * 0.985
+		var out := r if side == "Right" else -r
+		chain.active = true
+		chain.influence = w
+		chain.target = to_skeleton * wrist
+		chain.pole = shoulder + to_skeleton.basis * (out * 0.4 - d * 0.3 + Vector3.DOWN * 0.1)
+		_grip_targets[side] = wrist
+		var hand: int = bones[side + "Hand"]
+		_orientation.orientations[hand] = skeleton.get_bone_global_pose(hand).basis.slerp(grip, w)
+	# Legs: dangling from the hips along the lagging swing, off the wall and the ground (a low hang bends the knees).
+	_hang_legs = true
+	var ground := -INF
+	var below := _probe(space, grip_mid, grip_mid + Vector3.DOWN * 6.0)
+	if not below.is_empty():
+		ground = (below.position as Vector3).y
+	var hang_dir := Basis(d, -_legs.y) * Basis(r, -_legs.x) * Vector3.DOWN
+	for index in 2:
+		var side := "Left" if index == 0 else "Right"
+		var hip: Vector3 = skeleton.global_transform * skeleton.get_bone_global_pose(bones[side + "UpperLeg"]).origin
+		var knee: Vector3 = skeleton.global_transform * skeleton.get_bone_global_pose(bones[side + "LowerLeg"]).origin
+		var foot := hip + hang_dir * _leg_length(side) * 0.95
+		var into: float = (foot - climb.edge).dot(d)
+		if into > -FOOT_WALL_CLEAR:
+			foot -= d * (into + FOOT_WALL_CLEAR)
+		foot.y = maxf(foot.y, ground + FOOT_GROUND_CLEAR)
+		_feet[index].target = to_skeleton * foot
+		_feet[index].pole = to_skeleton * (knee + d * 0.4 + Vector3.UP * 0.1)
+		_feet[index].influence = w
+		_feet[index].active = true
+		var foot_bone: int = bones[side + "Foot"]
+		_orientation.orientations[foot_bone] = skeleton.get_bone_global_pose(foot_bone).basis
+
+
+## A new hang: the hands start on the authored grip places, and the catch sets the body swinging (moving into the wall
+## it swings out off it; falling, it swings out a little; moving along the wall, it rolls the other way).
+func _start_hang(climb: Dictionary) -> void:
+	_plants.clear()
+	_step.clear()
+	_hang_weight = 0.0
+	hang_swing = Vector2.ZERO
+	_legs = Vector2.ZERO
+	_legs_v = Vector2.ZERO
+	_prev_shimmy = 0.0
+	var v: Vector3 = climb.get("catch_velocity", Vector3.ZERO)
+	var into := maxf(0.0, v.dot(climb.direction))
+	var falling := maxf(0.0, -v.y)
+	_swing_v = Vector2(clampf(0.25 + 0.25 * into + 0.12 * falling, 0.0, 1.6), clampf(-v.dot(climb.right) / SWING_LENGTH, -1.2, 1.2))
+
+
+## Each hand's place on the ledge follows the hang point; one hand moves at a time (the one furthest behind, which is
+## the leading hand when the shimmy sets off), lifting off and reaching a little past its place.
+func _move_hands(climb: Dictionary, space: PhysicsDirectSpaceState3D, dt: float) -> void:
+	var d: Vector3 = climb.direction
+	var r: Vector3 = climb.right
+	var lip: float = climb.lip_y
+	var slots := {}
+	for side in ["Left", "Right"]:
+		slots[side] = _hand_slot(climb, side)
+		if not _plants.has(side):
+			_plants[side] = _snap_hand(space, slots[side], d, lip)
+	if _step.size() > 1:
+		two_hands_moving += 1
+	for side in _step.keys():
+		var step: Dictionary = _step[side]
+		step.t = float(step.t) + dt / STEP_TIME
+		if step.t >= 1.0:
+			_plants[side] = step.to
+			_step.erase(side)
+			hand_steps += 1
+	if not _step.is_empty():
+		return
+	var shimmying := absf(float(climb.shimmy)) > 0.05
+	var best := ""
+	var worst := 0.0
+	for side in ["Left", "Right"]:
+		var drift: float = (slots[side] - _plants[side]).dot(r)
+		if absf(drift) > (STEP_TRIGGER if shimmying else STEP_SETTLE) and absf(drift) > worst:
+			best = side
+			worst = absf(drift)
+	if best != "":
+		var ahead: float = signf((slots[best] - _plants[best]).dot(r)) * (STEP_OVERSHOOT if shimmying else 0.0)
+		_step[best] = {"from": _plants[best], "to": _snap_hand(space, slots[best] + r * ahead, d, lip), "t": 0.0}
+
+
+## Where a hand belongs on the ledge now: the authored grip's sideways place either side of the hang point.
+func _hand_slot(climb: Dictionary, side: String) -> Vector3:
+	var scale: float = visual.skeleton.global_transform.basis.get_scale().x
+	return (climb.edge as Vector3) - (climb.right as Vector3) * _grip_hand_x(side) * scale
+
+
+## The wrist's grip point for a hand at `at` (on the face, at the lip): the real top just past the face and the real
+## face there, then the wrist just out from the face and just above the top.
+func _snap_hand(space: PhysicsDirectSpaceState3D, at: Vector3, d: Vector3, lip: float) -> Vector3:
+	var top_y := lip
+	var column := at + d * 0.06
+	var top := _probe(space, Vector3(column.x, lip + 0.25, column.z), Vector3(column.x, lip - 0.25, column.z))
+	if not top.is_empty():
+		top_y = (top.position as Vector3).y
+	var face := at
+	var from := Vector3(at.x, top_y - 0.06, at.z) - d * 0.3
+	var hit := _probe(space, from, from + d * 0.5)
+	if not hit.is_empty():
+		face = hit.position
+	return Vector3(face.x, top_y, face.z) - d * WRIST_OUT + Vector3.UP * WRIST_UP
+
+
+func _hand_target(side: String, d: Vector3) -> Vector3:
+	if _step.has(side):
+		var step: Dictionary = _step[side]
+		var u := clampf(float(step.t), 0.0, 1.0)
+		var arc := sin(PI * u)
+		return (step.from as Vector3).lerp(step.to, smoothstep(0.0, 1.0, u)) + Vector3.UP * STEP_LIFT * arc - d * 0.04 * arc
+	return _plants.get(side, Vector3.ZERO)
+
+
+## Gripping hand orientation in skeleton space: fingers (bone +Y) over the top into the wall, palm (bone +Z) down on it.
+func _grip_basis(d: Vector3, skeleton: Skeleton3D) -> Basis:
+	var fingers := Vector3(d.x, 0.0, d.z).normalized()
+	var palm := Vector3.DOWN
+	var world := Basis(fingers.cross(palm), fingers, palm)
+	return (skeleton.global_transform.basis.inverse() * world).orthonormalized()
+
+
+func _probe(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> Dictionary:
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.exclude = ray_exclude
+	return space.intersect_ray(query)
+
+
+func _arm_length() -> float:
+	var sk: Skeleton3D = visual.skeleton
+	var b: Dictionary = visual.bone_index
+	var a := sk.get_bone_global_rest(b.LeftUpperArm).origin
+	var e := sk.get_bone_global_rest(b.LeftLowerArm).origin
+	var h := sk.get_bone_global_rest(b.LeftHand).origin
+	return (a.distance_to(e) + e.distance_to(h)) * sk.global_transform.basis.get_scale().x
+
+
+func _leg_length(side: String) -> float:
+	var sk: Skeleton3D = visual.skeleton
+	var b: Dictionary = visual.bone_index
+	var hip := sk.get_bone_global_rest(b[side + "UpperLeg"]).origin
+	var knee := sk.get_bone_global_rest(b[side + "LowerLeg"]).origin
+	var ankle := sk.get_bone_global_rest(b[side + "Foot"]).origin
+	return (hip.distance_to(knee) + knee.distance_to(ankle)) * sk.global_transform.basis.get_scale().x
 
 
 ## Sideways (clip x) position of a hand in the authored pull-up's grip frame, sampled from the clip once.
@@ -603,7 +887,7 @@ func _support(vault: Dictionary) -> void:
 
 func _correct_feet(grounded: bool, dt: float) -> void:
 	max_correction = 0.0
-	for index in 2:
+	for index in (0 if _hang_legs else 2):   # hanging: the legs are the hang's (_hang)
 		var side := "Left" if index == 0 else "Right"
 		var skeleton: Skeleton3D = visual.skeleton
 		var foot := skeleton.get_bone_global_pose(visual.bone_index[side + "Foot"])

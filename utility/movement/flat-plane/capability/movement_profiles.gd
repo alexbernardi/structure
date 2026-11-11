@@ -24,7 +24,7 @@ static func cybernetic_legs():
 		["vault_lift", "add", 0.55],
 		["vault_max_depth", "add", 0.3],
 		["mantle_max_height", "add", 0.75],
-		["grip_reach", "add", 0.6],
+		["grip_reach", "add", 0.25],
 		["catch_distance", "add", 0.25],
 		["grip_strength", "add", 5.0],
 		["mantle_strength", "mul", 1.4],

@@ -2,8 +2,35 @@
 
 Branch: `benchmark/opus-traversal`. Tasks: [0007](../TASKS/0007-unified-traversal.md) (5.0),
 [0008](../TASKS/0008-traversal-refinement.md) (5.1), [0009](../TASKS/0009-hang-angles-slide.md) (5.2),
-[0010](../TASKS/0010-crouch-flip.md) (5.3). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
+[0010](../TASKS/0010-crouch-flip.md) (5.3), [0011](../TASKS/0011-hang-reach-shimmy.md) (5.4). Builds on the [4.0 vault](MOVEMENT-LAB-4.md) and the approved
 [3.0 authored locomotion](MOVEMENT-LAB-3.md); both are preserved.
+
+## 5.4: reach from the body, hands on the lip, dangling hang, shimmy
+
+Task [0011](../TASKS/0011-hang-reach-shimmy.md).
+
+- **Reach comes from the body and the jump.** The hands catch a top up to the body's overhead reach above wherever the
+  jump has put the feet: stand height x 1.306 (the 1.8 m mannequin's wrist reaches 2.19 m with the arm straight up,
+  + 0.08 m of fingers over the lip + 0.08 m of shoulder stretch = 2.35 m; a test checks it against the skeleton) +
+  `grip_reach`, now the extra reach of an upgrade (0 for a human, +0.25 cybernetic, +0.3 spell). A standing jump's
+  0.77 m apex puts a 3.0 m lip in reach; the sprained ankle's weaker jump does not; a shorter body reaches less. The
+  "upgrades only" ledges on lanes E and J are now 3.6 m.
+- **Hands on the lip.** Each hand's place is found by rays at that hand (the real top just past the face, and the
+  face): wrist 4.5 cm out from the face and 2.4 cm above the top, fingers over the top pointing into the wall, palm
+  down; the arms reach up to them (elbows out and back). The mannequin's hand mesh was fixed: it was centred on the
+  wrist with its long axis across the arm; it now runs from the wrist toward the fingers.
+- **Dangling hang (procedural, presentation only).** No hang clip exists in either library, so the pull-up's grip
+  frame is placed and corrected: the body hangs from the hands at arm's length, pitched out about the hands until the
+  head and chest clear the face; a damped pendulum swing (set going by the catch, bouncing off the wall, about 0.37 Hz)
+  pitches it out from the wall, and starting or stopping a shimmy swings it sideways as a parallelogram (both arms
+  together, the torso tilting a third as much); the legs follow through a soft hip, kept off the wall and the
+  ground. Spread hands pull the drawn body up so each planted wrist stays within its arm. The collider hangs at arm's
+  length where there is room (2.23 m below the top for the human), else as low as the ground allows.
+- **Shimmy.** While hanging, stick left / right moves along the ledge at `shimmy_speed` (0.9 m/s), only while the top
+  and the face continue under the leading hand and 8 cm beyond at the same height, and the body has room; at a wall's
+  end or a gap it stops (the overlay's hang line stays). Hands move one at a time, the trailing one first set off as
+  the leading hand, lifting off and reaching a little ahead. One press pulls up from wherever the hang has moved to.
+- Lane `lane_n`: a 3.0 m wall 8 m long, a 0.6 m gap and a 4 m wall, a 2.6 m wall.
 
 ## 5.3: crouch flip
 
@@ -35,7 +62,7 @@ Task [0009](../TASKS/0009-hang-angles-slide.md). How to use each move:
 
 | Move | Input | Notes |
 |---|---|---|
-| Catch and hang | jump into a high edge (top at least 1.5 m above the feet, hanging feet clear of the ground); no press | both hands grip the lip (authored `ClimbUp_2m` grip frame, two-hand IK); Ctrl or stick back lets go |
+| Catch and hang | jump into a high edge (top at least 1.5 m above the feet, hanging feet clear of the ground); no press | both hands grip the lip (authored `ClimbUp_2m` grip frame, two-hand IK); Ctrl or stick back lets go; 5.4: stick left / right shimmies |
 | Pull up | Space once while hanging | `ClimbUp_2m` pull-up and step over onto the top, or over a thin top and down the far side; refused climbs keep the hang and say why |
 | Early catch | Space in the air as the body reaches the edge | climbs at once (no hang), the press is never lost |
 | Fence / sharp angle | Space near it, or in the air near it | vault up to 35 degrees; beyond, climb over square to the face keeping the speed along it |

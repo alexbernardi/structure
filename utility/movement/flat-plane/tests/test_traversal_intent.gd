@@ -253,7 +253,8 @@ func test_deep_blocks_are_mantled_and_tall_ledges_need_a_jump_and_grab(t) -> voi
 
 func test_upgrades_change_what_is_feasible(t) -> void:
 	var scene = await _scene()
-	# The 3.0 m ledge: beyond a human's grab, within the cybernetic jump + grab.
+	# The 3.6 m ledge (5.4: a human's jump and arms reach about 3.1 m): beyond a human's grab, within the cybernetic
+	# jump + reach and the spell's lighter jump.
 	for profile in ["human", "cyber", "magic"]:
 		scene.capabilities.clear()
 		if profile != "human":
@@ -269,11 +270,11 @@ func test_upgrades_change_what_is_feasible(t) -> void:
 				return _input(true, false, true)   # second press near the apex: air jump if the character can
 			return _input(false, false, plan.jumped))
 		if profile == "human":
-			t.eq(stats.mantles, 0, "human: the 3.0 m ledge is out of reach")
+			t.eq(stats.mantles, 0, "human: the 3.6 m ledge is out of reach")
 			t.ok(scene.body.global_position.y < 0.1, "human: still on the ground")
 		else:
-			t.eq(stats.mantles, 1, "%s: the 3.0 m ledge is reached (%s)" % [profile, stats.choices])
-			t.ok(stats.max_y > 2.99, "%s: standing on it (%.2f m)" % [profile, stats.max_y])
+			t.eq(stats.mantles, 1, "%s: the 3.6 m ledge is reached (%s)" % [profile, stats.choices])
+			t.ok(stats.max_y > 3.59, "%s: standing on it (%.2f m)" % [profile, stats.max_y])
 			t.eq(stats.overlap_ticks, 0, "%s: no penetration" % profile)
 	# The 1.6 m wall: vaulted only with cybernetic legs, which costs energy and heat.
 	scene.capabilities.clear()

@@ -239,7 +239,7 @@ func _traversal_course() -> void:
 	_course_wall(Vector3(x0 + 1.25, 0.0, -31.0), 1.0, 2.5, 0.0, block, "LaneEBlock", "1.0 m x 2.5 m deep")
 	_course_wall(Vector3(x0 + 10.0, 0.0, -31.0), 1.4, 3.0, 0.0, block, "LaneEPlatform", "1.4 m platform")
 	_course_wall(Vector3(x0 + 20.0, 0.0, -31.0), 1.9, 3.0, 0.0, block, "LaneELedge19", "1.9 m: jump + grab")
-	_course_wall(Vector3(x0 + 30.0, 0.0, -31.0), 3.0, 3.0, 0.0, gate, "LaneELedge30", "3.0 m: upgrades only")
+	_course_wall(Vector3(x0 + 30.0, 0.0, -31.0), 3.6, 3.0, 0.0, gate, "LaneELedge36", "3.6 m: upgrades only")
 	_course_wall(Vector3(x0 + 40.0, 0.0, -31.0), 1.6, 0.35, 0.0, gate, "LaneEWall160", "1.6 m: cybernetic vault")
 	# F: invalid and awkward
 	_course_wall(Vector3(x0, 0.0, -37.0), 1.0, 0.35, 0.0, wall, "LaneFBarred", "test bar: catch + climb")
@@ -298,13 +298,16 @@ func _irregular_lane(x0: float) -> void:
 ##                       otherwise climb over square to the fence keeping the sideways momentum, from the ground or a catch
 ##   J (z -61) high    - 2.2 and 2.6 m walls (2 m deep): jump, catch on contact and hang, one press pulls up and over;
 ##                       a 2.4 m wall 0.3 m thick (pull up and over the far side); a 2.6 m wall with a slab just above its
-##                       top (no room: the hang holds, the press is refused); a 3.0 m wall (cybernetic reach)
+##                       top (no room: the hang holds, the press is refused); a 3.0 m wall (a human's jump and reach,
+##                       5.4) and a 3.6 m wall (cybernetic reach)
 ##   K (z -67) slide   - 30 m of flat run-out with two bars leaving 1.0 m of clearance (slide under, too low to crouch
 ##                       under), then a 12 degree ramp up, a plateau and a 12 degree ramp down
 ##   L (z -73) combo   - vault a 1.0 m wall, mantle a 1.2 m block, drop off, catch and pull up a 2.4 m wall, run off it,
 ##                       slide under a 1.0 m bar
 ##   M (z -79) flip    - (5.3) open ground for standing and slide flips, a 1.0 m deck to flip off (a longer fall),
 ##                       a 0.5 m box to flip onto (a shorter one), a bar with 1.0 m clearance (no room: refused)
+##   N (z -85) hang    - (5.4) a 3.0 m wall 8 m long to catch and shimmy along (it ends: the shimmy stops), then a
+##                       0.6 m gap and a 3.0 m wall 4 m long, and a 2.6 m wall 6 m long (hangs closer to the ground)
 func _lanes_52(x0: float) -> void:
 	var fence := _tint(Color(0.55, 0.45, 0.30))
 	var block := _tint(Color(0.36, 0.55, 0.80))
@@ -325,7 +328,8 @@ func _lanes_52(x0: float) -> void:
 	_course_wall(Vector3(x0 + 20.0, 0.0, zj), 2.4, 0.3, 0.0, wall, "LaneJThin24", "2.4 m thin: over")
 	_course_wall(Vector3(x0 + 29.0, 0.0, zj), 2.6, 2.0, 0.0, block, "LaneJCovered", "2.6 m, no room")
 	_box(Vector3(x0 + 29.0, 3.15, zj), Vector3(2.0, 0.3, 3.0), Vector3.ZERO, bar, "LaneJSlab")
-	_course_wall(Vector3(x0 + 39.0, 0.0, zj), 3.0, 2.0, 0.0, gate, "LaneJWall30", "3.0 m: cybernetic")
+	_course_wall(Vector3(x0 + 39.0, 0.0, zj), 3.0, 2.0, 0.0, block, "LaneJWall30", "3.0 m: human reach")
+	_course_wall(Vector3(x0 + 48.0, 0.0, zj), 3.6, 2.0, 0.0, gate, "LaneJWall36", "3.6 m: cybernetic")
 	landmarks["lane_j"] = Vector3(x0 - 7.0, 0.0, zj)
 	landmarks["lane_j_26"] = Vector3(x0 + 5.5, 2.2, zj)
 	landmarks["lane_j_thin"] = Vector3(x0 + 15.0, 0.0, zj)
@@ -369,6 +373,12 @@ func _lanes_52(x0: float) -> void:
 	_label(Vector3(x0 + 34.0, 1.8, zm), "no room to flip")
 	landmarks["lane_m"] = Vector3(x0 - 7.0, 0.0, zm)
 	landmarks["lane_m_deck"] = Vector3(x0 + 14.0, 1.0, zm)
+	# N: hang and shimmy (walls 2 m deep along +X, long along Z)
+	var zn := -85.0
+	_course_wall(Vector3(x0 + 4.0, 0.0, zn), 3.0, 2.0, 0.0, block, "LaneNLong", "3.0 m: catch, stick left / right", 8.0)
+	_course_wall(Vector3(x0 + 4.0, 0.0, zn - 6.6), 3.0, 2.0, 0.0, block, "LaneNShort", "gap 0.6 m", 4.0)
+	_course_wall(Vector3(x0 + 16.0, 0.0, zn), 2.6, 2.0, 0.0, wall, "LaneNLow", "2.6 m", 6.0)
+	landmarks["lane_n"] = Vector3(x0 - 4.0, 0.0, zn)
 
 
 func _label(position: Vector3, caption: String) -> void:
