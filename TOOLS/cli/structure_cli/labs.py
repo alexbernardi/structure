@@ -151,6 +151,7 @@ def sync(update_systems: bool = False, base: str = "main") -> int:
         raise LabError(f"not on a laboratory branch (on {current_branch()}); run this in the lab's worktree")
     if dirty(paths.REPO):
         raise LabError("uncommitted changes in the lab: commit them (or `git stash push -u -m <tag>`) before syncing")
+    _require_identity()
     before = _git("rev-parse", "HEAD").stdout.strip()
     proc = _git("merge", "--no-ff", "--no-edit", base)
     if proc.returncode != 0:
@@ -213,6 +214,7 @@ def promote(name: str | None, source_branch: str | None, merge: bool, gates: lis
         raise LabError(f"no branch {source}")
     if source in trees and dirty(trees[source]):
         raise LabError(f"{trees[source]} ({source}) has uncommitted changes; commit them first")
+    _require_identity()
     base_sha = _git("rev-parse", base, check=True).stdout.strip()
     source_sha = _git("rev-parse", source, check=True).stdout.strip()
     ahead = _git("rev-list", "--count", f"{base}..{source}").stdout.strip()
@@ -230,7 +232,12 @@ def promote(name: str | None, source_branch: str | None, merge: bool, gates: lis
               "worktree": str(where), "ahead": int(ahead), "behind": int(behind), "gates": gates, "at": buildinfo.utc_now()}
     if proc.returncode != 0:
         conflicts = _git("diff", "--name-only", "--diff-filter=U", cwd=where).stdout.split()
-        record.update({"ok": False, "conflicts": conflicts})
+        record.update({"ok": False, "conflicts": conflicts, "git": (proc.stdout + proc.stderr).strip()})
+        if not conflicts:
+            print("  MERGE FAILED (no conflicts; main and the lab are untouched):")
+            for line in record["git"].splitlines():
+                print("    " + line)
+            return _save(record, label, stamp)
         print("  MERGE CONFLICT in the integration worktree (main and the lab are untouched):")
         for f in conflicts:
             print("    ", f)
@@ -263,6 +270,14 @@ def promote(name: str | None, source_branch: str | None, merge: bool, gates: lis
         print(f"  validated merge ready: `structure.py lab promote ... --merge`, or `git -C <{base} worktree> merge "
               f"--ff-only {merge_sha[:10]}`")
     return _save(record, label, stamp)
+
+
+def _require_identity() -> None:
+    """A promotion creates a merge commit: git needs an author identity (config or GIT_AUTHOR_* / GIT_COMMITTER_*)."""
+    if _git("var", "GIT_COMMITTER_IDENT").returncode != 0 or _git("var", "GIT_AUTHOR_IDENT").returncode != 0:
+        raise LabError("git has no author identity for the merge commit: set user.name and user.email "
+                       "(`git config user.name ...`) or the GIT_AUTHOR_NAME / GIT_AUTHOR_EMAIL / GIT_COMMITTER_NAME / "
+                       "GIT_COMMITTER_EMAIL environment variables")
 
 
 def _save(record: dict, label: str, stamp: str) -> dict:

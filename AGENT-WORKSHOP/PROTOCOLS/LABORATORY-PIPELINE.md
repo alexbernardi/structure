@@ -67,7 +67,8 @@ python TOOLS/cli/structure.py lab promote combat --merge    # and fast-forward m
 python TOOLS/cli/structure.py lab promote --branch <branch> --merge   # a branch not named lab/<name>
 ```
 
-1. Refuses if the laboratory has uncommitted changes.
+1. Refuses if the laboratory has uncommitted changes, or if git has no author identity for the merge commit
+   (`git config user.name` / `user.email`, or the `GIT_AUTHOR_*` / `GIT_COMMITTER_*` environment variables).
 2. Creates `integrate/<name>-<stamp>` from the current `main` in `.runtime/worktrees/` and merges the laboratory
    there (`--no-ff`). Conflicts stop it there; `main` and the laboratory are untouched - sync the laboratory and retry.
 3. Runs the gates inside the integration worktree: `setup`, then `test check tools import unit rooms utility labs`
