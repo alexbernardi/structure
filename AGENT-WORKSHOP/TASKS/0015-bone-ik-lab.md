@@ -43,8 +43,49 @@ documented; Traverse behaviour unchanged.
 
 ## Validation
 
-To be filled with commands and results (step 6).
+All in the laboratory worktree, Godot 4.7.2-stable, 2026-11-11.
+
+| Command | Result |
+|---|---|
+| `python TOOLS/cli/structure.py lab validate` | **PASS**: `check` 0 errors / 0 warnings; `labs` 46 passed, 0 failed (44 bone_ik + 2 scaffold) and the freshly scaffolded `template_check` 2 / 2 |
+| lab tests alone (`--dir=res://tests/bone_ik`) | 44 passed, 0 failed (proportions 8, rig integrity 8, joint limits 11, animation 4, runtime 7, body plan 2, scene 4) |
+| `--mode=bench --dir=res://benchmarks` | joint limits (21 joints) 0.15 ms, axial alignment 0.13 ms, animation sample + full chain 0.27 ms per frame, rig from proportions 0.13 ms (GDScript, this machine) |
+| `tools/retarget_report.gd` (51 clips) | orientation error 0.0000 deg and bone-length error 0 on every clip; 17 / 51 within all hard limits after alignment (8 before); table in `BONE-IK-ANIMATION.md` |
+| still captures (`--capture`) | front T-pose, front neutral with limits, side neutral, perspective Jog_Fwd, perspective clamped manual pose, front Vitruvian preset, side ClimbUp_2m: rendered and inspected by the agent |
+| isolation | `git diff main` outside `LABS/bone_ik` touches only workshop documents; `main` still `8d60133`, clean; no file of `utility/`, `SANDBOX/`, `SYSTEM-ROOMS/` or another laboratory changed |
+
+Verified versus assumed:
+
+- Verified by tests: everything in the acceptance list except "believable" (a human judgement) - proportions and
+  stature exact, hierarchy = profile, symmetry, configurability, bending directions on both sides, constrained poses
+  never beyond the hard limits, retargeting of all 51 clips, the scene and its controls (headless), the API stubs.
+- Verified by measurement once: the physics backend (`DEFAULT` = GodotPhysics3D in 4.7.2).
+- Not verified: the look of the skeleton in motion and of the proportions to a person; real mouse interaction; the
+  reference video's content (inaccessible, KI-029); de Leva's segment lengths against the full paper (only the
+  upper-arm mass fraction was cross-checked).
 
 ## Outcome
 
-To be filled (step 7).
+**Changes** (branch `lab/bone_ik`, commits after `a3b2d33` "lab bone_ik: create"):
+
+- `LABS/bone_ik/systems/bone_ik/`: proportions, rig builder, humanoid bone set, swing-twist joint math, joint profile
+  with lossless axial alignment, body plan; data `joint_limits.json` (21 joints, sources) and `body_plan.json`;
+  humanoid clip adapter; modifiers (pose source, probes, axial alignment, limits with a policy, twist helpers); the
+  rig entry point `vitruvian_rig.gd` 0.1.0 and its draft CONTRACT.
+- `LABS/bone_ik/scenes/vitruvian_lab.*`, `viz/`: the visual workbench (main scene); `tests/bone_ik/` (44 tests and
+  two helpers); `benchmarks/bench_rig.gd`; `tools/retarget_report.gd`. The scaffold's `lab.tscn` and its test are kept.
+- Workshop: research note, three documentation pages, ADR-0011 (proposed), KI-027..029, START-HERE row, indexes.
+
+**Decisions**: rest orientations = SkeletonProfileHumanoid's (exact retargeting of every profile-normalised clip);
+anatomy as data with soft ~ clinical active range and hard ~ passive range + margin; one ordered modifier chain with
+stage probes; lossless axial alignment of hinges, forearm roll and straight-limb roll splits; limit policy
+PROCEDURAL by default (authored clips measured, not clamped - the brief forbids degrading working animation);
+twist helpers as leaf bones; 16 physical bodies for 29 animation bones. Jolt for phase 3 is proposed, not applied.
+
+**Open problems**: KI-027 (no human review yet; authored clips exceed per-segment limits by convention; foot contact
+residue up to 2.6 cm in locomotion), KI-028 (physics backend decision), KI-029 (video). Elliptical swing cones for
+shoulder and hip; no fingers; no skinned body.
+
+**Next steps** (need the user): review the lab (`& $godot --path LABS\bone_ik` in the worktree); accept or amend
+ADR-0011 (especially Jolt for phase 3); approve phase 2 as proposed in `BONE-IK-LAB.md` section 5. Nothing was pushed
+or merged into `main`; promotion is `lab promote bone_ik` when the user asks.

@@ -106,7 +106,7 @@ func _create_nodes() -> void:
 func build(p = null) -> void:
 	if p != null:
 		proportions = p
-	var time := player.current_animation_position if player.is_playing() else 0.0
+	var time := player.current_animation_position if player.assigned_animation != "" else 0.0   # playing or paused
 	definition = RigBuilder.build(proportions)
 	RigBuilder.apply_to(skeleton, definition)
 	profile = JointProfile.new(definition)
@@ -255,7 +255,7 @@ func pose_state() -> Dictionary:
 			"soft_load": s.get("soft", 0.0),
 		}
 	return {"version": VERSION, "mode": MODE_NAMES[mode], "clip": clip,
-		"time": player.current_animation_position if player.is_playing() else 0.0,
+		"time": player.current_animation_position if player.assigned_animation != "" else 0.0,
 		"response_state": response_state, "limits_enforced": limit_modifier.enforce,
 		"limit_policy": ["procedural", "always", "measure"][limit_policy],
 		"hinge_align": hinge_modifier.active, "hinge_transfer_deg": _transfer_deg(),

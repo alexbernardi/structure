@@ -112,6 +112,11 @@ func test_rebuild_with_new_proportions_keeps_playing(t) -> void:
 	t.eq(rig.mode, Rig.Mode.ANIMATION, "still animating")
 	t.ok(rig.player.is_playing() and rig.player.current_animation == "Walk", "same clip")
 	t.near(rig.definition.measurements.stature, 1.62, 1e-6, "new stature")
+	rig.player.pause()
+	rig.player.seek(0.7, true)
+	rig.build(Proportions.new())
+	t.near(rig.player.current_animation_position, 0.7, 1e-3, "a paused clip keeps its time across a rebuild")
+	t.near(rig.pose_state().time, 0.7, 1e-3, "pose state reports the paused time")
 	t.eq(rig.skeleton.get_bone_count(), 29, "same skeleton layout")
 
 

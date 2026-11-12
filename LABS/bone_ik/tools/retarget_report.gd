@@ -16,7 +16,7 @@ func _initialize() -> void:
 	var rig = Rig.new()
 	root.add_child(rig)
 	rig.build()
-	var lines := ["| Clip | Source | Frames | Orientation error (deg) | Length error (m) | Planted-toe error (m) | Lowest sole ours / source (m) | Hinge transfer max (deg) | Raw violations (deg beyond hard) | After hinge alignment |",
+	var lines := ["| Clip | Source | Frames | Orientation error (deg) | Length error (m) | Planted-toe error (m) | Lowest sole ours / source (m) | Axial transfer max (deg) | Raw violations (deg beyond hard) | After axial alignment |",
 		"|---|---|---:|---:|---:|---:|---:|---:|---|---|"]
 	var clean := 0
 	var total := 0
@@ -37,7 +37,7 @@ func _initialize() -> void:
 				m.rotation_error_deg, m.length_error_m, m.stance_toe_error_m, m.min_sole_m, m.src_min_sole_m,
 				m.max_hinge_transfer_deg, _fmt(m.raw_violations), _fmt(m.violations)])
 		src.free()
-	var text := "Clips within the hard limits after hinge alignment: %d / %d\n\n" % [clean, total] + "\n".join(lines) + "\n"
+	var text := "Clips within the hard limits after axial alignment: %d / %d\n\n" % [clean, total] + "\n".join(lines) + "\n"
 	print(text)
 	if out != "":
 		var f := FileAccess.open(out, FileAccess.WRITE)

@@ -15,3 +15,4 @@ needs the user's approval (see `../PROTOCOLS/WORKSHOP-PROTOCOL.md`). Superseded 
 | [0008](ADR-0008-testing-strategy.md) | Zero-dependency GDScript runner, stdlib Python orchestration, headless bot clients; engine errors fail tests | Accepted |
 | [0009](ADR-0009-utility-tree.md) | `utility/` tree for standalone development utilities (the movement laboratory) | Accepted; amended by 0010 |
 | [0010](ADR-0010-shared-systems-and-laboratories.md) | Package rooms installed pinned at `res://systems/<room>/`; release tags; laboratories as `lab/<name>` worktrees with `LABS/<name>/`; promotion through a validated integration branch | Accepted |
+| [0011](ADR-0011-vitruvian-rig-architecture.md) | Vitruvian rig: profile rest orientations + anthropometric proportions, data-driven joint profile and body plan, one ordered modifier chain; Jolt for the bone_ik lab from phase 3 | Proposed (lab-internal, needs approval) |

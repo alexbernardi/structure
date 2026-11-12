@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "version": "0.1.0",
+  "purpose": "Physical rigid bodies of the Vitruvian rig (phase 3 input). Animation bones and physics bodies are separate: 16 bodies drive 29 animation bones. Each body owns one 'driver' bone (the PhysicalBone3D's bone) and lists the animation bones that ride on it kinematically.",
+  "mass_source": "de Leva P. (1996), J Biomech 29(9):1223-1230, adult male segment mass fractions (percent of body mass): head+neck 6.94, trunk 43.46 split into lower (11.17), middle (16.33) and upper (15.96) trunk, upper arm 2.71, forearm 1.62, hand 0.61, thigh 14.16, shank 4.33, foot 1.37.",
+  "bodies": {
+    "pelvis": {"driver": "Hips", "followers": ["Root"], "mass_pct": 11.17, "shape": "box", "segment": "lower trunk (LPT)"},
+    "abdomen": {"driver": "Spine", "followers": ["Chest"], "mass_pct": 16.33, "shape": "capsule", "segment": "middle trunk (MPT)"},
+    "thorax": {"driver": "UpperChest", "followers": ["LeftShoulder", "RightShoulder"], "mass_pct": 15.96, "shape": "capsule", "segment": "upper trunk (UPT); the clavicles follow it until the girdle is simulated"},
+    "head": {"driver": "Head", "followers": ["Neck"], "mass_pct": 6.94, "shape": "sphere", "segment": "head and neck"},
+    "upper_arm_l": {"driver": "LeftUpperArm", "followers": ["LeftUpperArmTwist"], "mass_pct": 2.71, "shape": "capsule", "segment": "upper arm"},
+    "forearm_l": {"driver": "LeftLowerArm", "followers": ["LeftLowerArmTwist"], "mass_pct": 1.62, "shape": "capsule", "segment": "forearm"},
+    "hand_l": {"driver": "LeftHand", "followers": [], "mass_pct": 0.61, "shape": "box", "segment": "hand"},
+    "thigh_l": {"driver": "LeftUpperLeg", "followers": ["LeftUpperLegTwist"], "mass_pct": 14.16, "shape": "capsule", "segment": "thigh"},
+    "shank_l": {"driver": "LeftLowerLeg", "followers": [], "mass_pct": 4.33, "shape": "capsule", "segment": "shank"},
+    "foot_l": {"driver": "LeftFoot", "followers": ["LeftToes"], "mass_pct": 1.37, "shape": "box", "segment": "foot (toes ride on it)"},
+    "upper_arm_r": {"driver": "RightUpperArm", "followers": ["RightUpperArmTwist"], "mass_pct": 2.71, "shape": "capsule", "segment": "upper arm"},
+    "forearm_r": {"driver": "RightLowerArm", "followers": ["RightLowerArmTwist"], "mass_pct": 1.62, "shape": "capsule", "segment": "forearm"},
+    "hand_r": {"driver": "RightHand", "followers": [], "mass_pct": 0.61, "shape": "box", "segment": "hand"},
+    "thigh_r": {"driver": "RightUpperLeg", "followers": ["RightUpperLegTwist"], "mass_pct": 14.16, "shape": "capsule", "segment": "thigh"},
+    "shank_r": {"driver": "RightLowerLeg", "followers": [], "mass_pct": 4.33, "shape": "capsule", "segment": "shank"},
+    "foot_r": {"driver": "RightFoot", "followers": ["RightToes"], "mass_pct": 1.37, "shape": "box", "segment": "foot (toes ride on it)"}
+  },
+  "lod": {
+    "full": "16 bodies (above)",
+    "reduced": "10 bodies: pelvis, trunk (abdomen+thorax), head, arms as upper arm + forearm-with-hand, legs as thigh + shank-with-foot",
+    "minimal": "1 capsule (no ragdoll): distant characters keep authored animation only"
+  },
+  "armour_note": "Armour adds mass per body (and widens shapes) without changing the skeleton; strength and joint resistance are per-joint dynamics in joint_limits.json (phase 3)."
+}
