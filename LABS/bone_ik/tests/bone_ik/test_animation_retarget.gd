@@ -71,3 +71,17 @@ func test_locomotion_clips_retarget(t) -> void:
 		t.ok(m.violations.is_empty(), "%s: within the hard limits after hinge alignment (%s; raw %s)" % [clip, m.violations, m.raw_violations])
 		t.ok(absf(m.min_sole_m - m.src_min_sole_m) < 0.03, "%s: lowest sole point matches the source within 3 cm (%.4f vs %.4f m)" % [clip, m.min_sole_m, m.src_min_sole_m])
 		t.ok(m.hinge_position_change_m < 1e-4, "%s: hinge alignment moves no joint (%.7f m)" % [clip, m.hinge_position_change_m])
+
+
+func test_axial_alignment_on_awkward_clips(t) -> void:
+	# Push: the source splits a straight arm's roll between upper arm and forearm with a full extra turn; Roll and
+	# Punch_Cross bend elbows far. Alignment must stay lossless and leave no arm joint beyond its hard limit.
+	for clip in ["Push", "Punch_Cross", "Roll"]:
+		var m := Measure.measure(rig, source, clip, 30)
+		t.ok(m.hinge_position_change_m < 1e-4, "%s: alignment moves no joint (%.7f m)" % [clip, m.hinge_position_change_m])
+		var arms := []
+		for bone in m.violations:
+			if bone.ends_with("UpperArm") or bone.ends_with("LowerArm"):
+				arms.append(bone)
+		if clip != "Roll":   # Roll keeps a genuine left-hand / hip excess (see BONE-IK-ANIMATION.md)
+			t.ok(arms.is_empty(), "%s: shoulders and elbows within limits after alignment (raw %s)" % [clip, m.raw_violations])

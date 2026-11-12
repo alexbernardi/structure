@@ -30,7 +30,7 @@ func test_modifier_chain_order(t) -> void:
 	var names := []
 	for c in rig.skeleton.get_children():
 		names.append(String(c.name))
-	t.eq(names, ["PoseSource", "ProbeAnimation", "ProbeIK", "HingeAlign", "JointLimits", "TwistHelpers", "ProbeFinal"],
+	t.eq(names, ["PoseSource", "ProbeAnimation", "ProbeIK", "AxialAlign", "JointLimits", "TwistHelpers", "ProbeFinal"],
 		"animation/pose source -> probe -> (IK slot) -> probe -> hinge align -> limits -> helpers -> probe")
 
 
@@ -61,9 +61,9 @@ func test_manual_pose_is_limited_and_stages_are_distinguished(t) -> void:
 	var state: Dictionary = rig.pose_state()
 	t.ok(state.violating_joints >= 1 and state.worst_violation_bone == "LeftLowerLeg", "pose state reports the violation (%s)" % state.worst_violation_bone)
 	t.near(state.joints.LeftLowerLeg.incoming_beyond_hard_deg, 34.0, 1e-3, "violation measured in degrees")
-	rig.set_limits_enforced(false)
+	rig.set_limit_policy(Rig.LimitPolicy.MEASURE)
 	await _step()
-	t.near(rig.get_joint_angles("LeftLowerLeg", "final").x, -40.0, 1e-3, "measure-only mode leaves the pose alone")
+	t.near(rig.get_joint_angles("LeftLowerLeg", "final").x, -40.0, 1e-3, "measure-only policy leaves the pose alone")
 
 
 func test_twist_helpers_follow_forearm_rotation(t) -> void:
@@ -78,9 +78,12 @@ func test_twist_helpers_follow_forearm_rotation(t) -> void:
 	await _step()
 	t.near(rad_to_deg(rig.probe_final.rotations[helper].get_angle()), 20.0, 0.05, "upper-arm helper counter-rotates half the twist")
 	var fore := sk.find_bone("LeftLowerArmTwist")
-	rig.set_joint_angles("LeftHand", Vector3(0, 0, 16))
+	t.near(rad_to_deg(rig.probe_final.rotations[fore].get_angle()), 24.0, 0.05, "mid-forearm helper counter-rotates 40 % of the pronation")
+	rig.set_joint_angles("LeftLowerArm", Vector3(0, 0, 0))
+	rig.set_joint_angles("LeftHand", Vector3(0, 0, 30))   # forearm rotation stored on the hand, as some rigs do
 	await _step()
-	t.near(rad_to_deg(rig.probe_final.rotations[fore].get_angle()), 8.0, 0.05, "forearm helper carries half the hand twist")
+	t.near(rig.get_joint_angles("LeftHand").z, 0.0, 1e-3, "axial alignment removes the twist from the wrist")
+	t.near(rig.get_joint_angles("LeftLowerArm").z, 30.0, 1e-3, "and gives it to the forearm")
 
 
 func test_animation_mode_runs_through_the_chain(t) -> void:
@@ -91,6 +94,9 @@ func test_animation_mode_runs_through_the_chain(t) -> void:
 	t.eq(s.mode, "Imported animation", "mode")
 	t.ok(absf(s.hinge_transfer_deg.LeftLowerArm) + absf(s.hinge_transfer_deg.RightLowerArm) > 1.0, "hinge alignment active on the elbows (%s)" % [s.hinge_transfer_deg])
 	t.eq(s.violating_joints, 0, "no joint beyond its hard limit after alignment")
+	t.eq(s.limits_enforced, false, "authored playback is measured, not clamped, under the default policy")
+	rig.set_limit_policy(Rig.LimitPolicy.ALWAYS)
+	t.eq(rig.limit_modifier.enforce, true, "the ALWAYS policy clamps authored clips too")
 	var a: Array[Transform3D] = rig.stage_globals("animation")
 	var f: Array[Transform3D] = rig.stage_globals("final")
 	var hand: int = rig.definition.index.LeftHand

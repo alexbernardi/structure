@@ -22,7 +22,8 @@ func _process_modification_with_delta(_delta: float) -> void:
 
 
 func has_snapshot() -> bool:
-	return frames > 0
+	var skeleton := get_skeleton()
+	return frames > 0 and skeleton != null and rotations.size() == skeleton.get_bone_count()
 
 
 ## Model-space bone transforms of the snapshot (forward kinematics over the skeleton's hierarchy).

@@ -5,9 +5,9 @@ config_version=5
 
 [application]
 
-config/name="bone_ik laboratory"
+config/name="bone_ik laboratory - Vitruvian skeleton"
 config/description="Structure laboratory: develop one system against approved, pinned shared systems."
-run/main_scene="res://scenes/lab.tscn"
+run/main_scene="res://scenes/vitruvian_lab.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 run/flush_stdout_on_print=true
 

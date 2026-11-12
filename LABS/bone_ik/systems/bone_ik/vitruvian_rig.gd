@@ -4,7 +4,7 @@
 ##
 ##   [AnimationPlayer | PoseSource]  -> Probe "animation"
 ##   -> (phase 2: IK modifiers are inserted here) -> Probe "ik"
-##   -> HingeAlignModifier (lossless elbow / knee cleanup) -> JointLimitModifier (anatomical hard limits) -> TwistHelperModifier -> Probe "final"
+##   -> AxialAlignModifier (lossless elbow / knee / forearm cleanup) -> JointLimitModifier (anatomical hard limits) -> TwistHelperModifier -> Probe "final"
 ##   -> (phase 3: PhysicalBoneSimulator3D goes last)
 ##
 ## The rig owns no character movement: the Root bone stays at the origin; a controller moves this node.
@@ -22,7 +22,7 @@ const PoseProbe = preload("res://systems/bone_ik/runtime/pose_probe_modifier.gd"
 const PoseSource = preload("res://systems/bone_ik/runtime/pose_source_modifier.gd")
 const LimitModifier = preload("res://systems/bone_ik/runtime/joint_limit_modifier.gd")
 const TwistModifier = preload("res://systems/bone_ik/runtime/twist_helper_modifier.gd")
-const HingeModifier = preload("res://systems/bone_ik/runtime/hinge_align_modifier.gd")
+const AxialModifier = preload("res://systems/bone_ik/runtime/axial_align_modifier.gd")
 
 enum Mode { REST, NEUTRAL, ANIMATION, MANUAL }
 const MODE_NAMES := ["T-pose (rest)", "Neutral standing", "Imported animation", "Manual joints"]
@@ -35,6 +35,10 @@ const NEUTRAL_POSE := {
 	"LeftLowerLeg": Vector3(4, 0, 0), "RightLowerLeg": Vector3(4, 0, 0),
 	"LeftFoot": Vector3(2, 0, 0), "RightFoot": Vector3(2, 0, 0),
 }
+## Limit policy. Authored clips concentrate motion in single bones (see BONE-IK-ANIMATION.md), so clamping them by
+## default would change working animation: PROCEDURAL enforces the hard limits on rest / neutral / manual (and,
+## later, IK) poses and only measures authored playback. ALWAYS also clamps authored clips; MEASURE never clamps.
+enum LimitPolicy { PROCEDURAL, ALWAYS, MEASURE }
 ## Response states (phase 3+ defines their physics; only "animated" exists now).
 const RESPONSE_STATES := ["animated", "partial_ragdoll", "full_ragdoll", "recovering"]
 
@@ -51,6 +55,7 @@ var hinge_modifier
 var limit_modifier
 var twist_modifier
 var mode := Mode.REST
+var limit_policy := LimitPolicy.PROCEDURAL
 var clip := ""
 var manual_angles := {}           ## bone -> Vector3 degrees (manual mode)
 var animation_reports := {}
@@ -81,8 +86,8 @@ func _create_nodes() -> void:
 	probe_ik = PoseProbe.new()
 	probe_ik.name = "ProbeIK"
 	probe_ik.stage = "ik"
-	hinge_modifier = HingeModifier.new()
-	hinge_modifier.name = "HingeAlign"
+	hinge_modifier = AxialModifier.new()
+	hinge_modifier.name = "AxialAlign"
 	limit_modifier = LimitModifier.new()
 	limit_modifier.name = "JointLimits"
 	twist_modifier = TwistModifier.new()
@@ -145,6 +150,7 @@ func play(name: String, from := 0.0) -> bool:
 
 func _apply_mode(time: float) -> void:
 	pose_source.active = mode != Mode.ANIMATION
+	_apply_limit_policy()
 	if mode == Mode.ANIMATION and clip != "" and player.has_animation(clip):
 		player.play(clip)
 		player.seek(time, true)
@@ -190,8 +196,21 @@ func reset_manual() -> void:
 	_refresh_pose_source()
 
 
+func set_limit_policy(policy: LimitPolicy) -> void:
+	limit_policy = policy
+	_apply_limit_policy()
+
+
+## Shortcut used by tools: true = ALWAYS, false = MEASURE.
 func set_limits_enforced(on: bool) -> void:
-	limit_modifier.enforce = on
+	set_limit_policy(LimitPolicy.ALWAYS if on else LimitPolicy.MEASURE)
+
+
+func _apply_limit_policy() -> void:
+	match limit_policy:
+		LimitPolicy.ALWAYS: limit_modifier.enforce = true
+		LimitPolicy.MEASURE: limit_modifier.enforce = false
+		_: limit_modifier.enforce = mode != Mode.ANIMATION
 
 
 func set_hinge_align(on: bool) -> void:
@@ -238,6 +257,7 @@ func pose_state() -> Dictionary:
 	return {"version": VERSION, "mode": MODE_NAMES[mode], "clip": clip,
 		"time": player.current_animation_position if player.is_playing() else 0.0,
 		"response_state": response_state, "limits_enforced": limit_modifier.enforce,
+		"limit_policy": ["procedural", "always", "measure"][limit_policy],
 		"hinge_align": hinge_modifier.active, "hinge_transfer_deg": _transfer_deg(),
 		"violating_joints": limit_modifier.violating, "worst_violation_deg": limit_modifier.worst_deg,
 		"worst_violation_bone": limit_modifier.worst_bone, "joints": joints,

@@ -99,25 +99,89 @@ func bind(definition: Dictionary) -> void:
 		by_bone[bone.name] = j
 
 
+## Limb pairs aligned before the limits: [parent, child, kind]. Hinges first (they change the forearm's local
+## rotation), then the forearm-rotation transfer from the hand.
+const AXIAL_PAIRS := [
+	["LeftUpperArm", "LeftLowerArm", "hinge"], ["RightUpperArm", "RightLowerArm", "hinge"],
+	["LeftUpperLeg", "LeftLowerLeg", "hinge"], ["RightUpperLeg", "RightLowerLeg", "hinge"],
+	["LeftLowerArm", "LeftHand", "forearm"], ["RightLowerArm", "RightHand", "forearm"],
+]
+
+
 ## Hinge alignment (lossless): authored rigs often rotate the forearm or shin about the upper arm / thigh axis
 ## instead of rolling the upper arm / thigh. Writing the hinge motion as M = R(pd, alpha) * R(f, theta) * R(t, phi)
 ## (pd = the parent segment's long axis), the alpha part is moved to the parent's own axial roll. Every joint
-## position is unchanged; the hinge keeps only flexion and its own axial rotation. -> {parent, child, alpha}
+## position is unchanged; the hinge keeps only flexion and its own axial rotation. The bending plane is ambiguous
+## by 180 degrees (flexion theta with alpha, or -theta with alpha - 180), and undefined for a straight limb, where
+## the roll can be split freely between the two segments (authored rigs sometimes differ by a full turn there).
+## Candidates are the two plane readings plus every 15 degrees; the one with the smallest total hard-limit excess
+## of both joints wins (ties: the smaller transfer). -> {parent, child, alpha}
 static func align_hinge(p: Dictionary, c: Dictionary, parent_local: Quaternion, child_local: Quaternion) -> Dictionary:
 	var m := motion(c, child_local)
 	var pd: Vector3 = p.d_rest
 	var u: Vector3 = (c.f as Vector3).cross(pd).normalized()   # where +flexion moves the distal segment
 	var v := m * pd
 	var v_perp := v - pd * v.dot(pd)
-	var alpha := 0.0
+	var best := {"parent": parent_local, "child": child_local, "alpha": 0.0, "cost": INF}
+	var candidates := [0.0]
 	if v_perp.length() > 1e-4:
-		alpha = atan2(v_perp.dot(pd.cross(u)), v_perp.dot(u))
-		if absf(alpha) > PI * 0.5:   # the limb is hyperextended: keep theta negative instead of flipping the plane
-			alpha -= signf(alpha) * PI
-	if absf(alpha) < 1e-7:
+		var alpha := atan2(v_perp.dot(pd.cross(u)), v_perp.dot(u))
+		candidates = [alpha, alpha - signf(alpha) * PI]
+	best = _best_roll(p, c, parent_local, child_local, candidates, best)
+	if best.cost > 1e-3:   # the cheap readings still violate a limit: search the roll split (rare, about 13x the cost)
+		var grid := []
+		for k in range(-11, 13):
+			grid.append(k * PI / 12.0)
+		best = _best_roll(p, c, parent_local, child_local, grid, best)
+	best.erase("cost")
+	return best
+
+
+static func _best_roll(p: Dictionary, c: Dictionary, lp0: Quaternion, lc0: Quaternion, candidates: Array, best: Dictionary) -> Dictionary:
+	for a in candidates:
+		var q := Quaternion(p.axis_local, a)
+		var lp := (lp0 * q).normalized()
+		var lc := (q.inverse() * lc0).normalized()
+		var cost: float = JointMath.limit_state(angles(p, lp), p.limits).hard + JointMath.limit_state(angles(c, lc), c.limits).hard
+		cost += absf(a) * 1e-4   # tie-break: the smaller transfer
+		if cost < best.cost:
+			best = {"parent": lp, "child": lc, "alpha": a, "cost": cost}
+	return best
+
+
+## Forearm-rotation transfer (lossless): many rigs store pronation / supination on the hand bone. The hand motion's
+## twist about the forearm axis is moved to the forearm's own roll (where the radius turns around the ulna); the
+## hand keeps a pure swing (flexion and deviation). -> {parent, child, alpha}
+static func align_forearm(p: Dictionary, c: Dictionary, parent_local: Quaternion, child_local: Quaternion) -> Dictionary:
+	var m := motion(c, child_local)
+	var pd: Vector3 = p.d_rest
+	var tw: Quaternion = JointMath.swing_twist(m, pd)[1]
+	var phi := JointMath.twist_angle(tw, pd)
+	if absf(phi) < 1e-7:
 		return {"parent": parent_local, "child": child_local, "alpha": 0.0}
-	var q := Quaternion(p.axis_local, alpha)
-	return {"parent": (parent_local * q).normalized(), "child": (q.inverse() * child_local).normalized(), "alpha": alpha}
+	var q := Quaternion(p.axis_local, phi)
+	return {"parent": (parent_local * q).normalized(), "child": (q.inverse() * child_local).normalized(), "alpha": phi}
+
+
+## Applies every AXIAL_PAIRS alignment to `locals` (bone index -> local rotation; missing bones are read from
+## `fallback`, a Callable(index) -> Quaternion). -> {locals: updated dictionary, transfers: {child bone: radians}}
+func align_axial(locals: Dictionary, fallback: Callable, hinges := true, forearms := true) -> Dictionary:
+	var out := locals.duplicate()
+	var transfers := {}
+	for pair in AXIAL_PAIRS:
+		if (pair[2] == "hinge" and not hinges) or (pair[2] == "forearm" and not forearms):
+			continue
+		var p: Dictionary = joint(pair[0])
+		var c: Dictionary = joint(pair[1])
+		if p.is_empty() or c.is_empty():
+			continue
+		var lp: Quaternion = out[p.bone_index] if out.has(p.bone_index) else fallback.call(p.bone_index)
+		var lc: Quaternion = out[c.bone_index] if out.has(c.bone_index) else fallback.call(c.bone_index)
+		var r := align_hinge(p, c, lp, lc) if pair[2] == "hinge" else align_forearm(p, c, lp, lc)
+		out[p.bone_index] = r.parent
+		out[c.bone_index] = r.child
+		transfers[pair[1]] = r.alpha
+	return {"locals": out, "transfers": transfers}
 
 
 ## Joint motion M (model frame of the proximal segment, measured from anatomical neutral) of a local rotation.

@@ -22,10 +22,6 @@ static func _angle(a: Basis, b: Basis) -> float:
 	return rad_to_deg(2.0 * atan2(Vector3(q.x, q.y, q.z).length(), absf(q.w)))
 
 
-const HINGES := [["LeftUpperArm", "LeftLowerArm"], ["RightUpperArm", "RightLowerArm"],
-	["LeftUpperLeg", "LeftLowerLeg"], ["RightUpperLeg", "RightLowerLeg"]]
-
-
 static func _fk_with(sk: Skeleton3D, rotations: Dictionary) -> Array[Transform3D]:
 	var out: Array[Transform3D] = []
 	out.resize(sk.get_bone_count())
@@ -37,7 +33,7 @@ static func _fk_with(sk: Skeleton3D, rotations: Dictionary) -> Array[Transform3D
 
 
 ## rig: a built vitruvian_rig in the tree. source_scene: the instantiated source GLB (in the tree or not).
-## Violations are reported for the raw clip and after the lossless hinge alignment the rig applies before its limits.
+## Violations are reported for the raw clip and after the lossless axial alignment the rig applies before its limits.
 static func measure(rig, source_scene: Node, clip: String, samples := 40) -> Dictionary:
 	var src_sk: Skeleton3D = source_scene.find_children("*", "Skeleton3D", true, false)[0]
 	var src_ap: AnimationPlayer = source_scene.find_children("*", "AnimationPlayer", true, false)[0]
@@ -98,15 +94,11 @@ static func measure(rig, source_scene: Node, clip: String, samples := 40) -> Dic
 		for sp in soles:
 			out.min_sole_m = minf(out.min_sole_m, (ours[sp[0]] * (sp[1] as Vector3)).y)
 			out.src_min_sole_m = minf(out.src_min_sole_m, (theirs[sp[2]] * (sp[3] as Vector3)).y * scale)
-		# Hinge alignment exactly as the rig's HingeAlignModifier does it, then the limit check.
-		var rotations := {}
-		for h in HINGES:
-			var p: Dictionary = profile.joint(h[0])
-			var c: Dictionary = profile.joint(h[1])
-			var r := JointProfile.align_hinge(p, c, sk.get_bone_pose_rotation(p.bone_index), sk.get_bone_pose_rotation(c.bone_index))
-			rotations[p.bone_index] = r.parent
-			rotations[c.bone_index] = r.child
-			out.max_hinge_transfer_deg = maxf(out.max_hinge_transfer_deg, absf(rad_to_deg(r.alpha)))
+		# Axial alignment exactly as the rig's AxialAlignModifier does it, then the limit check.
+		var aligned_r: Dictionary = profile.align_axial({}, sk.get_bone_pose_rotation)
+		var rotations: Dictionary = aligned_r.locals
+		for k in aligned_r.transfers:
+			out.max_hinge_transfer_deg = maxf(out.max_hinge_transfer_deg, absf(rad_to_deg(aligned_r.transfers[k])))
 		var aligned := _fk_with(sk, rotations)
 		for i in aligned.size():
 			out.hinge_position_change_m = maxf(out.hinge_position_change_m, aligned[i].origin.distance_to(ours[i].origin))

@@ -19,15 +19,16 @@ const BODY := [
 ]
 
 ## name -> [parent, fraction along the parent segment, bone whose twist it samples, share of that twist]
-## UpperArm/UpperLeg helpers sit near the proximal joint and counter-rotate half of their parent's own twist (keeps the
-## shoulder / hip deformation stable). The forearm helper carries half of the hand's twist relative to the forearm:
-## pronation and supination happen along the forearm (radius around ulna), not at the wrist.
+## The UpperArm / UpperLeg helpers sit near the proximal joint and counter-rotate half of their parent's roll (keeps
+## the shoulder / hip deformation stable). The forearm bone carries pronation / supination at its root (the axial
+## alignment moves any hand-stored forearm rotation there), so the mid-forearm helper counter-rotates 40 % of it:
+## skin twists progressively from elbow (0 %) to wrist (100 %), as the radius turns around the ulna.
 const HELPERS := {
 	"LeftUpperArmTwist": ["LeftUpperArm", 0.3, "LeftUpperArm", -0.5],
-	"LeftLowerArmTwist": ["LeftLowerArm", 0.6, "LeftHand", 0.5],
+	"LeftLowerArmTwist": ["LeftLowerArm", 0.6, "LeftLowerArm", -0.4],
 	"LeftUpperLegTwist": ["LeftUpperLeg", 0.3, "LeftUpperLeg", -0.5],
 	"RightUpperArmTwist": ["RightUpperArm", 0.3, "RightUpperArm", -0.5],
-	"RightLowerArmTwist": ["RightLowerArm", 0.6, "RightHand", 0.5],
+	"RightLowerArmTwist": ["RightLowerArm", 0.6, "RightLowerArm", -0.4],
 	"RightUpperLegTwist": ["RightUpperLeg", 0.3, "RightUpperLeg", -0.5],
 }
 
