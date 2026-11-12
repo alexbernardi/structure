@@ -1,0 +1,11 @@
+{
+  "name": "bone_ik",
+  "branch": "lab/bone_ik",
+  "base": "8d601332405b6480e47fc7119e2caf612a7731dd",
+  "created": "2026-11-12T01:29:58Z",
+  "systems": {
+    "movement_core": "1.0.0"
+  },
+  "develops": [],
+  "note": "Systems listed in `develops` have their workbench in this lab; the rest are pinned."
+}
